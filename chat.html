@@ -182,9 +182,10 @@ function md(t) {
 }
 function metaHTML(m) {
   if (!m) return "";
-  const kinds = m.kinds ? m.kinds.split(",").map(k => k.replace(":", " ×")).join(", ") : "";
+  const parts = m.kinds ? m.kinds.split(",").map(k => k.split(":")) : [];
+  const kinds = parts.map(([k, n]) => `${k} ×${n}`).join(", "), ent = parts.reduce((a, [, n]) => a + +n, 0);
   return `<div class="meta">${m.target ? `<span>→ ${esc(m.target)}</span>` : ""}
-    ${m.conv > 0 ? `<span class="badge shield" title="Ces valeurs ont été remplacées par des jetons avant envoi, puis restaurées dans la réponse">${m.conv} donnée(s) pseudonymisée(s) : ${esc(kinds)}</span>` : m.target ? `<span class="badge none">aucune donnée sensible détectée</span>` : ""}
+    ${m.conv > 0 ? `<span class="badge shield" title="Ces valeurs ont été remplacées par des jetons avant envoi, puis restaurées dans la réponse">${ent || m.conv} donnée(s) pseudonymisée(s) : ${esc(kinds)}${m.conv > ent ? ` · ${m.conv} occurrences dans la conversation` : ""}</span>` : m.target ? `<span class="badge none">aucune donnée sensible détectée</span>` : ""}
     ${m.ms ? `<span>${(m.ms / 1000).toFixed(1)} s</span>` : ""}${m.tok ? `<span>${m.tok.in} → ${m.tok.out} tokens</span>` : ""}</div>`;
 }
 function msgHTML(m, i) {

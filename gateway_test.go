@@ -359,3 +359,56 @@ func TestQuota(t *testing.T) {
 		t.Errorf("repli sur quota cible : %q puis %q", r.Header.Get("X-Gateway-Target"), r2.Header.Get("X-Gateway-Target"))
 	}
 }
+
+func TestNameHeuristics(t *testing.T) {
+	cfg, err := LoadConfig("config.example.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, _ := OpenStore(filepath.Join(t.TempDir(), "m.db"))
+	learner, _ = NewLearner(st.db)
+	defer func() { learner = nil }()
+	anon := func(txt string) string {
+		s := NewSession(cfg, cfg.Profiles["standard"])
+		body := map[string]any{"messages": []any{map[string]any{"role": "user", "content": txt}}}
+		s.Process(body, "openai")
+		return lastUserText(body)
+	}
+	for _, c := range []struct{ in, leak string }{
+		{"Moniseur Gérald Keizer est très malade", "Keizer"},
+		{"Gérald Keizer est très malade", "Keizer"},
+		{"KEIZER Gérald a appelé", "KEIZER"},
+		{"le patient Vandenbroucke est sorti", "Vandenbroucke"},
+		{"Dhr. Janssens komt morgen", "Janssens"},
+		{"Madmae Lefèvre et M. Keizr (typo de Keizer)", "Lefèvre"},
+		{"Gérald Keizer puis Keizr dans la même phrase", "Keizr"},
+	} {
+		if out := anon(c.in); strings.Contains(out, c.leak) {
+			t.Errorf("%q → %q (fuite de %q)", c.in, out, c.leak)
+		}
+	}
+	time.Sleep(200 * time.Millisecond) // async learning
+	for _, in := range []string{"Keizer a rappelé", "Kiezer a rappelé", "Vandenbrouke va mieux"} {
+		if out := anon(in); !strings.Contains(out, "«PERSON_1»") {
+			t.Errorf("mémoire : %q → %q", in, out)
+		}
+	}
+	for _, in := range []string{"Paris est une belle ville.", "Monsieur le directeur, Bonjour.", "Le Conseil Européen se réunit.", "Microsoft Azure et Google Cloud"} {
+		if out := anon(in); out != in {
+			t.Errorf("faux positif : %q → %q", in, out)
+		}
+	}
+	var n int
+	st.db.QueryRow(`SELECT COUNT(*) FROM learned`).Scan(&n)
+	rows, _ := st.db.Query(`SELECT vars FROM learned`)
+	for rows.Next() {
+		var b []byte
+		rows.Scan(&b)
+		if bytes.Contains(bytes.ToLower(b), []byte("keizer")) {
+			t.Error("nom stocké en clair")
+		}
+	}
+	if n == 0 {
+		t.Error("aucun nom appris")
+	}
+}

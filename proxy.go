@@ -485,8 +485,10 @@ func oaiEvent(m map[string]any, rs *Restorer, rec *Rec) {
 		ci := int(num(cm["index"]))
 		delta, _ := cm["delta"].(map[string]any)
 		if delta != nil {
-			if t, ok := delta["content"].(string); ok {
-				delta["content"] = rs.Push(rkey{ci, -1, "content"}, t)
+			for _, f := range []string{"content", "reasoning_content", "reasoning"} { // DeepSeek, GLM, Grok, vLLM
+				if t, ok := delta[f].(string); ok {
+					delta[f] = rs.Push(rkey{ci, -1, f}, t)
+				}
 			}
 			tcs, _ := delta["tool_calls"].([]any)
 			for _, tc := range tcs {
@@ -511,9 +513,9 @@ func oaiEvent(m map[string]any, rs *Restorer, rec *Rec) {
 				delta = map[string]any{}
 				cm["delta"] = delta
 			}
-			if k.f == "content" {
-				prev, _ := delta["content"].(string)
-				delta["content"] = prev + left
+			if k.f != "arguments" {
+				prev, _ := delta[k.f].(string)
+				delta[k.f] = prev + left
 				continue
 			}
 			tcs, _ := delta["tool_calls"].([]any)
@@ -544,8 +546,8 @@ func oaiChunk(tpl map[string]any, k rkey, left string) map[string]any {
 		}
 	}
 	delta := map[string]any{}
-	if k.f == "content" {
-		delta["content"] = left
+	if k.f != "arguments" {
+		delta[k.f] = left
 	} else {
 		delta["tool_calls"] = []any{map[string]any{"index": k.b, "function": map[string]any{"arguments": left}}}
 	}

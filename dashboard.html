@@ -394,6 +394,7 @@ const ACTIONS = {
     try { S.tests[d.n] = await api("/admin/api/target-test", { method: "POST", body: JSON.stringify({ Name: d.n }) }); } catch (e) { S.tests[d.n] = { error: e.message }; }
   },
   "tgt-model"(d) { const t = S.cfg.Targets[d.n]; t.Models = (t.Models || []).filter(m => m !== "*"); if (!t.Models.includes(d.m)) t.Models.push(d.m); },
+  async "learn-forget"() { if (!confirm("Effacer toute la mémoire des noms ?")) return; S.learned = (await api("/admin/api/learned", { method: "DELETE" })).count; toast("Mémoire des noms effacée"); },
   "det-add"() { S.cfg.Detectors.push({ Name: "NOUVEAU", Description: "", Regex: "\\bXXX-\\d+\\b" }); },
   "det-up"(d) { const a = S.cfg.Detectors, i = +d.i; if (i > 0) [a[i - 1], a[i]] = [a[i], a[i - 1]]; },
   "det-down"(d) { const a = S.cfg.Detectors, i = +d.i; if (i < a.length - 1) [a[i + 1], a[i]] = [a[i], a[i + 1]]; },
@@ -529,6 +530,8 @@ function viewPrivacy() {
     </tbody></table>`;
   return `<section class="card"><div class="chead"><div><h2>Détecteurs de données sensibles</h2><div class="sub">Le type (ex. PERSON) donne le nom des jetons «PERSON_1». Plusieurs détecteurs peuvent partager un type. En cas de chevauchement, la correspondance la plus longue l'emporte, puis l'ordre.</div></div><span class="spacer"></span><button class="btn primary" data-act="det-add">+ Détecteur</button></div>
       <div class="tw"><table><thead><tr><th>#</th><th>Type</th><th>Méthode</th><th>Paramètre</th><th>Note</th><th></th></tr></thead><tbody>${dets}</tbody></table></div></section>
+    <section class="card"><div class="chead"><div><h2>Mémoire des noms</h2><div class="sub">Actif si un détecteur « person_learned » est configuré. Chaque nom repéré avec certitude (titre, prénom connu, liste) est mémorisé sous forme d'empreintes HMAC, fautes de frappe comprises : il est ensuite reconnu seul (« Keizer », « Kiezer »). Aucun nom n'est stocké en clair ; oubli automatique après 1 an sans usage.</div></div><span class="spacer"></span>
+      <span class="badge">${S.learned ?? "…"} nom(s) mémorisé(s)</span><button class="btn danger" data-act="learn-forget">Tout oublier</button></div></section>
     <section class="card"><h2>Règles par profil</h2><div class="sub">Anonymiser : remplacé par un jeton puis restauré dans la réponse · Bloquer : requête refusée (violation) · Journaliser : laissé passer mais compté · Ignorer : non détecté</div>
       <div class="tw">${matrix}</div></section>
     <section class="card"><h2>Tester l'anonymisation</h2><div class="sub">Utilise la configuration <b>enregistrée</b>${isDirty() ? ' <span class="badge warn">modifications non enregistrées ignorées</span>' : ""}. Rien n'est envoyé à un LLM.</div>
@@ -634,6 +637,7 @@ function render() {
 async function go(tab) {
   S.tab = tab; store.set("gwtab", tab); render(); scrollTo(0, 0);
   if (tab === "report") await loadStats();
+  if (tab === "privacy") { try { S.learned = (await api("/admin/api/learned")).count; render(); } catch {} }
   if (tab === "quotas" || tab === "users") { await loadUsage(); if (!document.activeElement?.closest("#view")) render(); }
 }
 $("#tabs").onclick = e => { const b = e.target.closest("button[data-tab]"); if (b) go(b.dataset.tab); };

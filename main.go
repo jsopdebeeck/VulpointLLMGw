@@ -43,6 +43,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("base de métriques : %v", err)
 	}
+	if learner, err = NewLearner(store.db); err != nil {
+		log.Fatalf("mémoire des noms : %v", err)
+	}
 	meter := NewMeter()
 	if err := meter.Preload(store); err != nil {
 		log.Printf("quotas : préchargement impossible : %v", err)
@@ -81,6 +84,16 @@ func main() {
 	mux.HandleFunc("PUT /admin/api/config", g.admin(g.handlePutConfig))
 	mux.HandleFunc("GET /admin/api/usage", g.admin(g.handleUsage))
 	mux.HandleFunc("POST /admin/api/target-test", g.admin(g.handleTargetTest))
+	mux.HandleFunc("GET /admin/api/learned", g.admin(func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]any{"count": learner.Count()})
+	}))
+	mux.HandleFunc("DELETE /admin/api/learned", g.admin(func(w http.ResponseWriter, r *http.Request) {
+		if err := learner.Forget(0); err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		writeJSON(w, map[string]any{"count": learner.Count()})
+	}))
 	mux.HandleFunc("POST /admin/api/test", g.admin(g.handleTest))
 	mux.HandleFunc("POST /admin/api/reload", g.admin(func(w http.ResponseWriter, r *http.Request) {
 		if err := g.reload(*cfgPath); err != nil {
@@ -148,6 +161,9 @@ func (g *Gateway) maintenance(ctx context.Context) {
 		if err := g.store.Rollup(s.RawRetentionDays, s.AggRetentionDays); err != nil {
 			log.Print("agrégation : ", err)
 		}
+		if err := learner.Forget(365); err != nil { // names unused for a year are forgotten
+			log.Print("mémoire des noms : ", err)
+		}
 		select {
 		case <-ctx.Done():
 			return
@@ -196,6 +212,7 @@ func (g *Gateway) handleTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s := NewSession(cfg, prof)
+	s.NoLearn = true // testing must not feed the name memory
 	out := s.AnonymizeText(in.Text)
 	writeJSON(w, map[string]any{"output": out, "stats": s.Stats, "mapping": s.rev, "blocked": s.Blocked > 0,
 		"restored_ok": s.Restore(out) == in.Text || s.Blocked > 0})

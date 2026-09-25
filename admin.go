@@ -26,7 +26,9 @@ var builtinInfo = map[string]string{
 	"email": "Adresse email", "phone": "Numéro de téléphone (international ou national)",
 	"iban": "IBAN (clé de contrôle vérifiée)", "niss": "Numéro de registre national belge (clé vérifiée)",
 	"card": "Carte bancaire (Luhn)", "ipv4": "Adresse IPv4",
-	"person_title": "Nom précédé de M., Mme, Dr, Maître, Professeur…",
+	"person_title":     "Nom après un titre (Monsieur, Mme, Dr, Dhr… fautes de frappe tolérées) ou un mot de contexte (patient, client, nommé, né…)",
+	"person_firstname": "Prénom connu suivi d'un nom (Gérald Keizer) ou NOM + prénom (KEIZER Gérald) ; dictionnaire FR/NL/EN intégré",
+	"person_learned":   "Mémoire des noms déjà repérés, fautes de frappe comprises ; seules des empreintes HMAC sont stockées",
 }
 
 func cloneConfig(c *Config) *Config {

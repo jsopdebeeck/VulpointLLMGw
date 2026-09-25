@@ -13,20 +13,23 @@ import (
 // ---------- detectors ----------
 
 type Detector struct {
-	Kind  string
-	re    *regexp.Regexp
-	group int
-	valid func(string) bool
-	words bool              // enforce word boundaries (lists)
-	names bool              // matches are person/company names: learn their tokens too
-	kinds map[string]string // learned detector: lower(value) -> kind
-	prio  int
+	Kind    string
+	re      *regexp.Regexp
+	group   int
+	valid   func(string) bool
+	words   bool              // enforce word boundaries (lists)
+	names   bool              // matches are person/company names: learn their tokens too
+	kinds   map[string]string // learned detector: lower(value) -> kind
+	prio    int
+	custom  func(string) [][2]int // heuristic finders (names)
+	builtin string
 }
 
 type span struct {
-	s, e int
-	kind string
-	prio int
+	s, e  int
+	kind  string
+	prio  int
+	canon string // typo of a value seen earlier: reuse its placeholder
 }
 
 type builtin struct {
@@ -34,19 +37,19 @@ type builtin struct {
 	group int
 	valid func(string) bool
 	names bool
+	find  func(string) [][2]int
 }
 
 var builtins = map[string]builtin{
-	"email": {re: `[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+(?:\.[A-Za-z0-9\-]+)*\.[A-Za-z]{2,}`},
-	"phone": {re: `(?:\+|\b00)\d{2,3}[\s./-]?(?:\(0\)[\s./-]?)?\d(?:[\s./-]?\d){6,10}\b|\b0\d(?:[\s./-]?\d){7,8}\b`, valid: digitsBetween(8, 15)},
-	"iban":  {re: `\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]{4}){2,7}(?:[ ]?[A-Z0-9]{1,3})?\b`, valid: validIBAN},
-	"niss":  {re: `\b\d{2}\.?\d{2}\.?\d{2}[-.\s]?\d{3}[.\s]?\d{2}\b`, valid: validNISS},
-	"card":  {re: `\b(?:\d[ -]?){12,18}\d\b`, valid: validLuhn},
-	"ipv4":  {re: `\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b`},
-	"person_title": {
-		re:    `(?:\b(?:M|Mr|Mrs|Ms|Dr|Pr)\.?|\b(?:Mme|Mlle|Madame|Mademoiselle|Monsieur|Docteur|Maître|Professeur))\s+([A-ZÀ-ÖØ-Þ][\p{L}'\-]+(?:\s+[A-ZÀ-ÖØ-Þ][\p{L}'\-]+){0,2})`,
-		group: 1, names: true,
-	},
+	"email":            {re: `[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+(?:\.[A-Za-z0-9\-]+)*\.[A-Za-z]{2,}`},
+	"phone":            {re: `(?:\+|\b00)\d{2,3}[\s./-]?(?:\(0\)[\s./-]?)?\d(?:[\s./-]?\d){6,10}\b|\b0\d(?:[\s./-]?\d){7,8}\b`, valid: digitsBetween(8, 15)},
+	"iban":             {re: `\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]{4}){2,7}(?:[ ]?[A-Z0-9]{1,3})?\b`, valid: validIBAN},
+	"niss":             {re: `\b\d{2}\.?\d{2}\.?\d{2}[-.\s]?\d{3}[.\s]?\d{2}\b`, valid: validNISS},
+	"card":             {re: `\b(?:\d[ -]?){12,18}\d\b`, valid: validLuhn},
+	"ipv4":             {re: `\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b`},
+	"person_title":     {find: findTitled, names: true},
+	"person_firstname": {find: findFirstnames, names: true},
+	"person_learned":   {find: func(s string) [][2]int { return learner.Find(s) }, names: true},
 }
 
 func buildDetector(dc *DetectorCfg, base string, prio int) (*Detector, error) {
@@ -61,7 +64,10 @@ func buildDetector(dc *DetectorCfg, base string, prio int) (*Detector, error) {
 		if !ok {
 			return nil, fmt.Errorf("builtin inconnu %q", dc.Builtin)
 		}
-		d.re, d.group, d.valid, d.names = regexp.MustCompile(b.re), b.group, b.valid, b.names
+		d.group, d.valid, d.names, d.custom, d.builtin = b.group, b.valid, b.names, b.find, dc.Builtin
+		if b.find == nil {
+			d.re = regexp.MustCompile(b.re)
+		}
 	case dc.Regex != "":
 		d.re, err = regexp.Compile(dc.Regex)
 	case len(dc.Words) > 0 || dc.WordsFile != "":
@@ -119,6 +125,12 @@ func boundary(s string, a, b int) bool {
 
 func (d *Detector) Find(s string) []span {
 	var out []span
+	if d.custom != nil {
+		for _, m := range d.custom(s) {
+			out = append(out, span{m[0], m[1], d.Kind, d.prio, ""})
+		}
+		return out
+	}
 	for _, m := range d.re.FindAllStringSubmatchIndex(s, -1) {
 		a, b := m[0], m[1]
 		if d.group > 0 && len(m) > 2*d.group+1 && m[2*d.group] >= 0 {
@@ -131,7 +143,7 @@ func (d *Detector) Find(s string) []span {
 		if d.kinds != nil {
 			k = d.kinds[strings.ToLower(s[a:b])]
 		}
-		out = append(out, span{a, b, k, d.prio})
+		out = append(out, span{a, b, k, d.prio, ""})
 	}
 	return out
 }
@@ -208,14 +220,22 @@ type Session struct {
 	fwd     map[string]string // kind \x00 lower(value) -> placeholder id
 	rev     map[string]string // placeholder id -> original value
 	cnt     map[string]int
+	fuzzy   map[string]string // one-deletion variant of a learned name word -> lower(word)
+	toLearn []string
+	learnOn bool // a person_learned detector is configured
+	NoLearn bool
 	Stats   map[string]map[string]int // kind -> action -> count
 	Anon    int
 	Blocked int
 }
 
 func NewSession(cfg *Config, prof *Profile) *Session {
-	return &Session{prof: prof, dets: cfg.dets, learn: map[string]string{}, fwd: map[string]string{},
-		rev: map[string]string{}, cnt: map[string]int{}, Stats: map[string]map[string]int{}}
+	s := &Session{prof: prof, dets: cfg.dets, learn: map[string]string{}, fwd: map[string]string{},
+		rev: map[string]string{}, cnt: map[string]int{}, fuzzy: map[string]string{}, Stats: map[string]map[string]int{}}
+	for _, d := range cfg.dets {
+		s.learnOn = s.learnOn || d.builtin == "person_learned"
+	}
+	return s
 }
 
 func (s *Session) action(kind string) string {
@@ -249,12 +269,20 @@ func (s *Session) BlockedKinds() string {
 	return strings.Join(ks, ", ")
 }
 
-// ConvertedKinds summarizes what was pseudonymized or stripped, e.g. "EMAIL:1,PERSON:2" (ASCII: sent as an HTTP header).
+// ConvertedKinds counts distinct pseudonymized values (and stripped media) per kind,
+// e.g. "EMAIL:1,PERSON:2" (ASCII: sent as an HTTP header).
 func (s *Session) ConvertedKinds() string {
-	var ks []string
+	n := map[string]int{}
+	for id := range s.rev {
+		n[id[:strings.LastIndex(id, "_")]]++
+	}
 	for k, m := range s.Stats {
-		if n := m["anonymize"] + m["strip"]; n > 0 {
-			ks = append(ks, fmt.Sprintf("%s:%d", k, n))
+		n[k] += m["strip"]
+	}
+	var ks []string
+	for k, c := range n {
+		if c > 0 {
+			ks = append(ks, fmt.Sprintf("%s:%d", k, c))
 		}
 	}
 	sort.Strings(ks)
@@ -270,6 +298,19 @@ func (s *Session) spans(text string, withLearned bool) []span {
 	}
 	if withLearned && s.learned != nil {
 		all = append(all, s.learned.Find(text)...)
+	}
+	if withLearned && len(s.fuzzy) > 0 { // typos of names seen in this conversation
+		for _, t := range tokenize(text) {
+			if !isCap(t.w) || utf8.RuneCountInString(t.w) < 5 {
+				continue
+			}
+			for _, v := range variants(fold(t.w)) {
+				if c, ok := s.fuzzy[v]; ok {
+					all = append(all, span{t.s, t.e, s.learn[c], len(s.dets) + 1, c})
+					break
+				}
+			}
+		}
 	}
 	sort.Slice(all, func(i, j int) bool {
 		a, b := all[i], all[j]
@@ -302,12 +343,19 @@ func (s *Session) learnFrom(text string) string {
 		s.learn[strings.ToLower(v)] = sp.kind
 		if s.isNames(sp.kind) {
 			for _, t := range strings.FieldsFunc(v, func(r rune) bool { return unicode.IsSpace(r) || r == '-' }) {
-				if r, _ := utf8.DecodeRuneInString(t); utf8.RuneCountInString(t) >= 3 && unicode.IsUpper(r) {
-					if _, ok := s.learn[strings.ToLower(t)]; !ok {
-						s.learn[strings.ToLower(t)] = sp.kind
+				if r, _ := utf8.DecodeRuneInString(t); utf8.RuneCountInString(t) >= 3 && unicode.IsUpper(r) && !particles[fold(t)] {
+					lt := strings.ToLower(t)
+					if _, ok := s.learn[lt]; !ok {
+						s.learn[lt] = sp.kind
+					}
+					for _, vr := range variants(fold(t)) {
+						if len(vr) >= 4 {
+							s.fuzzy[vr] = lt
+						}
 					}
 				}
 			}
+			s.toLearn = append(s.toLearn, nameTokens(v)...)
 		}
 	}
 	return text
@@ -356,8 +404,12 @@ func (s *Session) Anonymize(text string) string {
 		act := s.action(sp.kind)
 		s.count(sp.kind, act)
 		if act == "anonymize" {
+			v := text[sp.s:sp.e]
+			if sp.canon != "" {
+				v = sp.canon
+			}
 			b.WriteString(text[last:sp.s])
-			b.WriteString(s.placeholder(sp.kind, text[sp.s:sp.e]))
+			b.WriteString(s.placeholder(sp.kind, v))
 			last = sp.e
 		}
 	}
@@ -389,6 +441,14 @@ func (s *Session) Process(body map[string]any, api string) {
 	walk(body, 0, s.Anonymize)
 	if s.prof.Hint && len(s.rev) > 0 {
 		injectHint(body, api)
+	}
+	s.commitLearning()
+}
+
+// commitLearning feeds the persistent (hashed) name memory.
+func (s *Session) commitLearning() {
+	if s.learnOn && !s.NoLearn {
+		learner.Learn(s.toLearn)
 	}
 }
 

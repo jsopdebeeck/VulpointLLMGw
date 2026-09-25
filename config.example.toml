@@ -40,9 +40,30 @@ base_url = "https://api.anthropic.com"
 api_key_env = "ANTHROPIC_API_KEY"
 models = ["claude-*"]
 
+[targets.deepseek]
+api = "openai"
+base_url = "https://api.deepseek.com/v1"
+api_key_env = "DEEPSEEK_API_KEY"
+models = ["deepseek-*"]
+stream_usage = true
+
+[targets.grok]
+api = "openai"
+base_url = "https://api.x.ai/v1"
+api_key_env = "XAI_API_KEY"
+models = ["grok-*"]
+
+[targets.glm]
+api = "openai"
+base_url = "https://api.z.ai/api/paas/v4"          # Chine continentale : https://open.bigmodel.cn/api/paas/v4
+api_key_env = "ZAI_API_KEY"
+models = ["glm-*"]
+
 # ---------------------------------------------------------------- détecteurs
-# Types intégrés : email, phone, iban, niss (NISS belge, avec contrôle),
-#                  card (Luhn), ipv4, person_title (nom après M., Mme, Dr, Maître…)
+# Types intégrés : email, phone, iban, niss (NISS belge, avec contrôle), card (Luhn), ipv4,
+#   person_title     : nom après un titre (fautes tolérées : Moniseur) ou un mot de contexte (patient, client, nommé…)
+#   person_firstname : prénom connu + nom (Gérald Keizer) ou NOM + prénom (KEIZER Gérald)
+#   person_learned   : mémoire des noms déjà vus, fautes de frappe comprises (empreintes HMAC seulement)
 # Personnalisés   : regex = '…' (group = n pour ne garder qu'un groupe)
 #                   words = [...] et/ou words_file = "fichier.txt" (1 terme par ligne)
 # Le nom devient le type du jeton : «EMAIL_1», «PERSON_2»…
@@ -71,6 +92,14 @@ builtin = "phone"
 [[detectors]]
 name = "PERSON"
 builtin = "person_title"
+
+[[detectors]]
+name = "PERSON"
+builtin = "person_firstname"
+
+[[detectors]]
+name = "PERSON"
+builtin = "person_learned"
 
 [[detectors]]
 name = "PERSON"                   # même type : même numérotation
