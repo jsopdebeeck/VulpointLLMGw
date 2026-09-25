@@ -1,0 +1,8 @@
+llmgw
+dist/
+*.db
+*.db-*
+config.toml
+config.toml.bak-*
+*.tmp
+.DS_Store

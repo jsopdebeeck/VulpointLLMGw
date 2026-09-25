@@ -1,0 +1,135 @@
+# llmgw : configuration. Rechargée automatiquement à chaque sauvegarde
+# (sauf listen, db et upstream_timeout_sec qui demandent un redémarrage).
+
+[server]
+listen = "127.0.0.1:8080"
+db = "gateway.db"                 # SQLite, relatif à ce fichier
+admin_token = "change-moi"        # dashboard + /admin/api (vide = ouvert)
+raw_retention_days = 30           # détail par requête, puis agrégats journaliers
+agg_retention_days = 1127         # ~3 ans d'agrégats
+max_body_mb = 50
+upstream_timeout_sec = 300
+
+# ---------------------------------------------------------------- LLM cibles
+# api = "openai"    → base_url se termine par /v1  (POST {base_url}/chat/completions)
+# api = "anthropic" → base_url sans /v1             (POST {base_url}/v1/messages)
+# models : globs acceptés ("claude-*", "*"). Clé : api_key_env (recommandé) ou api_key.
+
+[targets.local]
+api = "openai"
+base_url = "http://localhost:11434/v1"    # Ollama
+models = ["*"]
+
+[targets.openai]
+api = "openai"
+base_url = "https://api.openai.com/v1"
+api_key_env = "OPENAI_API_KEY"
+models = ["gpt-4o", "gpt-4o-mini", "gpt-4.1*"]
+stream_usage = true                       # compte les tokens aussi en streaming
+
+[targets.mistral]
+api = "openai"
+base_url = "https://api.mistral.ai/v1"
+api_key_env = "MISTRAL_API_KEY"
+models = ["mistral-*"]
+stream_usage = true
+
+[targets.anthropic]
+api = "anthropic"
+base_url = "https://api.anthropic.com"
+api_key_env = "ANTHROPIC_API_KEY"
+models = ["claude-*"]
+
+# ---------------------------------------------------------------- détecteurs
+# Types intégrés : email, phone, iban, niss (NISS belge, avec contrôle),
+#                  card (Luhn), ipv4, person_title (nom après M., Mme, Dr, Maître…)
+# Personnalisés   : regex = '…' (group = n pour ne garder qu'un groupe)
+#                   words = [...] et/ou words_file = "fichier.txt" (1 terme par ligne)
+# Le nom devient le type du jeton : «EMAIL_1», «PERSON_2»…
+# Ordre = priorité en cas de chevauchement de même longueur.
+
+[[detectors]]
+name = "EMAIL"
+builtin = "email"
+
+[[detectors]]
+name = "NISS"
+builtin = "niss"
+
+[[detectors]]
+name = "IBAN"
+builtin = "iban"
+
+[[detectors]]
+name = "CARD"
+builtin = "card"
+
+[[detectors]]
+name = "PHONE"
+builtin = "phone"
+
+[[detectors]]
+name = "PERSON"
+builtin = "person_title"
+
+[[detectors]]
+name = "PERSON"                   # même type : même numérotation
+words = ["Jean Martin", "Claire Dubois"]
+# words_file = "noms.txt"
+
+[[detectors]]
+name = "COMPANY"
+words = ["ACME SA", "ACME", "Globex"]
+# words_file = "entreprises.txt"
+
+[[detectors]]
+name = "DOSSIER"
+regex = '\bDOS-\d{4}-\d{5}\b'
+
+[[detectors]]
+name = "ID"
+regex = '\b(?:CLI|PAT)-\d{6,}\b'
+
+# ---------------------------------------------------------------- profils
+# targets          : LLM autorisés, dans l'ordre de préférence (repli si panne, 5xx ou 429)
+# default_action   : anonymize | block | log | off (appliquée aux types non listés)
+# actions          : action par type de donnée
+# images           : pass | strip (remplacées par un texte) | block (requête refusée)
+# placeholder_hint : ajoute une consigne demandant au LLM de conserver les «JETONS»
+
+[profiles.interne]
+description = "Données sensibles autorisées, LLM local uniquement"
+targets = ["local"]
+images = "pass"
+default_action = "log"
+
+[profiles.standard]
+description = "Cloud autorisé, tout est pseudonymisé"
+targets = ["mistral", "anthropic", "openai", "local"]
+images = "strip"
+default_action = "anonymize"
+placeholder_hint = true
+
+[profiles.strict]
+description = "Cloud, NISS/IBAN/carte interdits"
+targets = ["mistral", "local"]
+images = "block"
+default_action = "anonymize"
+actions = { NISS = "block", IBAN = "block", CARD = "block" }
+placeholder_hint = true
+
+# ---------------------------------------------------------------- utilisateurs
+# Le client envoie sa clé gateway dans "Authorization: Bearer <key>" ou "x-api-key".
+# key accepte ${VAR} pour lire une variable d'environnement.
+
+[users.alice]
+key = "gw-alice-remplace-moi"
+profile = "standard"
+
+[users.bob]
+key = "gw-bob-remplace-moi"
+profile = "strict"
+
+[users.labo]
+key = "gw-labo-remplace-moi"
+profile = "interne"

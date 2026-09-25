@@ -1,0 +1,658 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LLM Gateway</title>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f4f3f0; --surface: #fcfcfb; --border: #e3e2de; --grid: #ecebe7;
+  --text: #0b0b0b; --text2: #52514e; --muted: #858480;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300; --s7: #4a3aa7; --s8: #e34948;
+  --good: #0ca30c; --warning: #fab219; --critical: #d03b3b; --accent: #2a78d6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #111110; --surface: #1a1a19; --border: #2e2e2c; --grid: #262624;
+    --text: #ffffff; --text2: #c3c2b7; --muted: #8d8c85;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
+    --accent: #3987e5;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111110; --surface: #1a1a19; --border: #2e2e2c; --grid: #262624;
+  --text: #ffffff; --text2: #c3c2b7; --muted: #8d8c85;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
+  --accent: #3987e5;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif; }
+header { position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--border); }
+.hbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 12px 24px 0; max-width: 1400px; margin: 0 auto; }
+header h1 { font-size: 16px; margin: 0 12px 0 0; font-weight: 650; letter-spacing: -.01em; }
+nav.tabs { display: flex; gap: 2px; overflow-x: auto; padding: 8px 24px 0; max-width: 1400px; margin: 0 auto; }
+nav.tabs button { border: 0; background: none; color: var(--text2); padding: 8px 14px 10px; font: inherit; cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; }
+nav.tabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.seg button { border: 0; background: none; color: var(--text2); padding: 6px 12px; font: inherit; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+.spacer { flex: 1; }
+input, select, textarea, button.btn { font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 5px 9px; }
+input[type=checkbox] { width: 16px; height: 16px; padding: 0; accent-color: var(--accent); }
+input.num { width: 110px; text-align: right; font-variant-numeric: tabular-nums; }
+input.w100, textarea.w100, select.w100 { width: 100%; }
+button.btn { cursor: pointer; white-space: nowrap; }
+button.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.btn.danger { color: var(--critical); }
+button.icon { border: 0; background: none; color: var(--text2); cursor: pointer; padding: 2px 6px; font: inherit; border-radius: 6px; }
+button.icon:hover { background: var(--grid); color: var(--text); }
+button:disabled { opacity: .4; cursor: default; }
+main { padding: 20px 24px 96px; max-width: 1400px; margin: 0 auto; display: grid; gap: 20px; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+.kpi .l { color: var(--text2); font-size: 12px; }
+.kpi .v { font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; margin-top: 2px; }
+.kpi .s { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 560px), 1fr)); gap: 20px; }
+.grid3 { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr)); gap: 16px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; min-width: 0; }
+.card h2 { font-size: 15px; margin: 0 0 2px; font-weight: 600; }
+.card h3 { font-size: 14px; margin: 0; font-weight: 600; }
+.card .sub, .sub { color: var(--muted); font-size: 12px; margin-bottom: 10px; }
+.chead { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.fields { display: grid; grid-template-columns: 130px 1fr; gap: 8px 10px; align-items: center; font-size: 13px; }
+.fields > label { color: var(--text2); }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--text2); margin-bottom: 6px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.chart { position: relative; }
+.chart svg { display: block; width: 100%; height: 220px; overflow: visible; }
+.chart text { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 10px; font-size: 12px; box-shadow: 0 4px 16px rgba(0,0,0,.12); white-space: nowrap; z-index: 30; display: none; }
+.tip b { display: block; margin-bottom: 4px; }
+.tip .r { display: flex; gap: 12px; justify-content: space-between; color: var(--text2); }
+.tip .r span:last-child { color: var(--text); font-variant-numeric: tabular-nums; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; vertical-align: middle; }
+th { color: var(--text2); font-weight: 500; font-size: 12px; }
+td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+td.wrap { white-space: normal; }
+.tw { overflow-x: auto; }
+.badge { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 999px; font-size: 12px; border: 1px solid var(--border); white-space: nowrap; }
+.badge.bad::before { content: "⛔"; font-size: 10px; } .badge.warn::before { content: "⚠"; font-size: 11px; }
+.badge.ok::before { content: "✓"; color: var(--good); }
+.badge.conv::before { content: "⇄"; color: var(--accent); }
+.chip { display: inline-block; border: 1px solid var(--border); border-radius: 6px; padding: 1px 7px; margin: 2px 4px 2px 0; font-size: 12px; background: var(--bg); cursor: pointer; }
+.err { color: var(--critical); }
+code, .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; }
+code.newkey { background: var(--bg); border: 1px dashed var(--accent); padding: 2px 6px; border-radius: 6px; }
+#login { max-width: 420px; margin: 80px auto; }
+textarea { min-height: 80px; resize: vertical; }
+pre.out { white-space: pre-wrap; word-break: break-word; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px; margin: 8px 0 0; font-size: 13px; }
+.order { display: grid; gap: 4px; }
+.order div { display: flex; align-items: center; gap: 6px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 3px 4px 3px 10px; font-size: 13px; }
+.order div span.rank { color: var(--muted); font-size: 11px; width: 14px; }
+.order div span.nm { flex: 1; }
+.meter { position: relative; height: 6px; border-radius: 3px; background: var(--grid); min-width: 70px; margin-top: 3px; overflow: hidden; }
+.meter i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; background: var(--accent); }
+.meter i.w { background: var(--warning); } .meter i.c { background: var(--critical); }
+.use { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+#savebar { position: fixed; left: 50%; transform: translateX(-50%); bottom: 16px; z-index: 20; display: flex; gap: 10px; align-items: center;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px 10px 16px; box-shadow: 0 8px 28px rgba(0,0,0,.18); max-width: calc(100% - 32px); }
+#toast { position: fixed; right: 16px; top: 16px; z-index: 40; max-width: min(520px, calc(100% - 32px)); background: var(--surface); border: 1px solid var(--border);
+  border-left: 4px solid var(--good); border-radius: 10px; padding: 10px 14px; box-shadow: 0 8px 28px rgba(0,0,0,.18); display: none; white-space: pre-wrap; }
+#toast.bad { border-left-color: var(--critical); }
+.matrix select { min-width: 150px; }
+.matrix td:first-child { font-weight: 600; }
+.help { font-size: 12px; color: var(--text2); background: var(--bg); border-radius: 8px; padding: 8px 12px; }
+@media (max-width: 640px) { .hbar, nav.tabs, main { padding-left: 16px; padding-right: 16px; } .fields { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="hbar">
+    <h1>LLM Gateway</h1>
+    <span class="spacer"></span>
+    <span id="upd" style="color:var(--muted);font-size:12px"></span>
+    <button class="btn" id="theme" title="Thème clair / sombre">◐</button>
+  </div>
+  <nav class="tabs" id="tabs" role="tablist">
+    <button data-tab="users" role="tab">Utilisateurs &amp; règles</button>
+    <button data-tab="targets" role="tab">LLM cibles</button>
+    <button data-tab="privacy" role="tab">Filtrage &amp; privacy</button>
+    <button data-tab="quotas" role="tab">Quotas</button>
+    <button data-tab="report" role="tab">Reporting</button>
+  </nav>
+</header>
+
+<div id="login" class="card" hidden>
+  <h2>Jeton d'administration</h2>
+  <p class="sub">La valeur <code>admin_token</code> de la section [server] de config.toml. Elle reste dans ce navigateur.</p>
+  <form id="loginf" style="display:flex;gap:8px"><input id="tok" type="password" style="flex:1" autocomplete="off"><button class="btn">Entrer</button></form>
+  <p id="loginerr" class="err"></p>
+</div>
+
+<main id="view" hidden></main>
+<div id="savebar" hidden><span>Modifications non enregistrées</span><button class="btn" id="cancel">Annuler</button><button class="btn primary" id="save">Enregistrer</button></div>
+<div id="toast"></div>
+<div class="tip" id="tip"></div>
+
+<script>
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const store = { get(k) { try { return localStorage.getItem(k) } catch { return null } }, set(k, v) { try { localStorage.setItem(k, v) } catch {} } };
+let token = store.get("gwtok") || "", range = store.get("gwrange") || "48h", data = null;
+const S = { cfg: null, orig: "", meta: null, usage: null, tab: store.get("gwtab") || "users", newKeys: {}, tests: {}, testOut: "" };
+
+const nf = new Intl.NumberFormat("fr-BE");
+const fmt = n => { n = +n || 0; const a = Math.abs(n); return a >= 1e9 ? (n / 1e9).toFixed(1) + " G" : a >= 1e6 ? (n / 1e6).toFixed(1) + " M" : a >= 1e4 ? (n / 1e3).toFixed(1) + " k" : nf.format(Math.round(n)); };
+const fmtB = n => { n = +n || 0; const u = ["o", "Ko", "Mo", "Go", "To"]; let i = 0; while (n >= 1024 && i < 4) { n /= 1024; i++; } return (i ? n.toFixed(1) : n) + " " + u[i]; };
+const fmtMs = n => n >= 10000 ? (n / 1000).toFixed(1) + " s" : Math.round(n) + " ms";
+const SLOTS = ["--s1", "--s2", "--s3", "--s4", "--s5", "--s6", "--s7", "--s8"];
+const color = i => `var(${SLOTS[i % 8]})`;
+const KEEP = "__keep__";
+
+async function api(path, opt = {}) {
+  const r = await fetch(path, { ...opt, headers: { "X-Admin-Token": token, "Content-Type": "application/json" } });
+  if (r.status === 401) { showLogin("Jeton refusé"); throw new Error("401"); }
+  if (!r.ok) throw new Error((await r.text()).trim());
+  return r.json();
+}
+function showLogin(msg) { $("#view").hidden = true; $("#login").hidden = false; $("#loginerr").textContent = msg || ""; }
+$("#loginf").onsubmit = e => { e.preventDefault(); token = $("#tok").value; store.set("gwtok", token); boot(); };
+function toast(msg, bad) { const t = $("#toast"); t.textContent = msg; t.className = bad ? "bad" : ""; t.style.display = "block"; clearTimeout(t._h); t._h = setTimeout(() => t.style.display = "none", bad ? 9000 : 3500); }
+
+const entityOrder = { user: [], target: [] };
+function colorOf(kind, name) {
+  const list = entityOrder[kind]; let i = list.indexOf(name);
+  if (i < 0) { list.push(name); i = list.length - 1; }
+  return i < 7 ? color(i) : "var(--muted)";
+}
+
+// ---------- charts (inline SVG) ----------
+let W = 640; const H = 220, M = { l: 44, r: 8, t: 8, b: 24 };
+function niceMax(v) { if (v <= 0) return 1; const p = 10 ** Math.floor(Math.log10(v)); const f = v / p; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p; }
+function shortLabel(b) {
+  if (range === "48h") return b.slice(11, 13) + "h";
+  if (range === "60d") return b.slice(8, 10) + "/" + b.slice(5, 7);
+  if (range === "6w") return "S" + b.slice(6);
+  if (range === "12m") return ["janv", "févr", "mars", "avr", "mai", "juin", "juil", "août", "sept", "oct", "nov", "déc"][+b.slice(5, 7) - 1];
+  return b;
+}
+function scale(v) { const step = niceMax(v / 4), k = Math.max(1, Math.ceil(v / step - 1e-9)); return { max: step * k, k }; }
+function axes(sc, fmtY, buckets, xOf) {
+  let s = ""; const max = sc.max, K = sc.k;
+  for (let i = 0; i <= K; i++) {
+    const v = max * i / K, y = M.t + (H - M.t - M.b) * (1 - i / K);
+    s += `<line x1="${M.l}" x2="${W - M.r}" y1="${y}" y2="${y}" stroke="var(--grid)" ${i ? "" : 'stroke="var(--border)"'}/>`;
+    s += `<text x="${M.l - 6}" y="${y + 4}" text-anchor="end">${fmtY(v)}</text>`;
+  }
+  const every = Math.ceil(buckets.length / 8);
+  buckets.forEach((b, i) => { if (i % every === 0) s += `<text x="${xOf(i)}" y="${H - 6}" text-anchor="middle">${shortLabel(b)}</text>`; });
+  return s;
+}
+function legend(series) {
+  if (series.length < 2) return "";
+  return `<div class="legend">${series.map(s => `<span><i style="background:${s.color}"></i>${esc(s.name)}</span>`).join("")}</div>`;
+}
+function tipHTML(title, rows) { return `<b>${esc(title)}</b>` + rows.map(r => `<div class="r"><span>${r[0]}</span><span>${r[1]}</span></div>`).join(""); }
+function bindTip(el, buckets, rowsAt, xOf, bw) {
+  const svg = $("svg", el), tip = $("#tip"), hl = $(".hl", el);
+  const idx = e => { const r = svg.getBoundingClientRect(); const x = (e.clientX - r.left) * svg.viewBox.baseVal.width / r.width; return Math.max(0, Math.min(buckets.length - 1, Math.round((x - xOf(0)) / bw))); };
+  svg.onpointermove = e => {
+    const i = idx(e); hl.setAttribute("x", xOf(i) - bw / 2); hl.setAttribute("width", bw); hl.style.display = "";
+    tip.innerHTML = tipHTML(buckets[i], rowsAt(i)); tip.style.display = "block";
+    const tw = tip.offsetWidth, x = e.clientX + 14 + tw > innerWidth ? e.clientX - tw - 14 : e.clientX + 14;
+    tip.style.left = x + scrollX + "px"; tip.style.top = e.clientY + scrollY + 12 + "px";
+  };
+  svg.onpointerleave = () => { tip.style.display = "none"; hl.style.display = "none"; };
+}
+function stacked(el, buckets, series, fmtY) {
+  W = Math.max(320, el.clientWidth || 640);
+  const n = buckets.length, pw = W - M.l - M.r, bw = pw / n, barW = Math.max(2, Math.min(28, bw - Math.max(2, bw * .25)));
+  const xOf = i => M.l + bw * (i + .5);
+  const tot = buckets.map((_, i) => series.reduce((a, s) => a + s.values[i], 0));
+  const sc = scale(Math.max(1, ...tot)), max = sc.max, ph = H - M.t - M.b, yv = v => ph * v / max;
+  let bars = "";
+  buckets.forEach((_, i) => {
+    let y = H - M.b; const segs = series.filter(s => s.values[i] > 0);
+    segs.forEach((s, k) => {
+      const h = yv(s.values[i]); const gap = k ? 2 : 0; const top = k === segs.length - 1;
+      const hh = Math.max(0, h - gap), yy = y - h;
+      const r = top ? Math.min(4, barW / 2, hh) : 0;
+      bars += top && r > 0
+        ? `<path d="M${xOf(i) - barW / 2},${y - gap} v${-(hh - r)} q0,${-r} ${r},${-r} h${barW - 2 * r} q${r},0 ${r},${r} v${hh - r} z" fill="${s.color}"/>`
+        : `<rect x="${xOf(i) - barW / 2}" y="${yy}" width="${barW}" height="${hh}" fill="${s.color}"/>`;
+      y -= h;
+    });
+  });
+  el.innerHTML = legend(series) + `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="graphique">
+    <rect class="hl" y="${M.t}" height="${ph}" fill="var(--grid)" style="display:none"/>${axes(sc, fmtY, buckets, xOf)}${bars}</svg>`;
+  bindTip(el, buckets, i => [...series.filter(s => s.values[i]).map(s => [`<i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${s.color};margin-right:6px"></i>${esc(s.name)}`, fmtY(s.values[i])]), ["Total", fmtY(tot[i])]], xOf, bw);
+}
+function lines(el, buckets, series, fmtY) {
+  W = Math.max(320, el.clientWidth || 640);
+  const n = buckets.length, pw = W - M.l - M.r, bw = pw / n, xOf = i => M.l + bw * (i + .5);
+  const sc = scale(Math.max(1, ...series.flatMap(s => s.values.filter(v => v != null)))), max = sc.max, ph = H - M.t - M.b, yOf = v => M.t + ph * (1 - v / max);
+  let paths = "";
+  series.forEach(s => {
+    let d = "", pen = false;
+    s.values.forEach((v, i) => { if (v == null) { pen = false; return; } d += (pen ? "L" : "M") + xOf(i).toFixed(1) + "," + yOf(v).toFixed(1); pen = true; });
+    paths += `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+    s.values.forEach((v, i) => { if (v != null && (n < 40 || s.values[i - 1] == null && s.values[i + 1] == null)) paths += `<circle cx="${xOf(i)}" cy="${yOf(v)}" r="3" fill="${s.color}" stroke="var(--surface)" stroke-width="2"/>`; });
+  });
+  el.innerHTML = legend(series) + `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="graphique">
+    <rect class="hl" y="${M.t}" height="${ph}" fill="var(--grid)" style="display:none"/>${axes(sc, fmtY, buckets, xOf)}${paths}</svg>`;
+  bindTip(el, buckets, i => series.map(s => [`<i style="display:inline-block;width:8px;height:2px;background:${s.color};margin-right:6px;vertical-align:3px"></i>${esc(s.name)}`, s.values[i] == null ? "—" : fmtY(s.values[i])]), xOf, bw);
+}
+function seriesBy(rows, kind, buckets, val) {
+  const names = [...new Set(rows.map(r => r.G))];
+  names.sort((a, b) => entityOrder[kind].indexOf(a) - entityOrder[kind].indexOf(b));
+  let ser = names.map(nm => ({ name: nm, color: colorOf(kind, nm), values: buckets.map(b => rows.filter(r => r.G === nm && r.B === b).reduce((a, r) => a + val(r), 0)) }));
+  if (ser.length > 7) { // 8+ entities: fold the tail into "Autres"
+    ser.sort((a, b) => b.values.reduce((x, y) => x + y, 0) - a.values.reduce((x, y) => x + y, 0));
+    const rest = ser.slice(6);
+    ser = ser.slice(0, 6).concat([{ name: "Autres", color: "var(--muted)", values: buckets.map((_, i) => rest.reduce((a, s) => a + s.values[i], 0)) }]);
+  }
+  return ser;
+}
+
+// ---------- tables ----------
+function sumRows(rows) {
+  const g = {};
+  rows.forEach(r => { const a = g[r.G] ||= { G: r.G, N: 0, Err: 0, BI: 0, BO: 0, TI: 0, TO: 0, SI: 0, SG: 0, SU: 0, ST: 0, An: 0, Bl: 0 };
+    for (const k in a) if (k !== "G") a[k] += r[k]; });
+  return Object.values(g).sort((a, b) => b.N - a.N);
+}
+function table(el, rows, kind) {
+  if (!rows.length) { el.innerHTML = `<p class="sub">Aucune donnée sur la période.</p>`; return; }
+  el.innerHTML = `<table><thead><tr><th>${kind === "user" ? "Utilisateur" : "LLM"}</th><th class="n">Requêtes</th><th class="n">Tokens in</th><th class="n">Tokens out</th><th class="n">Volume in/out</th><th class="n">Moy. totale</th><th class="n">Moy. LLM</th><th class="n">Moy. gateway</th><th class="n">Conv.</th><th class="n">Viol.</th><th class="n">Erreurs</th></tr></thead><tbody>` +
+    rows.map(r => { const ok = r.N - r.Bl || 1; return `<tr><td><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${colorOf(kind, r.G)};margin-right:8px"></i>${esc(r.G || "?")}</td><td class="n">${fmt(r.N)}</td><td class="n">${fmt(r.TI)}</td><td class="n">${fmt(r.TO)}</td><td class="n">${fmtB(r.BI)} / ${fmtB(r.BO)}</td><td class="n">${fmtMs(r.ST / r.N)}</td><td class="n">${fmtMs(r.SU / ok)}</td><td class="n">${fmtMs(r.SG / r.N)}</td><td class="n">${fmt(r.An)}</td><td class="n">${r.Bl ? `<span class="badge bad">${fmt(r.Bl)}</span>` : "0"}</td><td class="n">${r.Err ? `<span class="badge warn">${fmt(r.Err)}</span>` : "0"}</td></tr>`; }).join("") + `</tbody></table>`;
+}
+const ACT = { anonymize: ["conv", "anonymisé"], strip: ["conv", "retiré"], block: ["bad", "bloqué"], log: ["warn", "journalisé"], pass: ["ok", "laissé passer"] };
+function detTable(el, dets) {
+  if (!dets.length) { el.innerHTML = `<p class="sub">Aucune détection sur la période.</p>`; return; }
+  const by = {}; dets.forEach(d => { const k = d.Kind + "|" + d.Action; (by[k] ||= { kind: d.Kind, act: d.Action, n: 0, users: {} }).n += d.N; by[k].users[d.User] = (by[k].users[d.User] || 0) + d.N; });
+  el.innerHTML = `<table><thead><tr><th>Type</th><th>Action</th><th class="n">Occurrences</th><th>Principaux utilisateurs</th></tr></thead><tbody>` +
+    Object.values(by).sort((a, b) => b.n - a.n).map(d => `<tr><td>${esc(d.kind)}</td><td><span class="badge ${ACT[d.act]?.[0] || ""}">${ACT[d.act]?.[1] || esc(d.act)}</span></td><td class="n">${fmt(d.n)}</td><td>${Object.entries(d.users).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([u, n]) => `${esc(u)} (${fmt(n)})`).join(", ")}</td></tr>`).join("") + `</tbody></table>`;
+}
+function recentTable(el, rec) {
+  if (!rec?.length) { el.innerHTML = `<p class="sub">Aucune requête pour l'instant.</p>`; return; }
+  el.innerHTML = `<table><thead><tr><th>Heure</th><th>Utilisateur</th><th>LLM</th><th>Modèle</th><th class="n">Statut</th><th class="n">Tokens</th><th class="n">Total</th><th class="n">LLM</th><th class="n">Gateway</th><th class="n">Conv.</th><th>Remarque</th></tr></thead><tbody>` +
+    rec.map(r => `<tr><td>${new Date(r.TS * 1000).toLocaleString("fr-BE", { dateStyle: "short", timeStyle: "medium" })}</td><td>${esc(r.User)}</td><td>${esc(r.Target)}</td><td>${esc(r.Model)}${r.Stream ? " ⇢" : ""}</td>
+      <td class="n">${r.Blocked ? `<span class="badge bad">${r.Status}</span>` : r.Status >= 400 || !r.Status ? `<span class="badge warn">${r.Status}</span>` : r.Status}</td>
+      <td class="n">${fmt(r.TokIn)} / ${fmt(r.TokOut)}</td><td class="n">${fmtMs(r.TotalMs)}</td><td class="n">${fmtMs(r.UpMs)}</td><td class="n">${fmtMs(r.GwMs)}</td><td class="n">${r.Anon}</td><td class="err">${esc(r.Err)}</td></tr>`).join("") + `</tbody></table>`;
+}
+
+
+// ---------- config draft: binding, dirty state, save ----------
+const L = {
+  act: { anonymize: "Anonymiser", block: "Bloquer", log: "Journaliser", off: "Ignorer" },
+  img: { pass: "Laisser passer", strip: "Retirer", block: "Bloquer" },
+  meth: { builtin: "Intégré", regex: "Expression régulière", words: "Liste de termes" },
+};
+const opts = (map, cur, extra = "") => extra + Object.entries(map).map(([k, v]) => `<option value="${esc(k)}" ${k === cur ? "selected" : ""}>${esc(v)}</option>`).join("");
+const sortedNames = o => Object.keys(o || {}).sort((a, b) => a.localeCompare(b));
+
+function normalize(c) {
+  c.Targets ||= {}; c.Profiles ||= {}; c.Users ||= {}; c.Detectors ||= [];
+  for (const p of Object.values(c.Profiles)) { p.Targets ||= []; p.Actions ||= {}; }
+  for (const t of Object.values(c.Targets)) { t.Models ||= []; }
+}
+async function loadConfig() {
+  const r = await api("/admin/api/config");
+  S.meta = r; S.cfg = r.config; normalize(S.cfg); S.orig = JSON.stringify(S.cfg);
+  entityOrder.user = sortedNames(S.cfg.Users); entityOrder.target = sortedNames(S.cfg.Targets);
+  markDirty();
+}
+const isDirty = () => S.cfg && JSON.stringify(S.cfg) !== S.orig;
+function markDirty() { $("#savebar").hidden = !isDirty(); }
+addEventListener("beforeunload", e => { if (isDirty()) e.preventDefault(); });
+
+function readVal(el) {
+  const t = el.dataset.type;
+  if (el.type === "checkbox") return el.checked;
+  const v = el.value;
+  if (t === "num") return v.trim() === "" ? 0 : parseInt(v, 10) || 0;
+  if (t === "list") return v.split(",").map(s => s.trim()).filter(Boolean);
+  if (t === "lines") return v.split("\n").map(s => s.trim()).filter(Boolean);
+  if (t === "kv") { const o = {}; v.split("\n").forEach(l => { const i = l.indexOf(":"); if (i > 0) o[l.slice(0, i).trim()] = l.slice(i + 1).trim(); }); return o; }
+  if (t === "upper") return v.trim().toUpperCase().replace(/[^A-Z0-9_]/g, "_");
+  if (t === "secret") return v === "" && el.dataset.had ? KEEP : v;
+  return v;
+}
+function setPath(obj, path, v) {
+  let o = obj;
+  for (const k of path.slice(0, -1)) { if (o[k] == null || typeof o[k] !== "object") o[k] = {}; o = o[k]; }
+  const last = path[path.length - 1];
+  if (v === "" && path.includes("Actions")) delete o[last]; else o[last] = v;
+}
+document.addEventListener("change", e => {
+  const el = e.target.closest("[data-bind]"); if (!el) return;
+  setPath(S.cfg, el.dataset.bind.split("|"), readVal(el));
+  markDirty();
+  if (el.dataset.rerender !== undefined) render();
+});
+
+function cleanup(c) {
+  const emptyQ = q => !q || (!q.RPM && !q.RPD && !q.TokensDay && !q.TokensMonth && !q.Action);
+  for (const g of [c.Profiles, c.Users, c.Targets]) for (const x of Object.values(g)) if (emptyQ(x.Quota)) x.Quota = null;
+}
+$("#save").onclick = async () => {
+  cleanup(S.cfg);
+  try {
+    const r = await api("/admin/api/config", { method: "PUT", body: JSON.stringify({ Config: S.cfg }) });
+    await loadConfig(); render();
+    toast("Configuration enregistrée et appliquée." + (r.notes?.length ? "\n" + r.notes.join("\n") : ""));
+  } catch (e) { if (e.message !== "401") toast("Non enregistré : " + e.message, true); }
+};
+$("#cancel").onclick = () => { S.cfg = JSON.parse(S.orig); markDirty(); render(); };
+
+function genKey() { const b = new Uint8Array(20); crypto.getRandomValues(b); return "gw-" + [...b].map(x => x.toString(16).padStart(2, "0")).join(""); }
+const usedBy = {
+  profile: p => sortedNames(S.cfg.Users).filter(u => S.cfg.Users[u].Profile === p),
+  target: t => sortedNames(S.cfg.Profiles).filter(p => S.cfg.Profiles[p].Targets.includes(t)),
+};
+function askName(label, exists) {
+  const n = (prompt(label + " (lettres, chiffres, _ . -)") || "").trim();
+  if (!n) return null;
+  if (!/^[A-Za-z0-9_.-]+$/.test(n)) { toast("Nom invalide : lettres, chiffres, _ . - uniquement", true); return null; }
+  if (exists[n]) { toast("« " + n + " » existe déjà", true); return null; }
+  return n;
+}
+
+// ---------- actions (click delegation) ----------
+const ACTIONS = {
+  "user-add"() {
+    const n = askName("Nom de l'utilisateur ou de l'application", S.cfg.Users); if (!n) return;
+    const prof = sortedNames(S.cfg.Profiles)[0];
+    if (!prof) return toast("Créez d'abord un profil", true);
+    const k = genKey(); S.cfg.Users[n] = { Key: k, Profile: prof, Kind: "user" }; S.newKeys[n] = k;
+  },
+  "user-key"(d) { if (!confirm(`Générer une nouvelle clé pour ${d.n} ? L'ancienne cessera de fonctionner après enregistrement.`)) return; const k = genKey(); S.cfg.Users[d.n].Key = k; S.newKeys[d.n] = k; },
+  "user-del"(d) { if (confirm(`Supprimer ${d.n} ?`)) { delete S.cfg.Users[d.n]; delete S.newKeys[d.n]; } },
+  copy(d, el) { navigator.clipboard?.writeText(d.v).then(() => toast("Clé copiée")); },
+  "prof-add"() {
+    const n = askName("Nom du profil", S.cfg.Profiles); if (!n) return;
+    S.cfg.Profiles[n] = { Description: "", Targets: [], Images: "strip", DefaultAction: "anonymize", Actions: {}, Hint: true };
+  },
+  "prof-del"(d) { if (usedBy.profile(d.n).length) return toast("Profil utilisé par : " + usedBy.profile(d.n).join(", "), true); if (confirm(`Supprimer le profil ${d.n} ?`)) delete S.cfg.Profiles[d.n]; },
+  "pt-up"(d) { const a = S.cfg.Profiles[d.p].Targets, i = +d.i; if (i > 0) [a[i - 1], a[i]] = [a[i], a[i - 1]]; },
+  "pt-down"(d) { const a = S.cfg.Profiles[d.p].Targets, i = +d.i; if (i < a.length - 1) [a[i + 1], a[i]] = [a[i], a[i + 1]]; },
+  "pt-del"(d) { S.cfg.Profiles[d.p].Targets.splice(+d.i, 1); },
+  "tgt-add"() {
+    const n = askName("Nom de la cible (ex. mistral, ollama, azure-gpt)", S.cfg.Targets); if (!n) return;
+    S.cfg.Targets[n] = { API: "openai", BaseURL: "https://", Models: ["*"], StreamUsage: true };
+  },
+  "tgt-del"(d) { if (usedBy.target(d.n).length) return toast("Cible utilisée par les profils : " + usedBy.target(d.n).join(", "), true); if (confirm(`Supprimer la cible ${d.n} ?`)) delete S.cfg.Targets[d.n]; },
+  async "tgt-test"(d) {
+    S.tests[d.n] = { running: true }; render();
+    try { S.tests[d.n] = await api("/admin/api/target-test", { method: "POST", body: JSON.stringify({ Name: d.n }) }); } catch (e) { S.tests[d.n] = { error: e.message }; }
+  },
+  "tgt-model"(d) { const t = S.cfg.Targets[d.n]; t.Models = (t.Models || []).filter(m => m !== "*"); if (!t.Models.includes(d.m)) t.Models.push(d.m); },
+  "det-add"() { S.cfg.Detectors.push({ Name: "NOUVEAU", Description: "", Regex: "\\bXXX-\\d+\\b" }); },
+  "det-up"(d) { const a = S.cfg.Detectors, i = +d.i; if (i > 0) [a[i - 1], a[i]] = [a[i], a[i - 1]]; },
+  "det-down"(d) { const a = S.cfg.Detectors, i = +d.i; if (i < a.length - 1) [a[i + 1], a[i]] = [a[i], a[i + 1]]; },
+  "det-del"(d) { if (confirm(`Supprimer le détecteur ${S.cfg.Detectors[+d.i].Name} ?`)) S.cfg.Detectors.splice(+d.i, 1); },
+  async "test-run"() {
+    try {
+      const r = await api("/admin/api/test", { method: "POST", body: JSON.stringify({ Profile: $("#tprof").value, Text: $("#ttext").value }) });
+      S.testText = $("#ttext").value; S.testProf = $("#tprof").value;
+      const st = Object.entries(r.stats || {}).map(([k, a]) => Object.entries(a).map(([act, n]) => `<span class="badge ${ACT[act]?.[0] || ""}">${esc(k)} · ${ACT[act]?.[1] || act} ×${n}</span>`).join(" ")).join(" ");
+      S.testOut = (r.blocked ? `<p class="err">⛔ Cette requête serait bloquée par ce profil.</p>` : "") +
+        `<pre class="out">${esc(r.output)}</pre><div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px">${st || '<span class="sub">Aucune détection</span>'}</div>` +
+        (Object.keys(r.mapping || {}).length ? `<div class="tw" style="margin-top:8px"><table><tbody>${Object.entries(r.mapping).map(([k, v]) => `<tr><td class="mono">«${esc(k)}»</td><td>${esc(v)}</td></tr>`).join("")}</tbody></table></div>` : "");
+    } catch (e) { S.testOut = `<p class="err">${esc(e.message)}</p>`; }
+  },
+};
+document.addEventListener("click", async e => {
+  const el = e.target.closest("[data-act]"); if (!el) return;
+  const fn = ACTIONS[el.dataset.act]; if (!fn) return;
+  e.preventDefault();
+  await fn(el.dataset, el);
+  markDirty(); render();
+});
+// Detector method switch clears the fields of the other methods.
+document.addEventListener("change", e => {
+  const el = e.target.closest("[data-method]"); if (!el) return;
+  const d = S.cfg.Detectors[+el.dataset.method];
+  for (const k of ["Builtin", "Regex", "Group", "Words", "WordsFile"]) delete d[k];
+  if (el.value === "builtin") d.Builtin = "email"; else if (el.value === "regex") d.Regex = ""; else d.Words = [];
+  markDirty(); render();
+});
+const methodOf = d => d.Builtin ? "builtin" : (d.Words?.length || d.WordsFile || (!d.Regex && d.Words)) ? "words" : "regex";
+
+// ---------- tab: users & rules ----------
+function viewUsers() {
+  const c = S.cfg, P = sortedNames(c.Profiles), T = sortedNames(c.Targets), U = S.usage?.usage || {};
+  const users = sortedNames(c.Users).map(n => {
+    const u = c.Users[n], nk = S.newKeys[n], us = U["u:" + n] || {};
+    return `<tr>
+      <td><b>${esc(n)}</b></td>
+      <td><select data-bind="Users|${esc(n)}|Kind">${opts({ user: "Personne", app: "Application" }, u.Kind || "user")}</select></td>
+      <td><input data-bind="Users|${esc(n)}|Description" value="${esc(u.Description)}" placeholder="équipe, email, usage…" style="min-width:180px"></td>
+      <td><select data-bind="Users|${esc(n)}|Profile" data-rerender>${opts(Object.fromEntries(P.map(p => [p, p])), u.Profile)}</select></td>
+      <td class="wrap" style="font-size:12px;color:var(--text2)">${(c.Profiles[u.Profile]?.Targets || []).map(esc).join(" › ") || "—"}</td>
+      <td>${nk ? `<code class="newkey">${esc(nk)}</code> <button class="icon" data-act="copy" data-v="${esc(nk)}" title="Copier">⧉</button>` : `<span class="mono" style="color:var(--muted)">${esc(S.meta.keyHints?.[n] || "••••")}</span>`}
+        <button class="icon" data-act="user-key" data-n="${esc(n)}" title="Générer une nouvelle clé">↻</button></td>
+      <td><label><input type="checkbox" data-bind="Users|${esc(n)}|Disabled" ${u.Disabled ? "checked" : ""}> bloqué</label></td>
+      <td class="n">${fmt(us.DayReq || 0)} req · ${fmt(us.DayTok || 0)} tok</td>
+      <td><button class="icon" data-act="user-del" data-n="${esc(n)}" title="Supprimer">✕</button></td></tr>`;
+  }).join("");
+  const nkNote = Object.keys(S.newKeys).length ? `<p class="help">🔑 Nouvelle(s) clé(s) affichée(s) en entier : copiez-les maintenant et transmettez-les à l'utilisateur. Après rechargement de la page, seul un aperçu reste visible.</p>` : "";
+  const profs = P.map(pn => {
+    const p = c.Profiles[pn], avail = T.filter(t => !p.Targets.includes(t)), nRules = Object.keys(p.Actions || {}).length, users = usedBy.profile(pn);
+    return `<div class="card"><div class="chead"><h3>${esc(pn)}</h3><span class="spacer"></span><button class="icon" data-act="prof-del" data-n="${esc(pn)}" title="Supprimer">✕</button></div>
+      <div class="fields">
+        <label>Description</label><input class="w100" data-bind="Profiles|${esc(pn)}|Description" value="${esc(p.Description)}">
+        <label>LLM autorisés<br><span class="sub">ordre = priorité, repli si panne</span></label>
+        <div class="order">${p.Targets.map((t, i) => `<div><span class="rank">${i + 1}</span><span class="nm">${esc(t)} <span class="sub">${esc(c.Targets[t]?.API || "?")}</span></span>
+          <button class="icon" data-act="pt-up" data-p="${esc(pn)}" data-i="${i}" ${i ? "" : "disabled"}>↑</button><button class="icon" data-act="pt-down" data-p="${esc(pn)}" data-i="${i}" ${i < p.Targets.length - 1 ? "" : "disabled"}>↓</button><button class="icon" data-act="pt-del" data-p="${esc(pn)}" data-i="${i}">✕</button></div>`).join("")}
+          ${avail.length ? `<select data-addtarget="${esc(pn)}"><option value="">+ ajouter un LLM…</option>${avail.map(t => `<option>${esc(t)}</option>`).join("")}</select>` : ""}</div>
+        <label>Images, fichiers</label><select data-bind="Profiles|${esc(pn)}|Images">${opts(L.img, p.Images)}</select>
+        <label>Données sensibles</label><div>${esc(L.act[p.DefaultAction] || p.DefaultAction)} par défaut · ${nRules} règle(s) spécifique(s) <button class="icon" onclick="go('privacy')">→ Filtrage</button></div>
+        <label>Quota / utilisateur</label><div>${quotaText(p.Quota)} <button class="icon" onclick="go('quotas')">→ Quotas</button></div>
+        <label>Utilisé par</label><div class="wrap">${users.map(esc).join(", ") || '<span class="sub">personne</span>'}</div>
+      </div></div>`;
+  }).join("");
+  return `<section class="card"><div class="chead"><div><h2>Utilisateurs et applications clientes</h2><div class="sub">La clé gateway identifie le client ; le profil détermine les LLM autorisés, les règles de filtrage et le quota.</div></div><span class="spacer"></span><button class="btn primary" data-act="user-add">+ Utilisateur</button></div>
+    ${nkNote}<div class="tw"><table><thead><tr><th>Nom</th><th>Type</th><th>Description</th><th>Profil</th><th>LLM accessibles</th><th>Clé gateway</th><th>Accès</th><th class="n">Aujourd'hui</th><th></th></tr></thead><tbody>${users || '<tr><td colspan="9" class="sub">Aucun utilisateur</td></tr>'}</tbody></table></div></section>
+    <section><div class="chead"><div><h2 style="font-size:15px;margin:0">Profils : règles appliquées</h2><div class="sub">Un profil regroupe routage, politique de données et quota.</div></div><span class="spacer"></span><button class="btn" data-act="prof-add">+ Profil</button></div>
+    <div class="grid3">${profs}</div></section>`;
+}
+document.addEventListener("change", e => {
+  const el = e.target.closest("[data-addtarget]"); if (!el || !el.value) return;
+  S.cfg.Profiles[el.dataset.addtarget].Targets.push(el.value); markDirty(); render();
+});
+function quotaText(q) {
+  if (!q) return '<span class="sub">aucun</span>';
+  const p = [q.RPM && `${fmt(q.RPM)}/min`, q.RPD && `${fmt(q.RPD)} req/j`, q.TokensDay && `${fmt(q.TokensDay)} tok/j`, q.TokensMonth && `${fmt(q.TokensMonth)} tok/mois`].filter(Boolean);
+  return p.length ? p.join(" · ") + (q.Action === "warn" ? " (alerte)" : "") : '<span class="sub">aucun</span>';
+}
+
+// ---------- tab: targets ----------
+function viewTargets() {
+  const c = S.cfg;
+  const cards = sortedNames(c.Targets).map(n => {
+    const t = c.Targets[n], b = `Targets|${esc(n)}|`, saved = S.meta.config.Targets?.[n], tr = S.tests[n], profs = usedBy.target(n);
+    const keyState = S.meta.targetKeySet?.[n] ? '<span class="badge ok">clé active</span>' : '<span class="badge warn">aucune clé active</span>';
+    let test = "";
+    if (tr?.running) test = `<span class="sub">test en cours…</span>`;
+    else if (tr) test = tr.error ? `<div class="err" style="font-size:12px;white-space:normal">✕ ${esc(tr.status ? "HTTP " + tr.status + " : " : "")}${esc(tr.error)}</div>`
+      : `<div style="font-size:12px"><span class="badge ok">HTTP ${tr.status} · ${tr.ms} ms</span> ${tr.models?.length ? `${tr.models.length} modèles (cliquer pour autoriser) :<div style="max-height:110px;overflow:auto;margin-top:4px">${tr.models.map(m => `<span class="chip" data-act="tgt-model" data-n="${esc(n)}" data-m="${esc(m)}">${esc(m)}</span>`).join("")}</div>` : ""}</div>`;
+    return `<div class="card"><div class="chead"><h3>${esc(n)}</h3>${t.Disabled ? '<span class="badge warn">désactivée</span>' : ""}<span class="spacer"></span>
+      <button class="btn" data-act="tgt-test" data-n="${esc(n)}" ${saved ? "" : 'disabled title="Enregistrer d\'abord"'}>Tester</button><button class="icon" data-act="tgt-del" data-n="${esc(n)}" title="Supprimer">✕</button></div>
+      <div class="fields">
+        <label>Description</label><input class="w100" data-bind="${b}Description" value="${esc(t.Description)}">
+        <label>Format d'API</label><select data-bind="${b}API" data-rerender>${opts({ openai: "OpenAI (compatible)", anthropic: "Anthropic" }, t.API)}</select>
+        <label>URL de base</label><input class="w100 mono" data-bind="${b}BaseURL" value="${esc(t.BaseURL)}" placeholder="${t.API === "anthropic" ? "https://api.anthropic.com" : "https://…/v1"}">
+        <label>Modèles autorisés<br><span class="sub">séparés par des virgules, * accepté</span></label><input class="w100 mono" data-type="list" data-bind="${b}Models" value="${esc((t.Models || []).join(", "))}">
+        <label>Clé : variable d'env.</label><input class="w100 mono" data-bind="${b}APIKeyEnv" value="${esc(t.APIKeyEnv)}" placeholder="ex. MISTRAL_API_KEY (recommandé)">
+        <label>Clé : valeur directe</label><input class="w100 mono" type="password" autocomplete="new-password" data-type="secret" ${t.APIKey === KEEP ? "data-had=1" : ""} data-bind="${b}APIKey" value="${t.APIKey === KEEP ? "" : esc(t.APIKey)}" placeholder="${t.APIKey === KEEP ? "enregistrée (vide = conserver)" : "écrite dans config.toml"}">
+        <label>État</label><div>${keyState}</div>
+        <label>En-têtes HTTP<br><span class="sub">une ligne « nom: valeur »</span></label><textarea class="w100 mono" style="min-height:44px" data-type="kv" data-bind="${b}Headers">${esc(Object.entries(t.Headers || {}).map(([k, v]) => k + ": " + v).join("\n"))}</textarea>
+        <label>Options</label><div><label><input type="checkbox" data-bind="${b}StreamUsage" ${t.StreamUsage ? "checked" : ""}> tokens en streaming</label> &nbsp; <label><input type="checkbox" data-bind="${b}Disabled" ${t.Disabled ? "checked" : ""} data-rerender> désactivée</label></div>
+        <label>Utilisée par</label><div>${profs.map(esc).join(", ") || '<span class="sub">aucun profil</span>'}</div>
+        <label>Connexion</label><div>${test || '<span class="sub">« Tester » interroge /models avec la clé enregistrée</span>'}</div>
+      </div></div>`;
+  }).join("");
+  return `<section><div class="chead"><div><h2 style="font-size:15px;margin:0">Gateways de sortie : LLM cibles</h2><div class="sub">OpenAI, Mistral, Azure, Ollama, vLLM, LM Studio… au format OpenAI ; Claude au format Anthropic. Un client OpenAI n'est routé que vers des cibles OpenAI, et inversement.</div></div><span class="spacer"></span><button class="btn primary" data-act="tgt-add">+ Cible</button></div>
+    <div class="grid3">${cards || '<p class="sub">Aucune cible</p>'}</div></section>`;
+}
+
+// ---------- tab: privacy ----------
+function viewPrivacy() {
+  const c = S.cfg, P = sortedNames(c.Profiles), B = S.meta.builtins || {};
+  const dets = c.Detectors.map((d, i) => {
+    const m = methodOf(d), b = `Detectors|${i}|`;
+    const param = m === "builtin" ? `<select data-bind="${b}Builtin" data-rerender>${opts(Object.fromEntries(Object.keys(B).sort().map(k => [k, k])), d.Builtin)}</select> <span class="sub">${esc(B[d.Builtin] || "")}</span>`
+      : m === "regex" ? `<input class="mono" style="width:260px" data-bind="${b}Regex" value="${esc(d.Regex)}" placeholder="\\bDOS-\\d{4}-\\d{5}\\b"> groupe <input class="num" style="width:50px" data-type="num" data-bind="${b}Group" value="${d.Group || ""}" placeholder="0">`
+      : `<textarea class="mono" style="width:260px;min-height:52px" data-type="lines" data-bind="${b}Words" placeholder="un terme par ligne">${esc((d.Words || []).join("\n"))}</textarea><br><input class="mono" style="width:260px;margin-top:4px" data-bind="${b}WordsFile" value="${esc(d.WordsFile)}" placeholder="fichier (optionnel), ex. noms.txt">`;
+    return `<tr><td class="n sub">${i + 1}</td>
+      <td><input class="mono" style="width:120px" data-type="upper" data-bind="${b}Name" value="${esc(d.Name)}" data-rerender></td>
+      <td><select data-method="${i}">${opts(L.meth, m)}</select></td>
+      <td class="wrap">${param}</td>
+      <td><input data-bind="${b}Description" value="${esc(d.Description)}" placeholder="note"></td>
+      <td><button class="icon" data-act="det-up" data-i="${i}" ${i ? "" : "disabled"}>↑</button><button class="icon" data-act="det-down" data-i="${i}" ${i < c.Detectors.length - 1 ? "" : "disabled"}>↓</button><button class="icon" data-act="det-del" data-i="${i}">✕</button></td></tr>`;
+  }).join("");
+  const kinds = [...new Set(c.Detectors.map(d => d.Name))];
+  const cell = (pn, k) => { const p = c.Profiles[pn], v = p.Actions?.[k] || ""; return `<td><select data-bind="Profiles|${esc(pn)}|Actions|${esc(k)}">${opts(L.act, v, `<option value="" ${v ? "" : "selected"}>défaut (${esc(L.act[p.DefaultAction])})</option>`)}</select></td>`; };
+  const matrix = `<table class="matrix"><thead><tr><th>Type de donnée</th>${P.map(p => `<th>${esc(p)}</th>`).join("")}</tr></thead><tbody>
+    <tr style="background:var(--bg)"><td>Action par défaut</td>${P.map(pn => `<td><select data-bind="Profiles|${esc(pn)}|DefaultAction" data-rerender>${opts(L.act, c.Profiles[pn].DefaultAction)}</select></td>`).join("")}</tr>
+    ${kinds.map(k => `<tr><td class="mono">${esc(k)}</td>${P.map(pn => cell(pn, k)).join("")}</tr>`).join("")}
+    <tr><td>IMAGE / FICHIER</td>${P.map(pn => `<td><select data-bind="Profiles|${esc(pn)}|Images">${opts(L.img, c.Profiles[pn].Images)}</select></td>`).join("")}</tr>
+    <tr><td>Consigne « jetons »</td>${P.map(pn => `<td><label><input type="checkbox" data-bind="Profiles|${esc(pn)}|Hint" ${c.Profiles[pn].Hint ? "checked" : ""}> ajouter</label></td>`).join("")}</tr>
+    </tbody></table>`;
+  return `<section class="card"><div class="chead"><div><h2>Détecteurs de données sensibles</h2><div class="sub">Le type (ex. PERSON) donne le nom des jetons «PERSON_1». Plusieurs détecteurs peuvent partager un type. En cas de chevauchement, la correspondance la plus longue l'emporte, puis l'ordre.</div></div><span class="spacer"></span><button class="btn primary" data-act="det-add">+ Détecteur</button></div>
+      <div class="tw"><table><thead><tr><th>#</th><th>Type</th><th>Méthode</th><th>Paramètre</th><th>Note</th><th></th></tr></thead><tbody>${dets}</tbody></table></div></section>
+    <section class="card"><h2>Règles par profil</h2><div class="sub">Anonymiser : remplacé par un jeton puis restauré dans la réponse · Bloquer : requête refusée (violation) · Journaliser : laissé passer mais compté · Ignorer : non détecté</div>
+      <div class="tw">${matrix}</div></section>
+    <section class="card"><h2>Tester l'anonymisation</h2><div class="sub">Utilise la configuration <b>enregistrée</b>${isDirty() ? ' <span class="badge warn">modifications non enregistrées ignorées</span>' : ""}. Rien n'est envoyé à un LLM.</div>
+      <div style="display:flex;gap:8px;margin-bottom:8px"><select id="tprof">${P.map(p => `<option ${p === (S.testProf || "") ? "selected" : ""}>${esc(p)}</option>`).join("")}</select><button class="btn" data-act="test-run">Tester</button></div>
+      <textarea id="ttext" class="w100">${esc(S.testText ?? "Bonjour, je suis Mme Claire Dubois (claire.dubois@acme.be, +32 470 12 34 56). Mon NISS est 90.01.01-123.95 et le dossier DOS-2025-00042 concerne ACME SA. IBAN BE68 5390 0754 7034.")}</textarea>
+      <div>${S.testOut}</div></section>`;
+}
+
+// ---------- tab: quotas ----------
+function viewQuotas() {
+  const c = S.cfg, U = S.usage?.usage || {}, UQ = S.usage?.userQuota || {}, TQ = S.usage?.targetQuota || {};
+  const inp = (path, v, ph = "") => `<input class="num" data-type="num" data-bind="${path}" value="${v || ""}" placeholder="${esc(ph)}">`;
+  const act = (path, v) => `<select data-bind="${path}">${opts({ block: "Bloquer", warn: "Alerter" }, v || "block")}</select>`;
+  const bar = (used, lim) => { if (!lim) return `<div class="use">${fmt(used)}</div>`; const p = Math.min(100, used / lim * 100); return `<div class="use">${fmt(used)} / ${fmt(lim)}</div><div class="meter"><i class="${p >= 100 ? "c" : p >= 80 ? "w" : ""}" style="width:${p}%"></i></div>`; };
+  const F = [["RPM", "Req./minute"], ["RPD", "Req./jour"], ["TokensDay", "Tokens/jour"], ["TokensMonth", "Tokens/mois"]];
+  const head = `${F.map(f => `<th class="n">${f[1]}</th>`).join("")}<th>Si dépassé</th>`;
+  const profRows = sortedNames(c.Profiles).map(pn => { const q = c.Profiles[pn].Quota || {}; return `<tr><td><b>${esc(pn)}</b></td>${F.map(f => `<td class="n">${inp(`Profiles|${pn}|Quota|${f[0]}`, q[f[0]], "illimité")}</td>`).join("")}<td>${act(`Profiles|${pn}|Quota|Action`, q.Action)}</td><td class="sub">${usedBy.profile(pn).length} utilisateur(s)</td></tr>`; }).join("");
+  const userRows = sortedNames(c.Users).map(n => {
+    const u = c.Users[n], q = u.Quota || {}, pq = c.Profiles[u.Profile]?.Quota || {}, us = U["u:" + n] || {}, eq = UQ[n] || {};
+    return `<tr><td><b>${esc(n)}</b><div class="sub" style="margin:0">${esc(u.Profile)}</div></td>${F.map(f => `<td class="n">${inp(`Users|${n}|Quota|${f[0]}`, q[f[0]], pq[f[0]] ? "profil : " + pq[f[0]] : "illimité")}</td>`).join("")}
+      <td><select data-bind="Users|${esc(n)}|Quota|Action">${opts({ block: "Bloquer", warn: "Alerter" }, q.Action || "", `<option value="" ${q.Action ? "" : "selected"}>profil</option>`)}</select></td>
+      <td>${bar(us.RPM || 0, eq.RPM)}</td><td>${bar(us.DayReq || 0, eq.RPD)}</td><td>${bar(us.DayTok || 0, eq.TokensDay)}</td><td>${bar(us.MonthTok || 0, eq.TokensMonth)}</td></tr>`;
+  }).join("");
+  const tgtRows = sortedNames(c.Targets).map(n => { const q = c.Targets[n].Quota || {}, us = U["t:" + n] || {}, eq = TQ[n] || {};
+    return `<tr><td><b>${esc(n)}</b></td>${F.map(f => `<td class="n">${inp(`Targets|${n}|Quota|${f[0]}`, q[f[0]], "illimité")}</td>`).join("")}<td>${act(`Targets|${n}|Quota|Action`, q.Action)}</td>
+      <td>${bar(us.RPM || 0, eq.RPM)}</td><td>${bar(us.DayReq || 0, eq.RPD)}</td><td>${bar(us.DayTok || 0, eq.TokensDay)}</td><td>${bar(us.MonthTok || 0, eq.TokensMonth)}</td></tr>`; }).join("");
+  const useHead = `<th>Minute en cours</th><th>Req. aujourd'hui</th><th>Tokens aujourd'hui</th><th>Tokens ce mois</th>`;
+  return `<p class="help">Vide = illimité. Quand un quota est atteint : <b>Bloquer</b> renvoie une erreur 429 (comptée comme violation), <b>Alerter</b> laisse passer et journalise. Une cible LLM au-dessus de son quota est sautée : la suivante du profil prend le relais. Consommation en direct (jauges) selon la configuration <b>enregistrée</b>.</p>
+    <section class="card"><h2>Par profil</h2><div class="sub">Limite appliquée à <b>chaque</b> utilisateur du profil.</div><div class="tw"><table><thead><tr><th>Profil</th>${head}<th></th></tr></thead><tbody>${profRows}</tbody></table></div></section>
+    <section class="card"><h2>Par utilisateur</h2><div class="sub">Surcharge le profil champ par champ ; −1 = illimité pour cet utilisateur.</div><div class="tw"><table><thead><tr><th>Utilisateur</th>${head}${useHead}</tr></thead><tbody>${userRows}</tbody></table></div></section>
+    <section class="card"><h2>Par LLM cible</h2><div class="sub">Limite totale, tous utilisateurs confondus (budget fournisseur).</div><div class="tw"><table><thead><tr><th>Cible</th>${head}${useHead}</tr></thead><tbody>${tgtRows}</tbody></table></div></section>`;
+}
+
+// ---------- tab: reporting ----------
+function viewReport() {
+  return `<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><div class="seg" id="ranges" role="group" aria-label="Période">
+      ${[["48h", "48 h"], ["60d", "60 j"], ["6w", "6 sem"], ["12m", "12 mois"], ["3y", "3 ans"]].map(([r, l]) => `<button data-r="${r}" aria-pressed="${r === range}">${l}</button>`).join("")}</div>
+      <span class="sub" style="margin:0">Détail par requête sur ${S.cfg.Server.RawRetentionDays} j, puis agrégats journaliers lissés.</span></div>
+    <section class="kpis" id="kpis"></section>
+    <section class="grid2">
+      <div class="card"><h2>Requêtes par LLM cible</h2><div class="sub">Volumétrie par destination</div><div class="chart" id="c-req"></div></div>
+      <div class="card"><h2>Tokens par utilisateur</h2><div class="sub">Entrée + sortie, par source</div><div class="chart" id="c-tok"></div></div>
+      <div class="card"><h2>Temps de réponse moyen</h2><div class="sub">IN = lecture client · Gateway = traitement · LLM = cible jusqu'à la fin de réponse</div><div class="chart" id="c-lat"></div></div>
+      <div class="card"><h2>Filtrage</h2><div class="sub">Conversions (anonymisées ou retirées) et violations (bloquées : données ou quotas)</div><div class="chart" id="c-dlp"></div></div>
+    </section>
+    <section class="grid2">
+      <div class="card"><h2>Par utilisateur (source)</h2><div class="tw" id="t-user"></div></div>
+      <div class="card"><h2>Par LLM (destination)</h2><div class="tw" id="t-target"></div></div>
+    </section>
+    <section class="card"><h2>Détections et quotas par type</h2><div class="sub">Aucune valeur sensible n'est stockée, seulement des compteurs</div><div class="tw" id="t-det"></div></section>
+    <section class="card"><h2>Requêtes récentes</h2><div class="tw" id="t-recent"></div></section>`;
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest("#ranges button"); if (!b) return;
+  range = b.dataset.r; store.set("gwrange", range); loadStats();
+});
+function drawReport() {
+  if (!data || S.tab !== "report" || !$("#kpis")) return;
+  document.querySelectorAll("#ranges button").forEach(x => x.setAttribute("aria-pressed", x.dataset.r === range));
+  const d = data, B = d.buckets, all = d.all || [], tot = sumRows(all)[0] || { N: 0, Err: 0, BI: 0, BO: 0, TI: 0, TO: 0, SI: 0, SG: 0, SU: 0, ST: 0, An: 0, Bl: 0 };
+  const ok = tot.N - tot.Bl || 1, p = d.pct || {};
+  const kpi = (l, v, s = "") => `<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${s}</div></div>`;
+  $("#kpis").innerHTML =
+    kpi("Requêtes", fmt(tot.N), `${fmt(tot.Err)} erreurs`) +
+    kpi("Tokens", fmt(tot.TI + tot.TO), `${fmt(tot.TI)} in · ${fmt(tot.TO)} out`) +
+    kpi("Volume", fmtB(tot.BI + tot.BO), `${fmtB(tot.BI)} in · ${fmtB(tot.BO)} out`) +
+    kpi("Temps total moy.", tot.N ? fmtMs(tot.ST / tot.N) : "—", p.total_ms_p95 != null ? `p50 ${fmtMs(p.total_ms_p50)} · p95 ${fmtMs(p.total_ms_p95)}` : "") +
+    kpi("LLM cible moy.", tot.N ? fmtMs(tot.SU / ok) : "—", p.ttfb_ms_p50 != null ? `1er octet p50 ${fmtMs(p.ttfb_ms_p50)}` : "") +
+    kpi("Gateway moy.", tot.N ? fmtMs(tot.SG / tot.N) : "—", p.gw_ms_p95 != null ? `p95 ${fmtMs(p.gw_ms_p95)} · IN moy. ${fmtMs(tot.SI / (tot.N || 1))}` : "") +
+    kpi("Conversions", fmt(tot.An), "valeurs anonymisées ou retirées") +
+    kpi("Violations", tot.Bl ? `<span style="color:var(--critical)">${fmt(tot.Bl)}</span>` : "0", "requêtes bloquées");
+  stacked($("#c-req"), B, seriesBy(d.target || [], "target", B, r => r.N), fmt);
+  stacked($("#c-tok"), B, seriesBy(d.user || [], "user", B, r => r.TI + r.TO), fmt);
+  const at = (b, f) => { const r = all.find(x => x.B === b); return r && r.N ? f(r) : null; };
+  lines($("#c-lat"), B, [
+    { name: "IN", color: color(0), values: B.map(b => at(b, r => r.SI / r.N)) },
+    { name: "Gateway", color: color(1), values: B.map(b => at(b, r => r.SG / r.N)) },
+    { name: "LLM", color: color(2), values: B.map(b => at(b, r => r.N - r.Bl ? r.SU / (r.N - r.Bl) : null)) },
+  ], fmtMs);
+  stacked($("#c-dlp"), B, [
+    { name: "Conversions", color: color(0), values: B.map(b => at(b, r => r.An) || 0) },
+    { name: "Violations", color: "var(--critical)", values: B.map(b => at(b, r => r.Bl) || 0) },
+  ], fmt);
+  table($("#t-user"), sumRows(d.user || []), "user");
+  table($("#t-target"), sumRows(d.target || []), "target");
+  detTable($("#t-det"), d.dets || []);
+  recentTable($("#t-recent"), d.recent);
+}
+async function loadStats() { try { data = await api("/admin/api/stats?range=" + range); drawReport(); stamp(); } catch (e) { if (e.message !== "401") toast(e.message, true); } }
+async function loadUsage() { try { S.usage = await api("/admin/api/usage"); } catch {} }
+function stamp() { $("#upd").textContent = "Mis à jour " + new Date().toLocaleTimeString("fr-BE"); }
+
+// ---------- shell ----------
+const VIEWS = { users: viewUsers, targets: viewTargets, privacy: viewPrivacy, quotas: viewQuotas, report: viewReport };
+function render() {
+  if (!S.cfg) return;
+  const y = scrollY, a = document.activeElement?.id;
+  document.querySelectorAll("#tabs button").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === S.tab));
+  $("#view").innerHTML = (VIEWS[S.tab] || viewUsers)();
+  if (S.tab === "report") drawReport();
+  scrollTo(0, y); if (a && $("#" + a)) $("#" + a).focus();
+}
+async function go(tab) {
+  S.tab = tab; store.set("gwtab", tab); render(); scrollTo(0, 0);
+  if (tab === "report") await loadStats();
+  if (tab === "quotas" || tab === "users") { await loadUsage(); if (!document.activeElement?.closest("#view")) render(); }
+}
+$("#tabs").onclick = e => { const b = e.target.closest("button[data-tab]"); if (b) go(b.dataset.tab); };
+$("#theme").onclick = () => { const cur = document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"); const t = cur === "dark" ? "light" : "dark"; document.documentElement.dataset.theme = t; store.set("gwtheme", t); drawReport(); };
+if (store.get("gwtheme")) document.documentElement.dataset.theme = store.get("gwtheme");
+let rz; addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(drawReport, 150); });
+setInterval(async () => {
+  if (document.hidden || $("#view").hidden) return;
+  if (S.tab === "report") loadStats();
+  else if (S.tab === "quotas" && !document.activeElement?.closest("#view input, #view select")) { await loadUsage(); render(); stamp(); }
+}, 15000);
+async function boot() {
+  try {
+    await loadConfig();
+    $("#login").hidden = true; $("#view").hidden = false;
+    await loadUsage(); await go(S.tab); stamp();
+  } catch (e) { if (e.message !== "401") toast("Erreur : " + e.message, true); }
+}
+boot();
+</script>
+</body>
+</html>

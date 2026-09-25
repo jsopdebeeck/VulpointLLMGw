@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gateway Chat</title>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f4f3f0; --surface: #fcfcfb; --border: #e3e2de; --grid: #ecebe7;
+  --text: #0b0b0b; --text2: #52514e; --muted: #858480; --accent: #2a78d6; --userbg: #e8f0fb;
+  --good: #0ca30c; --critical: #d03b3b;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { color-scheme: dark; --bg: #111110; --surface: #1a1a19; --border: #2e2e2c; --grid: #262624;
+    --text: #fff; --text2: #c3c2b7; --muted: #8d8c85; --accent: #3987e5; --userbg: #1d2a3b; }
+}
+:root[data-theme="dark"] { color-scheme: dark; --bg: #111110; --surface: #1a1a19; --border: #2e2e2c; --grid: #262624;
+  --text: #fff; --text2: #c3c2b7; --muted: #8d8c85; --accent: #3987e5; --userbg: #1d2a3b; }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif; display: flex; flex-direction: column; }
+header { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--bg); }
+header h1 { font-size: 15px; margin: 0; font-weight: 650; }
+.who { font-size: 12px; color: var(--text2); }
+.spacer { flex: 1; }
+input, select, textarea, button { font: inherit; color: var(--text); }
+input, select { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; }
+button.btn { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; cursor: pointer; white-space: nowrap; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button:disabled { opacity: .45; cursor: default; }
+#log { flex: 1; overflow-y: auto; padding: 20px 16px 8px; }
+.wrap { max-width: 860px; margin: 0 auto; }
+.msg { margin: 0 0 18px; display: flex; flex-direction: column; }
+.msg.user { align-items: flex-end; }
+.bubble { max-width: 100%; padding: 10px 14px; border-radius: 14px; word-wrap: break-word; overflow-wrap: anywhere; }
+.user .bubble { background: var(--userbg); max-width: 85%; white-space: pre-wrap; }
+.assistant .bubble { background: var(--surface); border: 1px solid var(--border); width: 100%; }
+.assistant .bubble p { margin: 0 0 .6em; } .assistant .bubble p:last-child { margin: 0; }
+.bubble pre { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px; overflow-x: auto; font-size: 13px; }
+.bubble code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: .9em; }
+.meta { font-size: 12px; color: var(--muted); margin-top: 4px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.badge { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--border); font-size: 12px; color: var(--text2); background: var(--surface); }
+.badge.shield::before { content: "⇄"; color: var(--accent); }
+.badge.none::before { content: "✓"; color: var(--good); }
+.att { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 3px 8px; margin: 4px 6px 0 0; }
+.att button { border: 0; background: none; cursor: pointer; color: var(--muted); padding: 0 2px; }
+.att img { height: 28px; border-radius: 4px; }
+.err { color: var(--critical); }
+footer { border-top: 1px solid var(--border); padding: 10px 16px 14px; background: var(--bg); }
+.composer { max-width: 860px; margin: 0 auto; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 8px; }
+.composer.drag { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+.composer textarea { width: 100%; border: 0; outline: 0; resize: none; background: transparent; min-height: 44px; max-height: 240px; padding: 4px 6px; }
+.row { display: flex; gap: 8px; align-items: center; }
+.hint { font-size: 12px; color: var(--muted); }
+#login { max-width: 420px; margin: 12vh auto; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px; }
+#login h2 { margin: 0 0 4px; font-size: 17px; }
+.empty { text-align: center; color: var(--muted); margin-top: 12vh; }
+.empty b { color: var(--text); display: block; font-size: 18px; margin-bottom: 6px; }
+.cursor::after { content: "▍"; animation: blink 1s steps(2) infinite; color: var(--accent); }
+@keyframes blink { 50% { opacity: 0; } }
+</style>
+</head>
+<body>
+<div id="login" hidden>
+  <h2>Connexion au gateway</h2>
+  <p class="hint">Saisissez votre clé gateway personnelle (fournie par l'administrateur). Elle reste dans cet onglet.</p>
+  <form id="loginf" class="row"><input id="key" type="password" style="flex:1" autocomplete="off" placeholder="gw-…"><button class="btn primary">Entrer</button></form>
+  <p id="loginerr" class="err"></p>
+</div>
+
+<header id="top" hidden>
+  <h1>Gateway Chat</h1>
+  <span class="who" id="who"></span>
+  <span class="spacer"></span>
+  <input id="model" list="models" placeholder="modèle" style="width:230px" aria-label="Modèle">
+  <datalist id="models"></datalist>
+  <button class="btn" id="new">Nouvelle conversation</button>
+  <button class="btn" id="theme" title="Thème">◐</button>
+  <button class="btn" id="logout">Déconnexion</button>
+</header>
+<main id="log" hidden><div class="wrap" id="msgs"></div></main>
+<footer id="foot" hidden>
+  <div class="composer" id="composer">
+    <div id="atts"></div>
+    <textarea id="input" rows="1" placeholder="Votre message… (Entrée pour envoyer, Maj+Entrée pour une nouvelle ligne)"></textarea>
+    <div class="row">
+      <button class="btn" id="attach" title="Joindre un document ou une image">📎 Joindre</button>
+      <input type="file" id="file" multiple hidden accept=".txt,.md,.csv,.json,.xml,.html,.log,.yaml,.yml,.pdf,.docx,image/*">
+      <span class="hint" id="policy"></span>
+      <span class="spacer"></span>
+      <button class="btn" id="stop" hidden>Arrêter</button>
+      <button class="btn primary" id="send">Envoyer</button>
+    </div>
+  </div>
+</footer>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const ss = { get(k) { try { return sessionStorage.getItem(k) } catch { return null } }, set(k, v) { try { v == null ? sessionStorage.removeItem(k) : sessionStorage.setItem(k, v) } catch {} } };
+const ls = { get(k) { try { return localStorage.getItem(k) } catch { return null } }, set(k, v) { try { localStorage.setItem(k, v) } catch {} } };
+let key = ss.get("gwkey") || "", me = null, history = [], pending = [], ctrl = null;
+const MAX_DOC = 300000;
+
+// ---------- auth ----------
+async function login() {
+  const r = await fetch("/v1/me", { headers: { Authorization: "Bearer " + key } });
+  if (!r.ok) { ss.set("gwkey", null); $("#login").hidden = false; $("#loginerr").textContent = key ? "Clé refusée" : ""; return; }
+  me = await r.json();
+  $("#login").hidden = true; for (const id of ["#top", "#log", "#foot"]) $(id).hidden = false;
+  $("#who").textContent = `${me.user} · profil ${me.profile}`;
+  const imgs = { pass: "images transmises", strip: "images retirées avant envoi", block: "images interdites" }[me.images];
+  $("#policy").textContent = `Données sensibles pseudonymisées avant envoi · ${imgs}`;
+  const opts = new Set();
+  for (const t of me.targets) for (const m of t.Models || []) { if (!m.includes("*")) { opts.add(m); opts.add(t.Name + "/" + m); } }
+  $("#models").innerHTML = [...opts].map(m => `<option value="${esc(m)}">`).join("");
+  const hintWild = me.targets.filter(t => (t.Models || []).some(m => m.includes("*"))).map(t => `${t.Name} (${t.Models.join(", ")})`);
+  $("#model").title = "Modèles autorisés : " + ([...opts].join(", ") || "—") + (hintWild.length ? "\nAussi, selon motif : " + hintWild.join(" ; ") : "");
+  $("#model").value = ls.get("gwmodel") || [...opts][0] || "";
+  try { history = JSON.parse(ss.get("gwhist") || "[]"); } catch { history = []; }
+  renderAll(); $("#input").focus();
+}
+$("#loginf").onsubmit = e => { e.preventDefault(); key = $("#key").value.trim(); ss.set("gwkey", key); login(); };
+$("#logout").onclick = () => { ss.set("gwkey", null); ss.set("gwhist", null); location.reload(); };
+$("#model").onchange = () => ls.set("gwmodel", $("#model").value.trim());
+$("#theme").onclick = () => { const cur = document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"); const t = cur === "dark" ? "light" : "dark"; document.documentElement.dataset.theme = t; ls.set("gwtheme", t); };
+if (ls.get("gwtheme")) document.documentElement.dataset.theme = ls.get("gwtheme");
+
+// ---------- attachments ----------
+function loadScript(src) { return new Promise((ok, ko) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = () => ko(new Error("chargement impossible : " + src)); document.head.appendChild(s); }); }
+async function pdfText(buf) {
+  const pdfjs = await import("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs");
+  pdfjs.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs";
+  const doc = await pdfjs.getDocument({ data: buf }).promise; let out = "";
+  for (let i = 1; i <= doc.numPages; i++) { const c = await (await doc.getPage(i)).getTextContent(); out += c.items.map(it => it.str + (it.hasEOL ? "\n" : " ")).join("") + "\n\n"; }
+  return out;
+}
+async function docxText(buf) {
+  if (!window.mammoth) await loadScript("https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js");
+  return (await mammoth.extractRawText({ arrayBuffer: buf })).value;
+}
+async function addFile(f) {
+  const a = { name: f.name, size: f.size, loading: true }; pending.push(a); renderAtts();
+  try {
+    if (f.type.startsWith("image/")) {
+      a.kind = "image"; a.data = await new Promise((ok, ko) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = ko; r.readAsDataURL(f); });
+    } else {
+      a.kind = "doc"; const lower = f.name.toLowerCase();
+      a.text = lower.endsWith(".pdf") ? await pdfText(await f.arrayBuffer()) : lower.endsWith(".docx") ? await docxText(await f.arrayBuffer()) : await f.text();
+      a.text = a.text.replace(/\n{3,}/g, "\n\n").trim();
+      if (!a.text) throw new Error("aucun texte extrait (document scanné ?)");
+      if (a.text.length > MAX_DOC) { a.text = a.text.slice(0, MAX_DOC); a.truncated = true; }
+    }
+  } catch (e) { a.error = e.message; }
+  a.loading = false; renderAtts();
+}
+function renderAtts() {
+  $("#atts").innerHTML = pending.map((a, i) => `<span class="att">${a.kind === "image" && a.data ? `<img src="${a.data}" alt="">` : "📄"} ${esc(a.name)}
+    ${a.loading ? "<em>lecture…</em>" : a.error ? `<span class="err">${esc(a.error)}</span>` : a.kind === "doc" ? `<span class="hint">${Math.round(a.text.length / 1000)} k car.${a.truncated ? " (tronqué)" : ""}</span>` : ""}
+    <button data-rm="${i}" title="Retirer">✕</button></span>`).join("");
+}
+$("#atts").onclick = e => { const b = e.target.closest("[data-rm]"); if (b) { pending.splice(+b.dataset.rm, 1); renderAtts(); } };
+$("#attach").onclick = () => $("#file").click();
+$("#file").onchange = e => { [...e.target.files].forEach(addFile); e.target.value = ""; };
+const comp = $("#composer");
+comp.ondragover = e => { e.preventDefault(); comp.classList.add("drag"); };
+comp.ondragleave = () => comp.classList.remove("drag");
+comp.ondrop = e => { e.preventDefault(); comp.classList.remove("drag"); [...e.dataTransfer.files].forEach(addFile); };
+$("#input").addEventListener("paste", e => { const fs = [...e.clipboardData.files]; if (fs.length) { e.preventDefault(); fs.forEach(addFile); } });
+
+// ---------- rendering ----------
+function md(t) {
+  const parts = String(t).split(/```(\w*)\n?([\s\S]*?)(?:```|$)/g); let h = "";
+  for (let i = 0; i < parts.length; i += 3) {
+    h += esc(parts[i]).replace(/`([^`\n]+)`/g, "<code>$1</code>").replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>")
+      .split(/\n{2,}/).map(p => p.trim() ? `<p>${p.replace(/\n/g, "<br>")}</p>` : "").join("");
+    if (parts[i + 2] != null) h += `<pre><code>${esc(parts[i + 2])}</code></pre>`;
+  }
+  return h;
+}
+function metaHTML(m) {
+  if (!m) return "";
+  const kinds = m.kinds ? m.kinds.split(",").map(k => k.replace(":", " ×")).join(", ") : "";
+  return `<div class="meta">${m.target ? `<span>→ ${esc(m.target)}</span>` : ""}
+    ${m.conv > 0 ? `<span class="badge shield" title="Ces valeurs ont été remplacées par des jetons avant envoi, puis restaurées dans la réponse">${m.conv} donnée(s) pseudonymisée(s) : ${esc(kinds)}</span>` : m.target ? `<span class="badge none">aucune donnée sensible détectée</span>` : ""}
+    ${m.ms ? `<span>${(m.ms / 1000).toFixed(1)} s</span>` : ""}${m.tok ? `<span>${m.tok.in} → ${m.tok.out} tokens</span>` : ""}</div>`;
+}
+function msgHTML(m, i) {
+  if (m.role === "user") {
+    const atts = (m.atts || []).map(a => `<span class="att">${a.kind === "image" ? "🖼" : "📄"} ${esc(a.name)}</span>`).join("");
+    return `<div class="msg user"><div class="bubble">${esc(m.text)}</div>${atts ? `<div>${atts}</div>` : ""}${metaHTML(m.meta)}</div>`;
+  }
+  return `<div class="msg assistant"><div class="bubble ${m.streaming ? "cursor" : ""}" id="b${i}">${m.error ? `<span class="err">${esc(m.error)}</span>` : md(m.text || "")}</div>${metaHTML(m.meta)}</div>`;
+}
+function renderAll() {
+  $("#msgs").innerHTML = history.length ? history.map(msgHTML).join("")
+    : `<div class="empty"><b>Bonjour ${esc(me?.user || "")}</b>Vos messages passent par le gateway : noms, emails, numéros de dossier… sont remplacés par des jetons avant d'atteindre le LLM, puis restaurés dans la réponse.</div>`;
+  $("#log").scrollTop = $("#log").scrollHeight;
+}
+function save() { ss.set("gwhist", JSON.stringify(history.map(m => ({ ...m, atts: m.atts?.map(a => ({ name: a.name, kind: a.kind, text: a.text, data: a.kind === "image" ? a.data : undefined })) })))); }
+$("#new").onclick = () => { if (ctrl) ctrl.abort(); history = []; save(); renderAll(); };
+
+// ---------- request ----------
+function apiMessages() {
+  return history.filter(m => !m.error && !m.streaming).map(m => {
+    if (m.role === "assistant") return { role: "assistant", content: m.text };
+    let text = m.text;
+    for (const a of m.atts || []) if (a.kind === "doc") text += `\n\n--- Document joint : ${a.name} ---\n${a.text}\n--- Fin du document ---`;
+    const imgs = (m.atts || []).filter(a => a.kind === "image");
+    return imgs.length ? { role: "user", content: [{ type: "text", text }, ...imgs.map(a => ({ type: "image_url", image_url: { url: a.data } }))] } : { role: "user", content: text };
+  });
+}
+async function send() {
+  const text = $("#input").value.trim();
+  if (ctrl || (!text && !pending.length) || pending.some(a => a.loading)) return;
+  const model = $("#model").value.trim(); if (!model) { $("#model").focus(); return; }
+  ls.set("gwmodel", model);
+  const atts = pending.filter(a => !a.error); pending = []; renderAtts();
+  const um = { role: "user", text: text || "(voir document joint)", atts }; history.push(um);
+  const am = { role: "assistant", text: "", streaming: true }; history.push(am);
+  $("#input").value = ""; autosize(); renderAll();
+  ctrl = new AbortController(); $("#stop").hidden = false; $("#send").disabled = true;
+  const t0 = performance.now(); let buf = "";
+  try {
+    const r = await fetch("/v1/chat/completions", { method: "POST", signal: ctrl.signal,
+      headers: { Authorization: "Bearer " + key, "Content-Type": "application/json" },
+      body: JSON.stringify({ model, stream: true, messages: apiMessages() }) });
+    const meta = { target: r.headers.get("X-Gateway-Target"), conv: +(r.headers.get("X-Gateway-Conversions") || 0), kinds: r.headers.get("X-Gateway-Kinds") || "" };
+    um.meta = meta.target ? { conv: meta.conv, kinds: meta.kinds } : null;
+    if (!r.ok || !(r.headers.get("Content-Type") || "").includes("event-stream")) {
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error?.message || `HTTP ${r.status}`);
+      am.text = j.choices?.[0]?.message?.content || "";
+    } else {
+      const rd = r.body.getReader(), dec = new TextDecoder(); let tok = null, last = 0;
+      for (;;) {
+        const { done, value } = await rd.read(); if (done) break;
+        buf += dec.decode(value, { stream: true });
+        let i; while ((i = buf.indexOf("\n\n")) >= 0) {
+          const ev = buf.slice(0, i); buf = buf.slice(i + 2);
+          for (const line of ev.split("\n")) {
+            if (!line.startsWith("data:")) continue; const d = line.slice(5).trim(); if (d === "[DONE]") continue;
+            try { const j = JSON.parse(d); const c = j.choices?.[0]?.delta?.content; if (c) am.text += c; if (j.usage) tok = { in: j.usage.prompt_tokens, out: j.usage.completion_tokens }; if (j.error) throw new Error(j.error.message); } catch (e) { if (e.message && !(e instanceof SyntaxError)) throw e; }
+          }
+        }
+        if (performance.now() - last > 60) { last = performance.now(); const b = $("#b" + (history.length - 1)); if (b) { b.innerHTML = md(am.text); $("#log").scrollTop = $("#log").scrollHeight; } }
+      }
+      meta.tok = tok;
+    }
+    am.meta = { target: meta.target, conv: meta.conv, kinds: meta.kinds, ms: performance.now() - t0, tok: meta.tok };
+  } catch (e) {
+    if (e.name === "AbortError") am.text += "\n\n_(interrompu)_"; else am.error = e.message;
+  }
+  am.streaming = false; ctrl = null; $("#stop").hidden = true; $("#send").disabled = false;
+  save(); renderAll(); $("#input").focus();
+}
+$("#send").onclick = send;
+$("#stop").onclick = () => ctrl?.abort();
+$("#input").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); } });
+function autosize() { const t = $("#input"); t.style.height = "auto"; t.style.height = Math.min(240, t.scrollHeight) + "px"; }
+$("#input").addEventListener("input", autosize);
+
+if (key) login(); else $("#login").hidden = false;
+</script>
+</body>
+</html>
