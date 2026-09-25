@@ -305,7 +305,7 @@ func (s *Session) count(kind, act string) {
 type DebugEvent struct {
 	Kind, Action, Value, Placeholder string
 	N                                int
-	Sources                          map[string]int // where in the request: "system", "user #3"…
+	Sources                          map[string]int // where in the request: "system", "user@1" (1 = last message)…
 }
 
 func (s *Session) event(kind, act, v, ph string) {
@@ -570,7 +570,7 @@ func (s *Session) walkParts(body map[string]any, fn func(string) string) {
 						role = r
 					}
 				}
-				s.cur = fmt.Sprintf("%s #%d", role, i+1)
+				s.cur = fmt.Sprintf("%s@%d", role, len(msgs)-i) // counted from the end: stable when messages are prepended
 				msgs[i] = walk(m, 0, fn)
 			}
 			continue

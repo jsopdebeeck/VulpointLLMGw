@@ -144,3 +144,48 @@ func (g *Gateway) handleDebugClear(w http.ResponseWriter, r *http.Request) {
 	g.store.db.Exec(`VACUUM`)
 	writeJSON(w, map[string]any{"ok": true})
 }
+
+// handleDebugGlobal aggregates every detected value over the whole archive.
+func (g *Gateway) handleDebugGlobal(w http.ResponseWriter, r *http.Request) {
+	g.store.PurgeDebug(g.C().Debug.RetentionHours)
+	rs, err := g.store.db.Query(`SELECT id, ts, user, events FROM debug ORDER BY id`)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	defer rs.Close()
+	type agg struct {
+		Kind, Action, Value, Placeholder string
+		N, Exchanges                     int
+		Users                            map[string]int
+		LastID, LastTS                   int64
+	}
+	m := map[string]*agg{}
+	for rs.Next() {
+		var id, ts int64
+		var user, ev string
+		rs.Scan(&id, &ts, &user, &ev)
+		var es []*DebugEvent
+		json.Unmarshal([]byte(ev), &es)
+		for _, e := range es {
+			k := e.Kind + "\x00" + e.Action + "\x00" + e.Value
+			a := m[k]
+			if a == nil {
+				a = &agg{Kind: e.Kind, Action: e.Action, Value: e.Value, Users: map[string]int{}}
+				m[k] = a
+			}
+			a.N += e.N
+			a.Exchanges++
+			a.Users[user]++
+			a.LastID, a.LastTS = id, ts
+		}
+	}
+	out := make([]*agg, 0, len(m))
+	for _, a := range m {
+		out = append(out, a)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Exchanges > out[j].Exchanges || out[i].Exchanges == out[j].Exchanges && out[i].N > out[j].N
+	})
+	writeJSON(w, out)
+}

@@ -643,7 +643,7 @@ func TestAcronymListAndSources(t *testing.T) {
 			src[e.Value] += k + " "
 		}
 	}
-	if !strings.Contains(src["HUB"], "system #1") || !strings.Contains(src["cndg"], "user #2") {
+	if !strings.Contains(src["HUB"], "system@2") || !strings.Contains(src["cndg"], "user@1") {
 		t.Errorf("sources : %v", src)
 	}
 }

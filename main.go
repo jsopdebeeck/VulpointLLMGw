@@ -114,6 +114,7 @@ func main() {
 		writeJSON(w, map[string]any{"sent": uniq})
 	}))
 	mux.HandleFunc("GET /admin/api/debug", g.admin(g.handleDebugList))
+	mux.HandleFunc("GET /admin/api/debug/global", g.admin(g.handleDebugGlobal))
 	mux.HandleFunc("GET /admin/api/debug/{id}", g.admin(g.handleDebugGet))
 	mux.HandleFunc("DELETE /admin/api/debug", g.admin(g.handleDebugClear))
 	mux.HandleFunc("GET /admin/api/learned", g.admin(func(w http.ResponseWriter, r *http.Request) {

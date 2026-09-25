@@ -682,7 +682,8 @@ function viewDebug() {
     <section class="card"><h2>Échanges archivés</h2><div class="sub">Cliquer une ligne pour le détail. Légende : <b class="hl anonymize">anonymisé</b> <b class="hl block">bloqué</b> <b class="hl log">journalisé</b> <b class="hl strip">retiré</b></div>
       <div class="tw" style="max-height:340px;overflow:auto"><table><thead><tr><th>Heure</th><th>Utilisateur</th><th>LLM / modèle</th><th class="n">Statut</th><th>Détections</th><th class="n">Taille</th><th>Remarque</th></tr></thead>
       <tbody>${rows || `<tr><td colspan="7" class="sub">${saved ? "Aucun échange archivé pour l'instant." : "Mode DEBUG inactif."}</td></tr>`}</tbody></table></div></section>
-    ${S.dbgSel ? viewDebugDetail(S.dbgSel) : ""}`;
+    ${S.dbgSel ? viewDebugDetail(S.dbgSel) : ""}
+    ${viewDebugGlobal()}`;
 }
 // highlight placeholders (and, in original view, restore them) + blocked/logged values, in bold.
 function hlText(text, e, original) {
@@ -705,39 +706,70 @@ function partsText(c) {
   return c.map(p => p.text ?? (p.type === "tool_use" ? `[outil ${p.name}] ` + JSON.stringify(p.input) : p.type === "tool_result" ? "[résultat d'outil] " + partsText(p.content) : `[${p.type}]`)).join("\n");
 }
 function debugMessages(e) {
-  let body; try { body = JSON.parse(e.Req); } catch { return [{ role: "brut", text: e.Req }]; }
+  let body; try { body = JSON.parse(e.Req); } catch { return [{ role: "brut", src: "", text: e.Req }]; }
   const out = [];
-  if (body.system) out.push({ role: "system", text: partsText(body.system) });
-  for (const m of body.messages || []) {
+  if (body.system) out.push({ role: "system", src: "system", text: partsText(body.system) });
+  (body.messages || []).forEach((m, i) => {
     let t = partsText(m.content);
     for (const tc of m.tool_calls || []) t += `\n[appel d'outil ${tc.function?.name}] ${tc.function?.arguments}`;
-    out.push({ role: m.role, text: t });
-  }
-  if (body.input && !body.messages) out.push({ role: "input", text: partsText(body.input) });
+    out.push({ role: m.role, src: `${m.role} #${i + 1}`, text: t, i });
+  });
+  if (body.input && !body.messages) out.push({ role: "input", src: "input", text: partsText(body.input) });
   return out;
 }
-function viewDebugDetail(e) {
-  const orig = !!S.dbgOrig, msgs = debugMessages(e);
-  // where each value was found: sort by the most recent message, last message first
-  const pos = src => { const m = /#(\d+)$/.exec(src); return m ? +m[1] : 0; };
-  const maxPos = Math.max(0, ...(e.Events || []).flatMap(x => Object.keys(x.Sources || {}).map(pos)));
-  const lastUser = Math.max(0, ...(e.Events || []).flatMap(x => Object.keys(x.Sources || {}).filter(k => k.startsWith("user")).map(pos)));
-  const evs = [...(e.Events || [])].sort((a, b) => Math.max(0, ...Object.keys(b.Sources || {}).map(pos)) - Math.max(0, ...Object.keys(a.Sources || {}).map(pos)) || b.N - a.N);
-  const where = x => Object.entries(x.Sources || {}).sort((a, b) => pos(b[0]) - pos(a[0])).map(([k, n]) => `<span class="chip" style="cursor:default${pos(k) === lastUser && k.startsWith("user") ? ";border-color:var(--accent)" : ""}">${esc(k)}${n > 1 ? " ×" + n : ""}</span>`).join("");
-  const ev = evs.map(x => `<tr><td class="mono">${esc(x.Kind)}</td><td><b class="hl ${x.Action}">${ACTL[x.Action] || esc(x.Action)}</b></td><td><b>${esc(x.Value)}</b></td><td class="mono">${x.Placeholder ? "«" + esc(x.Placeholder) + "»" : "—"}</td><td class="n">${x.N}</td><td class="wrap">${where(x) || '<span class="sub">—</span>'}</td></tr>`).join("");
-  const msgHTML = msgs.map((m, i) => { const long = m.text.length > 1500 && i < msgs.length - 1;
-    return `<details class="dbgmsg" ${long ? "" : "open"}><summary>${esc(m.role)} · ${fmt(m.text.length)} car.</summary><div class="txt">${hlText(m.text, e, orig)}</div></details>`; }).join("");
-  return `<section class="card"><div class="chead"><div><h2>Échange #${e.ID}</h2><div class="sub">${new Date(e.TS * 1000).toLocaleString("fr-BE")} · ${esc(e.User)} (${esc(e.Profile)}) → ${esc(e.Target)}/${esc(e.Model)} · statut ${e.Status} · ${e.Conv} conversion(s)${e.Blocked ? " · BLOQUÉ" : ""}${e.Err ? " · " + esc(e.Err) : ""}</div></div><span class="spacer"></span>
-      <div class="seg"><button data-act="dbg-view" data-o="0" aria-pressed="${!orig}">Vue anonymisée</button><button data-act="dbg-view" data-o="1" aria-pressed="${orig}">Vue d'origine</button></div><button class="icon" data-act="dbg-close" title="Fermer">✕</button></div>
-    <h3>Mots détectés</h3><div class="sub" style="margin:2px 0 0">Portent sur <b>toute la requête reçue par le LLM</b> : prompt système du client (persona, mémoire…), historique de la conversation et dernier message. La colonne « Où » indique la partie concernée ; le dernier message utilisateur est encadré en bleu.</div>
-    <div class="tw" style="max-height:300px;overflow:auto;margin:6px 0 14px"><table><thead><tr><th>Type</th><th>Action</th><th>Valeur d'origine</th><th>Jeton</th><th class="n">Occurrences</th><th>Où</th></tr></thead><tbody>${ev || '<tr><td colspan="6" class="sub">Aucune détection</td></tr>'}</tbody></table></div>
-    <h3>Requête ${orig ? "(valeurs d'origine en gras)" : "(telle que reçue par le LLM)"}</h3>${msgHTML}
-    <h3 style="margin-top:14px">Réponse du LLM ${orig ? "(restaurée)" : "(brute, avant restauration)"}</h3><div class="dbgmsg"><div class="txt">${e.Resp ? hlText(e.Resp, e, orig) : '<span class="sub">vide</span>'}</div></div>
-    <details style="margin-top:10px"><summary class="sub" style="cursor:pointer">JSON brut envoyé au LLM</summary><pre class="out" style="max-height:400px;overflow:auto">${esc(e.Req)}</pre></details></section>`;
+// the exchange's own content: messages after the last assistant turn (the rest is context resent by the client)
+function splitTurn(msgs) {
+  const lastA = msgs.map(m => m.role).lastIndexOf("assistant");
+  const isNew = (m, k) => lastA >= 0 ? k > lastA : m.role !== "system";
+  return { turn: msgs.filter(isNew), context: msgs.filter((m, k) => !isNew(m, k)) };
 }
-async function loadDebug() { try { S.dbg = await api("/admin/api/debug"); } catch (e) { if (e.message !== "401") toast(e.message, true); } }
+function dbgTable(rows, whereFn, empty) {
+  return `<div class="tw" style="max-height:300px;overflow:auto;margin:6px 0 14px"><table><thead><tr><th>Type</th><th>Action</th><th>Valeur d'origine</th><th>Jeton</th><th class="n">Occ.</th><th>Où</th></tr></thead><tbody>${rows.map(x =>
+    `<tr><td class="mono">${esc(x.Kind)}</td><td><b class="hl ${x.Action}">${ACTL[x.Action] || esc(x.Action)}</b></td><td><b>${esc(x.Value)}</b></td><td class="mono">${x.Placeholder ? "«" + esc(x.Placeholder) + "»" : "—"}</td><td class="n">${x.n ?? x.N}</td><td class="wrap">${whereFn(x)}</td></tr>`).join("") ||
+    `<tr><td colspan="6" class="sub">${empty}</td></tr>`}</tbody></table></div>`;
+}
+function viewDebugDetail(e) {
+  const orig = !!S.dbgOrig, msgs = debugMessages(e), { turn, context } = splitTurn(msgs);
+  if (!e._remapped) { // server counts messages from the end ("user@1" = last): convert to positions in the request shown
+    const total = msgs.filter(m => m.i != null).length;
+    for (const x of e.Events || []) x.Sources = Object.fromEntries(Object.entries(x.Sources || {}).map(([k, n]) => { const m = /^(.*)@(\d+)$/.exec(k); return [m ? `${m[1]} #${total - +m[2] + 1}` : k, n]; }));
+    e._remapped = true;
+  }
+  const turnSrc = new Set(turn.map(m => m.src)), resp = e.Resp || "";
+  const chip = (k, n) => `<span class="chip" style="cursor:default">${esc(k)}${n > 1 ? " ×" + n : ""}</span>`;
+  // detections that belong to this exchange: in its new messages, or in the LLM response
+  const mine = (e.Events || []).map(x => {
+    const src = Object.entries(x.Sources || {}).filter(([k]) => turnSrc.has(k));
+    const inResp = x.Placeholder && resp.includes("«" + x.Placeholder + "»");
+    return { ...x, src, inResp, n: src.reduce((a, [, n]) => a + n, 0) };
+  }).filter(x => x.src.length || x.inResp);
+  const msgHTML = list => list.map(m => `<details class="dbgmsg" ${m.text.length > 3000 ? "" : "open"}><summary>${esc(m.src || m.role)} · ${fmt(m.text.length)} car.</summary><div class="txt">${hlText(m.text, e, orig)}</div></details>`).join("");
+  const allWhere = x => Object.entries(x.Sources || {}).sort((a, b) => (+(/#(\d+)$/.exec(b[0]) || [0, 0])[1]) - (+(/#(\d+)$/.exec(a[0]) || [0, 0])[1])).map(([k, n]) => chip(k, n)).join("");
+  return `<section class="card"><div class="chead"><div><h2>Échange #${e.ID}</h2><div class="sub">${new Date(e.TS * 1000).toLocaleString("fr-BE")} · ${esc(e.User)} (${esc(e.Profile)}) → ${esc(e.Target)}/${esc(e.Model)} · statut ${e.Status}${e.Blocked ? " · BLOQUÉ" : ""}${e.Err ? " · " + esc(e.Err) : ""}</div></div><span class="spacer"></span>
+      <div class="seg"><button data-act="dbg-view" data-o="0" aria-pressed="${!orig}">Vue anonymisée</button><button data-act="dbg-view" data-o="1" aria-pressed="${orig}">Vue d'origine</button></div><button class="icon" data-act="dbg-close" title="Fermer">✕</button></div>
+    <h3>Détecté dans cet échange</h3><div class="sub" style="margin:2px 0 0">Nouveaux messages de cet échange (${turn.length}) et réponse du LLM. Le contexte renvoyé par le client est en bas de page.</div>
+    ${dbgTable(mine, x => x.src.map(([k, n]) => chip(k, n)).join("") + (x.inResp ? chip("réponse", 1) : ""), "Rien de détecté dans cet échange")}
+    <h3>${turn.length > 1 ? "Messages" : "Message"} de cet échange ${orig ? "(valeurs d'origine en gras)" : "(tel que reçu par le LLM)"}</h3>${msgHTML(turn) || '<p class="sub">—</p>'}
+    <h3 style="margin-top:14px">Réponse du LLM ${orig ? "(restaurée)" : "(brute, avant restauration)"}</h3><div class="dbgmsg"><div class="txt">${resp ? hlText(resp, e, orig) : '<span class="sub">vide</span>'}</div></div>
+    <details style="margin-top:14px"><summary style="cursor:pointer"><b>Contexte complet envoyé au LLM</b> <span class="sub">· ${context.length} message(s) antérieurs ou système · ${(e.Events || []).length} valeur(s) détectée(s) au total · ${e.Conv} conversion(s)</span></summary>
+      <div class="sub" style="margin-top:6px">Le client (Hermes, chat…) renvoie à chaque appel son prompt système et tout l'historique : ils sont anonymisés à chaque fois.</div>
+      ${dbgTable(e.Events || [], allWhere, "Aucune détection")}
+      ${msgHTML(context)}
+      <details style="margin-top:10px"><summary class="sub" style="cursor:pointer">JSON brut envoyé au LLM</summary><pre class="out" style="max-height:400px;overflow:auto">${esc(e.Req)}</pre></details>
+    </details></section>`;
+}
+function viewDebugGlobal() {
+  const q = (S.dbgFilter || "").toLowerCase(), G = (S.dbgGlobal || []).filter(x => !q || (x.Kind + " " + x.Value + " " + x.Action).toLowerCase().includes(q));
+  return `<section class="card"><div class="chead"><div><h2>Vue globale : tout ce qui a été détecté</h2><div class="sub">Toutes les valeurs détectées dans l'archive (${(S.dbgGlobal || []).length}), tous échanges et contextes confondus, triées par nombre d'échanges.</div></div><span class="spacer"></span>
+      <input id="dbgfilter" placeholder="filtrer…" value="${esc(S.dbgFilter || "")}" style="width:180px"></div>
+    <div class="tw" style="max-height:460px;overflow:auto"><table><thead><tr><th>Type</th><th>Action</th><th>Valeur d'origine</th><th class="n">Échanges</th><th class="n">Occ.</th><th>Utilisateurs</th><th>Dernier</th></tr></thead><tbody>${G.slice(0, 1000).map(x =>
+      `<tr><td class="mono">${esc(x.Kind)}</td><td><b class="hl ${x.Action}">${ACTL[x.Action] || esc(x.Action)}</b></td><td><b>${esc(x.Value)}</b></td><td class="n">${x.Exchanges}</td><td class="n">${x.N}</td><td>${Object.keys(x.Users).map(esc).join(", ")}</td>
+       <td><button class="icon" data-act="dbg-open" data-id="${x.LastID}" title="Ouvrir l'échange">#${x.LastID} ↗</button></td></tr>`).join("") || '<tr><td colspan="7" class="sub">Rien</td></tr>'}</tbody></table></div></section>`;
+}
+document.addEventListener("input", e => { if (e.target.id === "dbgfilter") { S.dbgFilter = e.target.value; const p = e.target.selectionStart; render(); const f = $("#dbgfilter"); f.focus(); f.setSelectionRange(p, p); } });
+async function loadDebug() { try { [S.dbg, S.dbgGlobal] = await Promise.all([api("/admin/api/debug"), api("/admin/api/debug/global")]); } catch (e) { if (e.message !== "401") toast(e.message, true); } }
 Object.assign(ACTIONS, {
-  async "dbg-open"(d) { try { S.dbgSel = await api("/admin/api/debug/" + d.id); } catch (e) { toast(e.message, true); } },
+  async "dbg-open"(d) { try { S.dbgSel = await api("/admin/api/debug/" + d.id); setTimeout(() => [...document.querySelectorAll("h2")].find(h => h.textContent.startsWith("Échange #"))?.scrollIntoView({ block: "start" }), 50); } catch (e) { toast(e.message, true); } },
   "dbg-close"() { S.dbgSel = null; },
   "dbg-view"(d) { S.dbgOrig = d.o === "1"; },
   async "dbg-refresh"() { await loadDebug(); },
