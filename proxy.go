@@ -360,6 +360,19 @@ func (g *Gateway) handleLLM(api string) http.HandlerFunc {
 			} else {
 				out = []byte(sess.Restore(string(data)))
 			}
+			if resp.StatusCode >= 400 { // keep the upstream reason for the logs and the dashboard
+				msg := strings.TrimSpace(string(data[:min(len(data), 300)]))
+				if v, err := decodeJSON(data); err == nil {
+					if m, ok := v.(map[string]any); ok {
+						if e, ok := m["error"].(map[string]any); ok {
+							msg, _ = e["message"].(string)
+						} else if e, ok := m["error"].(string); ok {
+							msg = e
+						}
+					}
+				}
+				rec.Err = strings.TrimSpace(rec.Err + " upstream: " + msg)
+			}
 			ct := resp.Header.Get("Content-Type")
 			if ct == "" {
 				ct = "application/json"
@@ -639,11 +652,13 @@ func (g *Gateway) handleMe(w http.ResponseWriter, r *http.Request) {
 	type tgt struct {
 		Name, API string
 		Models    []string
+		Ready     bool // has a key, or is a local server that needs none
 	}
 	var ts []tgt
 	for _, n := range p.Targets {
 		if t := cfg.Targets[n]; !t.Disabled {
-			ts = append(ts, tgt{n, t.API, t.Models})
+			local := strings.Contains(t.BaseURL, "localhost") || strings.Contains(t.BaseURL, "127.0.0.1")
+			ts = append(ts, tgt{n, t.API, t.Models, t.key != "" || local})
 		}
 	}
 	us := g.meter.Snapshot()["u:"+name]

@@ -20,6 +20,7 @@ type Detector struct {
 	words   bool              // enforce word boundaries (lists)
 	names   bool              // matches are person/company names: learn their tokens too
 	kinds   map[string]string // learned detector: lower(value) -> kind
+	capOnly map[string]bool   // learned name words: only match when capitalized
 	prio    int
 	custom  func(string) [][2]int // heuristic finders (names)
 	builtin string
@@ -139,6 +140,9 @@ func (d *Detector) Find(s string) []span {
 		if a == b || (d.words && !boundary(s, a, b)) || (d.valid != nil && !d.valid(s[a:b])) {
 			continue
 		}
+		if d.capOnly[strings.ToLower(s[a:b])] && !isCap(s[a:b]) {
+			continue
+		}
 		k := d.Kind
 		if d.kinds != nil {
 			k = d.kinds[strings.ToLower(s[a:b])]
@@ -213,24 +217,26 @@ func validLuhn(s string) bool {
 // ---------- per-request session: anonymize in, restore out ----------
 
 type Session struct {
-	prof    *Profile
-	dets    []*Detector
-	learned *Detector
-	learn   map[string]string // lower(value) -> kind
-	fwd     map[string]string // kind \x00 lower(value) -> placeholder id
-	rev     map[string]string // placeholder id -> original value
-	cnt     map[string]int
-	fuzzy   map[string]string // one-deletion variant of a learned name word -> lower(word)
-	toLearn []string
-	learnOn bool // a person_learned detector is configured
-	NoLearn bool
-	Stats   map[string]map[string]int // kind -> action -> count
-	Anon    int
-	Blocked int
+	prof      *Profile
+	dets      []*Detector
+	learned   *Detector
+	learn     map[string]string // lower(value) -> kind
+	fwd       map[string]string // kind \x00 lower(value) -> placeholder id
+	rev       map[string]string // placeholder id -> original value
+	cnt       map[string]int
+	fuzzy     map[string]string // one-deletion variant of a learned name word -> lower(word)
+	allow     map[string]bool
+	nameWords map[string]bool // learned values that are names (case-sensitive match)
+	toLearn   []string
+	learnOn   bool // a person_learned detector is configured
+	NoLearn   bool
+	Stats     map[string]map[string]int // kind -> action -> count
+	Anon      int
+	Blocked   int
 }
 
 func NewSession(cfg *Config, prof *Profile) *Session {
-	s := &Session{prof: prof, dets: cfg.dets, learn: map[string]string{}, fwd: map[string]string{},
+	s := &Session{prof: prof, dets: cfg.dets, allow: cfg.allow, nameWords: map[string]bool{}, learn: map[string]string{}, fwd: map[string]string{},
 		rev: map[string]string{}, cnt: map[string]int{}, fuzzy: map[string]string{}, Stats: map[string]map[string]int{}}
 	for _, d := range cfg.dets {
 		s.learnOn = s.learnOn || d.builtin == "person_learned"
@@ -324,12 +330,31 @@ func (s *Session) spans(text string, withLearned bool) []span {
 	})
 	out, end := all[:0], 0
 	for _, sp := range all {
+		if s.allowed(text[sp.s:sp.e], sp.kind) {
+			continue
+		}
 		if sp.s >= end {
 			out = append(out, sp)
 			end = sp.e
 		}
 	}
 	return out
+}
+
+// allowed: the value, or for names its first word ("Claude Code", "Claude Cowork"), is on the allow list.
+func (s *Session) allowed(v, kind string) bool {
+	if len(s.allow) == 0 {
+		return false
+	}
+	if s.allow[fold(v)] {
+		return true
+	}
+	if s.isNames(kind) {
+		if ts := tokenize(v); len(ts) > 0 && s.allow[fold(ts[0].w)] {
+			return true
+		}
+	}
+	return false
 }
 
 // learnFrom (pass 1) remembers every value to anonymize, so that a name found
@@ -347,6 +372,7 @@ func (s *Session) learnFrom(text string) string {
 					lt := strings.ToLower(t)
 					if _, ok := s.learn[lt]; !ok {
 						s.learn[lt] = sp.kind
+						s.nameWords[lt] = true
 					}
 					for _, vr := range variants(fold(t)) {
 						if len(vr) >= 4 {
@@ -378,7 +404,7 @@ func (s *Session) buildLearned() {
 	for w := range s.learn {
 		ws = append(ws, w)
 	}
-	s.learned = &Detector{re: wordsRegex(ws), words: true, kinds: s.learn, prio: len(s.dets)}
+	s.learned = &Detector{re: wordsRegex(ws), words: true, kinds: s.learn, capOnly: s.nameWords, prio: len(s.dets)}
 }
 
 func (s *Session) placeholder(kind, v string) string {

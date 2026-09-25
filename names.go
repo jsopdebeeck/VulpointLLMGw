@@ -156,19 +156,24 @@ func editWithin1(a, b string) bool {
 
 func isTitle(w string) bool {
 	f := strings.TrimSuffix(fold(w), ".")
-	if shortTitles[f] {
-		return true
+	if shortTitles[f] { // abbreviations need their capital: "me", "m" are ordinary French words
+		return isCap(w)
 	}
 	if utf8.RuneCountInString(f) < 5 {
 		return false
 	}
 	for _, t := range titles {
 		if f == t || editWithin1(f, t) {
-			return true
+			// lowercase is only a title for forms of address ("bonjour monsieur Keizer");
+			// "maître", "docteur", "professeur" are also ordinary nouns ("le dossier maître Brésil")
+			return isCap(w) || addressForms[t]
 		}
 	}
 	return false
 }
+
+var addressForms = map[string]bool{"monsieur": true, "madame": true, "mademoiselle": true, "messieurs": true, "mesdames": true,
+	"mevrouw": true, "meneer": true, "juffrouw": true}
 
 // nameAfter returns the end of the name that starts at token i (1 to 3 capitalized
 // words, particles allowed inside), or -1.
@@ -200,7 +205,10 @@ func findTitled(s string) [][2]int {
 	var out [][2]int
 	for i := 0; i < len(ts)-1; i++ {
 		f := fold(ts[i].w)
-		if !isTitle(ts[i].w) && !cues[f] {
+		if !isTitle(ts[i].w) && !(cues[f] && !isAllCaps(ts[i].w)) { // "CLIENT ROSTER" is a heading, not a cue
+			continue
+		}
+		if f == "m" && !strings.HasPrefix(s[ts[i].e:], ".") { // "M." only
 			continue
 		}
 		if !gapOK(s[ts[i].e:ts[i+1].s]) {

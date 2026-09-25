@@ -44,7 +44,7 @@ models = ["claude-*"]
 api = "openai"
 base_url = "https://api.deepseek.com/v1"
 api_key_env = "DEEPSEEK_API_KEY"
-models = ["deepseek-*"]
+models = ["deepseek-flash", "deepseek-v4-pro"]
 stream_usage = true
 
 [targets.grok]
@@ -58,6 +58,13 @@ api = "openai"
 base_url = "https://api.z.ai/api/paas/v4"          # Chine continentale : https://open.bigmodel.cn/api/paas/v4
 api_key_env = "ZAI_API_KEY"
 models = ["glm-*"]
+
+# ---------------------------------------------------------------- privacy
+# Termes jamais anonymisés (produits, marques, personnalités publiques…). Pour un nom,
+# il suffit que le premier mot soit listé : "Claude" couvre aussi « Claude Code ».
+
+[privacy]
+allow = ["Claude", "Claude Code", "GitHub", "Anthropic", "OpenAI", "Mistral"]
 
 # ---------------------------------------------------------------- détecteurs
 # Types intégrés : email, phone, iban, niss (NISS belge, avec contrôle), card (Luhn), ipv4,

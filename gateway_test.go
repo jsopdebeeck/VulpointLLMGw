@@ -393,7 +393,8 @@ func TestNameHeuristics(t *testing.T) {
 			t.Errorf("mémoire : %q → %q", in, out)
 		}
 	}
-	for _, in := range []string{"Paris est une belle ville.", "Monsieur le directeur, Bonjour.", "Le Conseil Européen se réunit.", "Microsoft Azure et Google Cloud"} {
+	for _, in := range []string{"Paris est une belle ville.", "Monsieur le directeur, Bonjour.", "Le Conseil Européen se réunit.", "Microsoft Azure et Google Cloud",
+		"Il me parle du Brésil et du roster.", "Avec Claude Code, le code est prêt.", "Claude Cowork aide.", "Le dossier maître Brésil vit ici.", "CLIENT ROSTER (Vulpoint)"} {
 		if out := anon(in); out != in {
 			t.Errorf("faux positif : %q → %q", in, out)
 		}

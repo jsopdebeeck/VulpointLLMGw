@@ -18,8 +18,10 @@ type Config struct {
 	Targets   map[string]*Target  `toml:"targets"`
 	Profiles  map[string]*Profile `toml:"profiles"`
 	Users     map[string]*User    `toml:"users"`
+	Privacy   PrivacyCfg          `toml:"privacy"`
 	Detectors []*DetectorCfg      `toml:"detectors"`
 
+	allow  map[string]bool   // folded terms never anonymized
 	keys   map[string]string // client API key -> user name
 	dets   []*Detector
 	dbPath string
@@ -90,6 +92,10 @@ type Quota struct {
 	TokensDay   int64  `toml:"tokens_day,omitempty,omitzero"`
 	TokensMonth int64  `toml:"tokens_month,omitempty,omitzero"`
 	Action      string `toml:"action,omitempty"` // block (default) | warn
+}
+
+type PrivacyCfg struct {
+	Allow []string `toml:"allow,omitempty"` // never anonymized (products, public figures…)
 }
 
 type DetectorCfg struct {
@@ -172,6 +178,12 @@ func ParseConfig(data []byte, base string) (*Config, error) {
 		}
 	}
 
+	c.allow = map[string]bool{}
+	for _, a := range c.Privacy.Allow {
+		if a = strings.TrimSpace(a); a != "" {
+			c.allow[fold(a)] = true
+		}
+	}
 	c.dets = nil
 	for i, dc := range c.Detectors {
 		d, err := buildDetector(dc, base, i)

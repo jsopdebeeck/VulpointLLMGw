@@ -74,8 +74,8 @@ footer { border-top: 1px solid var(--border); padding: 10px 16px 14px; backgroun
   <h1>Gateway Chat</h1>
   <span class="who" id="who"></span>
   <span class="spacer"></span>
-  <input id="model" list="models" placeholder="modèle" style="width:230px" aria-label="Modèle">
-  <datalist id="models"></datalist>
+  <select id="modelSel" aria-label="Modèle" style="max-width:260px"></select>
+  <input id="model" placeholder="nom du modèle" style="width:200px" hidden aria-label="Autre modèle">
   <button class="btn" id="new">Nouvelle conversation</button>
   <button class="btn" id="theme" title="Thème">◐</button>
   <button class="btn" id="logout">Déconnexion</button>
@@ -113,18 +113,33 @@ async function login() {
   $("#who").textContent = `${me.user} · profil ${me.profile}`;
   const imgs = { pass: "images transmises", strip: "images retirées avant envoi", block: "images interdites" }[me.images];
   $("#policy").textContent = `Données sensibles pseudonymisées avant envoi · ${imgs}`;
-  const opts = new Set();
-  for (const t of me.targets) for (const m of t.Models || []) { if (!m.includes("*")) { opts.add(m); opts.add(t.Name + "/" + m); } }
-  $("#models").innerHTML = [...opts].map(m => `<option value="${esc(m)}">`).join("");
-  const hintWild = me.targets.filter(t => (t.Models || []).some(m => m.includes("*"))).map(t => `${t.Name} (${t.Models.join(", ")})`);
-  $("#model").title = "Modèles autorisés : " + ([...opts].join(", ") || "—") + (hintWild.length ? "\nAussi, selon motif : " + hintWild.join(" ; ") : "");
-  $("#model").value = ls.get("gwmodel") || [...opts][0] || "";
+  // one group per allowed LLM; targets without a key are listed as unavailable
+  const ids = [];
+  let h = "";
+  for (const t of me.targets) {
+    const ms = (t.Models || []).filter(m => !m.includes("*")), wild = (t.Models || []).filter(m => m.includes("*"));
+    h += `<optgroup label="${esc(t.Name)}${t.Ready ? "" : " (pas de clé)"}">` + ms.map(m => { const id = t.Name + "/" + m; if (t.Ready) ids.push(id); return `<option value="${esc(id)}" ${t.Ready ? "" : "disabled"}>${esc(m)}</option>`; }).join("")
+      + (wild.length ? `<option value="__other:${esc(t.Name)}" ${t.Ready ? "" : "disabled"}>${esc(wild.join(", "))} : autre…</option>` : "") + `</optgroup>`;
+  }
+  $("#modelSel").innerHTML = h;
+  const saved = ls.get("gwmodel");
+  if (saved && ids.includes(saved)) $("#modelSel").value = saved;
+  else if (saved && saved.includes("/") && me.targets.some(t => t.Ready && saved.startsWith(t.Name + "/"))) { $("#modelSel").value = "__other:" + saved.split("/")[0]; $("#model").value = saved.split("/").slice(1).join("/"); }
+  else $("#modelSel").value = ids[0] || "";
+  syncModel();
   try { history = JSON.parse(ss.get("gwhist") || "[]"); } catch { history = []; }
   renderAll(); $("#input").focus();
 }
 $("#loginf").onsubmit = e => { e.preventDefault(); key = $("#key").value.trim(); ss.set("gwkey", key); login(); };
 $("#logout").onclick = () => { ss.set("gwkey", null); ss.set("gwhist", null); location.reload(); };
-$("#model").onchange = () => ls.set("gwmodel", $("#model").value.trim());
+function currentModel() {
+  const v = $("#modelSel").value;
+  if (v.startsWith("__other:")) { const m = $("#model").value.trim(); return m ? v.slice(8) + "/" + m : ""; }
+  return v;
+}
+function syncModel() { $("#model").hidden = !$("#modelSel").value.startsWith("__other:"); if (currentModel()) ls.set("gwmodel", currentModel()); }
+$("#modelSel").onchange = () => { syncModel(); if (!$("#model").hidden) $("#model").focus(); };
+$("#model").onchange = syncModel;
 $("#theme").onclick = () => { const cur = document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"); const t = cur === "dark" ? "light" : "dark"; document.documentElement.dataset.theme = t; ls.set("gwtheme", t); };
 if (ls.get("gwtheme")) document.documentElement.dataset.theme = ls.get("gwtheme");
 
@@ -216,7 +231,7 @@ function apiMessages() {
 async function send() {
   const text = $("#input").value.trim();
   if (ctrl || (!text && !pending.length) || pending.some(a => a.loading)) return;
-  const model = $("#model").value.trim(); if (!model) { $("#model").focus(); return; }
+  const model = currentModel(); if (!model) { ($("#model").hidden ? $("#modelSel") : $("#model")).focus(); return; }
   ls.set("gwmodel", model);
   const atts = pending.filter(a => !a.error); pending = []; renderAtts();
   const um = { role: "user", text: text || "(voir document joint)", atts }; history.push(um);

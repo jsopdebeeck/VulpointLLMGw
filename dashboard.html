@@ -299,7 +299,7 @@ const opts = (map, cur, extra = "") => extra + Object.entries(map).map(([k, v]) 
 const sortedNames = o => Object.keys(o || {}).sort((a, b) => a.localeCompare(b));
 
 function normalize(c) {
-  c.Targets ||= {}; c.Profiles ||= {}; c.Users ||= {}; c.Detectors ||= [];
+  c.Targets ||= {}; c.Profiles ||= {}; c.Users ||= {}; c.Detectors ||= []; c.Privacy ||= {}; c.Privacy.Allow ||= [];
   for (const p of Object.values(c.Profiles)) { p.Targets ||= []; p.Actions ||= {}; }
   for (const t of Object.values(c.Targets)) { t.Models ||= []; }
 }
@@ -530,6 +530,8 @@ function viewPrivacy() {
     </tbody></table>`;
   return `<section class="card"><div class="chead"><div><h2>Détecteurs de données sensibles</h2><div class="sub">Le type (ex. PERSON) donne le nom des jetons «PERSON_1». Plusieurs détecteurs peuvent partager un type. En cas de chevauchement, la correspondance la plus longue l'emporte, puis l'ordre.</div></div><span class="spacer"></span><button class="btn primary" data-act="det-add">+ Détecteur</button></div>
       <div class="tw"><table><thead><tr><th>#</th><th>Type</th><th>Méthode</th><th>Paramètre</th><th>Note</th><th></th></tr></thead><tbody>${dets}</tbody></table></div></section>
+    <section class="card"><h2>Jamais anonymiser</h2><div class="sub">Produits, marques, personnalités publiques… Un terme par ligne, sans accents ni casse. Pour un nom, il suffit que le premier mot soit listé : « Claude » couvre « Claude Code ».</div>
+      <textarea class="w100" data-type="lines" data-bind="Privacy|Allow" style="min-height:90px">${esc((c.Privacy.Allow || []).join("\n"))}</textarea></section>
     <section class="card"><div class="chead"><div><h2>Mémoire des noms</h2><div class="sub">Actif si un détecteur « person_learned » est configuré. Chaque nom repéré avec certitude (titre, prénom connu, liste) est mémorisé sous forme d'empreintes HMAC, fautes de frappe comprises : il est ensuite reconnu seul (« Keizer », « Kiezer »). Aucun nom n'est stocké en clair ; oubli automatique après 1 an sans usage.</div></div><span class="spacer"></span>
       <span class="badge">${S.learned ?? "…"} nom(s) mémorisé(s)</span><button class="btn danger" data-act="learn-forget">Tout oublier</button></div></section>
     <section class="card"><h2>Règles par profil</h2><div class="sub">Anonymiser : remplacé par un jeton puis restauré dans la réponse · Bloquer : requête refusée (violation) · Journaliser : laissé passer mais compté · Ignorer : non détecté</div>
