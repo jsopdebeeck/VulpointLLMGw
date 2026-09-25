@@ -502,6 +502,13 @@ func TestTechnicalFalsePositives(t *testing.T) {
 	learner, _ = NewLearner(st.db)
 	defer func() { learner = nil }()
 	cfg.Privacy.Allow = nil // the built-in list alone must be enough
+	var keep []*Detector    // surname logic only: first names on their own are tested elsewhere
+	for _, d := range cfg.dets {
+		if d.builtin != "firstname_alone" {
+			keep = append(keep, d)
+		}
+	}
+	cfg.dets = keep
 	anon := func(in string) string {
 		s := NewSession(cfg, cfg.Profiles["standard"])
 		body := map[string]any{"messages": []any{map[string]any{"role": "user", "content": in}}}
@@ -680,6 +687,9 @@ func TestPlacesPetsOrgsFirstnames(t *testing.T) {
 		if out := anon(c.in); strings.Contains(out, c.leak) {
 			t.Errorf("%q → %q (fuite de %q)", c.in, out, c.leak)
 		}
+	}
+	if s := NewSession(cfg, cfg.Profiles["standard"]); strings.Count(s.AnonymizeText("Le HUB (H.U.B.) et le HUB"), "«COMPANY_1»") != 3 {
+		t.Error("HUB et H.U.B. doivent partager le même jeton")
 	}
 	for _, in := range []string{
 		"May I help you? Will you come in June?", "Rose est une couleur, Pierre est dure.", "Le hub central du réseau.",

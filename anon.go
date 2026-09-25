@@ -31,7 +31,8 @@ type span struct {
 	s, e  int
 	kind  string
 	prio  int
-	canon string // typo of a value seen earlier: reuse its placeholder
+	canon string    // typo of a value seen earlier: reuse its placeholder
+	det   *Detector // nil for values learned during the request
 }
 
 type builtin struct {
@@ -175,7 +176,7 @@ func (d *Detector) Find(s string) []span {
 	var out []span
 	if d.custom != nil {
 		for _, m := range d.custom(s) {
-			out = append(out, span{m[0], m[1], d.Kind, d.prio, ""})
+			out = append(out, span{m[0], m[1], d.Kind, d.prio, "", d})
 		}
 		return out
 	}
@@ -200,7 +201,7 @@ func (d *Detector) Find(s string) []span {
 		if d.kinds != nil {
 			k = d.kinds[strings.ToLower(s[a:b])]
 		}
-		out = append(out, span{a, b, k, d.prio, ""})
+		out = append(out, span{a, b, k, d.prio, "", d})
 	}
 	return out
 }
@@ -394,7 +395,7 @@ func (s *Session) spans(text string, withLearned bool) []span {
 			}
 			for _, v := range variants(fold(t.w)) {
 				if c, ok := s.fuzzy[v]; ok {
-					all = append(all, span{t.s, t.e, s.learn[c], len(s.dets) + 1, c})
+					all = append(all, span{t.s, t.e, s.learn[c], len(s.dets) + 1, c, nil})
 					break
 				}
 			}
@@ -447,7 +448,7 @@ func (s *Session) learnFrom(text string) string {
 			continue
 		}
 		v := text[sp.s:sp.e]
-		if isAllCaps(v) && sp.prio < len(s.dets) && s.dets[sp.prio].words { // list acronym: must not be learned case-insensitively
+		if isAllCaps(v) && sp.det != nil && sp.det.words && sp.det.kinds == nil { // list acronym: must not be learned case-insensitively
 			continue
 		}
 		s.learn[strings.ToLower(v)] = sp.kind
@@ -466,7 +467,7 @@ func (s *Session) learnFrom(text string) string {
 					}
 				}
 			}
-			if sp.prio < len(s.dets) && s.dets[sp.prio].strong() { // guesses from a first name are not persisted
+			if sp.det != nil && sp.det.strong() && sp.det.kinds == nil { // guesses from a first name are not persisted
 				s.toLearn = append(s.toLearn, nameTokens(v)...)
 			}
 		}
@@ -494,8 +495,14 @@ func (s *Session) buildLearned() {
 	s.learned = &Detector{re: wordsRegex(ws), words: true, kinds: s.learn, capOnly: s.nameWords, prio: len(s.dets)}
 }
 
+var reDottedAcronym = regexp.MustCompile(`^(?:\p{Lu}\.)+\p{Lu}?\.?$`)
+
 func (s *Session) placeholder(kind, v string) string {
-	k := kind + "\x00" + strings.ToLower(v)
+	key := strings.ToLower(v)
+	if reDottedAcronym.MatchString(v) { // H.U.B. and HUB: same entity, same token
+		key = strings.ToLower(strings.ReplaceAll(v, ".", ""))
+	}
+	k := kind + "\x00" + key
 	id, ok := s.fwd[k]
 	if !ok {
 		s.cnt[kind]++
