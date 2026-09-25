@@ -529,6 +529,7 @@ function viewTargets() {
         <label>Format d'API</label><select data-bind="${b}API" data-rerender>${opts({ openai: "OpenAI (compatible)", anthropic: "Anthropic" }, t.API)}</select>
         <label>URL de base</label><input class="w100 mono" data-bind="${b}BaseURL" value="${esc(t.BaseURL)}" placeholder="${t.API === "anthropic" ? "https://api.anthropic.com" : "https://…/v1"}">
         <label>Modèles autorisés<br><span class="sub">séparés par des virgules, * accepté</span></label><input class="w100 mono" data-type="list" data-bind="${b}Models" value="${esc((t.Models || []).join(", "))}">
+        <label>Alias de modèles<br><span class="sub">« demandé : envoyé », * accepté</span></label><textarea class="w100 mono" style="min-height:44px" data-type="kv" data-bind="${b}Aliases" placeholder="claude-* : deepseek-flash">${esc(Object.entries(t.Aliases || {}).map(([k, v]) => k + ": " + v).join("\n"))}</textarea>
         <label>Clé : variable d'env.</label><input class="w100 mono" data-bind="${b}APIKeyEnv" value="${esc(t.APIKeyEnv)}" placeholder="ex. MISTRAL_API_KEY (recommandé)">
         <label>Clé : valeur directe</label><input class="w100 mono" type="password" autocomplete="new-password" data-type="secret" ${t.APIKey === KEEP ? "data-had=1" : ""} data-bind="${b}APIKey" value="${t.APIKey === KEEP ? "" : esc(t.APIKey)}" placeholder="${t.APIKey === KEEP ? "enregistrée (vide = conserver)" : "écrite dans config.toml"}">
         <label>État</label><div>${keyState}</div>

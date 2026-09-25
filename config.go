@@ -46,7 +46,8 @@ type Target struct {
 	BaseURL     string            `toml:"base_url"`
 	APIKey      string            `toml:"api_key,omitempty"`
 	APIKeyEnv   string            `toml:"api_key_env,omitempty"`
-	Models      []string          `toml:"models,omitempty"` // glob, "*" = any
+	Models      []string          `toml:"models,omitempty"`  // glob, "*" = any
+	Aliases     map[string]string `toml:"aliases,omitempty"` // requested model (glob) -> model sent, e.g. "claude-*" = "deepseek-flash"
 	Headers     map[string]string `toml:"headers,omitempty"`
 	StreamUsage bool              `toml:"stream_usage,omitempty"` // ask OpenAI-style servers for usage in streams
 	// DowngradeJSONSchema turns response_format json_schema into json_object plus an instruction
@@ -57,6 +58,20 @@ type Target struct {
 
 	key  string
 	pats []*regexp.Regexp
+}
+
+// Alias returns the model to send for a requested name matching an alias pattern.
+func (t *Target) Alias(model string) (string, bool) {
+	best := ""
+	for pat := range t.Aliases { // longest matching pattern wins
+		if ok, _ := regexp.MatchString("^"+strings.ReplaceAll(regexp.QuoteMeta(pat), `\*`, ".*")+"$", model); ok && len(pat) > len(best) {
+			best = pat
+		}
+	}
+	if best == "" {
+		return "", false
+	}
+	return t.Aliases[best], true
 }
 
 func (t *Target) Allows(model string) bool {

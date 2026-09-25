@@ -69,6 +69,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/chat/completions", g.handleLLM("openai"))
 	mux.HandleFunc("POST /v1/messages", g.handleLLM("anthropic"))
+	mux.HandleFunc("POST /v1/messages/count_tokens", g.handleCountTokens)
 	mux.HandleFunc("GET /v1/models", g.handleModels)
 	mux.HandleFunc("GET /v1/me", g.handleMe)
 	mux.HandleFunc("GET /chat", func(w http.ResponseWriter, r *http.Request) {

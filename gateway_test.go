@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -72,6 +73,12 @@ func (m *mock) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	raw, _ := io.ReadAll(r.Body)
 	m.mu.Lock()
 	m.bodies = append(m.bodies, string(raw))
+	if strings.HasSuffix(r.URL.Path, "/count_tokens") {
+		m.mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"input_tokens":%d}`, len(raw)/4)
+		return
+	}
 	fail := m.fail
 	m.mu.Unlock()
 	if fail != 0 {
@@ -150,6 +157,7 @@ func setup(t *testing.T) (*httptest.Server, *mock, *mock, *Gateway) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/chat/completions", g.handleLLM("openai"))
 	mux.HandleFunc("POST /v1/messages", g.handleLLM("anthropic"))
+	mux.HandleFunc("POST /v1/messages/count_tokens", g.handleCountTokens)
 	gw := httptest.NewServer(mux)
 	t.Cleanup(gw.Close)
 	return gw, oai, ant, g
@@ -698,5 +706,45 @@ func TestPlacesPetsOrgsFirstnames(t *testing.T) {
 		if out := anon(in); out != in {
 			t.Errorf("faux positif : %q → %q", in, out)
 		}
+	}
+}
+
+func TestCountTokens(t *testing.T) {
+	gw, _, ant, _ := setup(t)
+	req := map[string]any{"model": "claude-sonnet-5", "messages": []any{map[string]any{"role": "user", "content": pii}}}
+	r := post(t, gw.URL+"/v1/messages/count_tokens?beta=true", "gw-alice-remplace-moi", req)
+	b, _ := io.ReadAll(r.Body)
+	if r.StatusCode != 200 || !strings.Contains(string(b), "input_tokens") {
+		t.Fatalf("status %d : %s", r.StatusCode, b)
+	}
+	noSecrets(t, ant.last())
+	if r := post(t, gw.URL+"/v1/messages/count_tokens", "gw-bob-remplace-moi", req); r.StatusCode != 403 {
+		t.Errorf("bob : 403 attendu (cible non autorisée ou NISS bloqué), obtenu %d", r.StatusCode)
+	}
+}
+
+func TestModelAlias(t *testing.T) {
+	cfg, _ := LoadConfig("config.example.toml")
+	tg := cfg.Targets["anthropic"]
+	tg.Models, tg.Aliases = []string{"deepseek-flash"}, map[string]string{"claude-*": "deepseek-flash", "claude-opus-*": "deepseek-v4-pro"}
+	tg.pats = []*regexp.Regexp{regexp.MustCompile(`^deepseek-flash$`)}
+	for in, want := range map[string]string{"claude-sonnet-4-6": "deepseek-flash", "claude-opus-5": "deepseek-v4-pro", "deepseek-flash": "deepseek-flash"} {
+		cs := route(cfg, cfg.Profiles["standard"], "anthropic", in)
+		if len(cs) == 0 || cs[0].model != want {
+			t.Errorf("%s → %v, %s attendu", in, cs, want)
+		}
+	}
+}
+
+func TestOpenProfileLogsOnly(t *testing.T) {
+	cfg, _ := LoadConfig("config.example.toml")
+	open := &Profile{Targets: []string{"local"}, Images: "pass", DefaultAction: "log", Actions: map[string]string{}}
+	s := NewSession(cfg, open)
+	s.Debug = true
+	if out := s.AnonymizeText(pii); out != pii {
+		t.Errorf("OPEN ne doit rien modifier : %q", out)
+	}
+	if len(s.Events) == 0 || s.Stats["EMAIL"]["log"] == 0 || s.Anon != 0 || s.Blocked != 0 {
+		t.Errorf("OPEN doit journaliser les détections : stats %v, conv %d", s.Stats, s.Anon)
 	}
 }

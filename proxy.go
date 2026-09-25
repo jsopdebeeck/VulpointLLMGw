@@ -133,20 +133,29 @@ func route(cfg *Config, p *Profile, api, model string) []cand {
 	}
 	var out []cand
 	for _, n := range p.Targets {
-		if t := cfg.Targets[n]; t.API == api && !t.Disabled && t.Allows(model) {
+		t := cfg.Targets[n]
+		if t.API != api || t.Disabled {
+			continue
+		}
+		if t.Allows(model) {
 			out = append(out, cand{n, t, model})
+		} else if to, ok := t.Alias(model); ok {
+			out = append(out, cand{n, t, to})
 		}
 	}
 	return out
 }
 
 func (g *Gateway) send(in *http.Request, c cand, api string, payload []byte) (*http.Response, error) {
-	url := strings.TrimRight(c.t.BaseURL, "/")
+	path := "/v1/messages"
 	if api == "openai" {
-		url += "/chat/completions"
-	} else {
-		url += "/v1/messages"
+		path = "/chat/completions"
 	}
+	return g.sendPath(in, c, api, path, payload)
+}
+
+func (g *Gateway) sendPath(in *http.Request, c cand, api, path string, payload []byte) (*http.Response, error) {
+	url := strings.TrimRight(c.t.BaseURL, "/") + path
 	req, err := http.NewRequestWithContext(in.Context(), "POST", url, bytes.NewReader(payload))
 	if err != nil {
 		return nil, err
@@ -768,4 +777,59 @@ func adaptBody(body map[string]any, t *Target, api string) map[string]any {
 	msgs, _ := body["messages"].([]any)
 	out["messages"] = append(append([]any{}, msgs...), map[string]any{"role": "system", "content": note})
 	return out
+}
+
+// ---------- /v1/messages/count_tokens (Claude Code) ----------
+
+// handleCountTokens counts the tokens of the request as it would be sent: same routing,
+// same anonymization and same blocking as /v1/messages. Not counted in usage or quotas.
+func (g *Gateway) handleCountTokens(w http.ResponseWriter, r *http.Request) {
+	const api = "anthropic"
+	cfg := g.C()
+	_, u := g.auth(cfg, r)
+	if u == nil {
+		apiError(w, api, 401, "authentication_error", "clé API gateway invalide ou utilisateur désactivé")
+		return
+	}
+	prof := cfg.Profiles[u.Profile]
+	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, int64(cfg.Server.MaxBodyMB)<<20))
+	v, derr := decodeJSON(raw)
+	body, ok := v.(map[string]any)
+	if err != nil || derr != nil || !ok {
+		apiError(w, api, 400, "invalid_request_error", "JSON invalide")
+		return
+	}
+	model, _ := body["model"].(string)
+	cands := route(cfg, prof, api, model)
+	if len(cands) == 0 {
+		apiError(w, api, 403, "permission_error", fmt.Sprintf("modèle %q non autorisé pour le profil %q", model, u.Profile))
+		return
+	}
+	sess := NewSession(cfg, prof)
+	sess.NoLearn = true
+	sess.Process(body, api)
+	if sess.Blocked > 0 {
+		apiError(w, api, 403, "permission_error", "requête bloquée par la politique de données : "+sess.BlockedKinds())
+		return
+	}
+	var resp *http.Response
+	for i, c := range cands {
+		body["model"] = c.model
+		resp, err = g.sendPath(r, c, api, "/v1/messages/count_tokens", encodeJSON(body))
+		if err == nil && (i == len(cands)-1 || (resp.StatusCode < 500 && resp.StatusCode != 429)) {
+			break
+		}
+		if err == nil {
+			resp.Body.Close()
+		}
+		resp = nil
+	}
+	if resp == nil {
+		apiError(w, api, 502, "api_error", "aucun LLM cible disponible")
+		return
+	}
+	defer resp.Body.Close()
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(resp.StatusCode)
+	io.Copy(w, resp.Body)
 }
