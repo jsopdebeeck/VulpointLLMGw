@@ -425,3 +425,37 @@ func TestDowngradeJSONSchema(t *testing.T) {
 		t.Error("la requête d'origine ne doit pas être modifiée (repli sur une autre cible)")
 	}
 }
+
+func TestDebugArchive(t *testing.T) {
+	gw, _, _, g := setup(t)
+	g.C().Debug.Enabled = true
+	g.C().Profiles["standard"].Actions["NISS"] = "log"
+	for _, stream := range []bool{false, true} {
+		r := post(t, gw.URL+"/v1/chat/completions", "gw-alice-remplace-moi", map[string]any{
+			"model": "mistral-large", "stream": stream, "messages": []any{map[string]any{"role": "user", "content": pii}}})
+		io.ReadAll(r.Body)
+	}
+	time.Sleep(300 * time.Millisecond)
+	rs, err := g.store.db.Query(`SELECT req, resp, mapping, events FROM debug`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := 0
+	for rs.Next() {
+		n++
+		var req, resp, mp, ev string
+		rs.Scan(&req, &resp, &mp, &ev)
+		if strings.Contains(req, "claire.dubois@acme.be") || !strings.Contains(req, "«EMAIL_1»") {
+			t.Errorf("requête archivée : doit être la vue anonymisée")
+		}
+		if !strings.Contains(resp, "«PERSON_") {
+			t.Errorf("réponse archivée : doit être la réponse brute du LLM, avant restauration : %q", resp)
+		}
+		if !strings.Contains(mp, "claire.dubois@acme.be") || !strings.Contains(ev, `"Action":"log"`) {
+			t.Errorf("détail : correspondances ou événements manquants\n%s\n%s", mp, ev)
+		}
+	}
+	if n != 2 {
+		t.Errorf("%d entrées archivées au lieu de 2", n)
+	}
+}

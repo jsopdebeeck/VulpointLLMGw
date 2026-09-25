@@ -19,6 +19,7 @@ type Config struct {
 	Profiles  map[string]*Profile `toml:"profiles"`
 	Users     map[string]*User    `toml:"users"`
 	Privacy   PrivacyCfg          `toml:"privacy"`
+	Debug     DebugCfg            `toml:"debug"`
 	Detectors []*DetectorCfg      `toml:"detectors"`
 
 	allow  map[string]bool   // folded terms never anonymized
@@ -97,6 +98,13 @@ type Quota struct {
 	Action      string `toml:"action,omitempty"` // block (default) | warn
 }
 
+// DebugCfg: archive full exchanges (cleartext!) for troubleshooting, purged after RetentionHours.
+type DebugCfg struct {
+	Enabled        bool `toml:"enabled"`
+	RetentionHours int  `toml:"retention_hours,omitempty,omitzero"`
+	MaxKB          int  `toml:"max_kb,omitempty,omitzero"` // per request / response
+}
+
 type PrivacyCfg struct {
 	Allow []string `toml:"allow,omitempty"` // never anonymized (products, public figures…)
 }
@@ -160,6 +168,12 @@ func ParseConfig(data []byte, base string) (*Config, error) {
 	}
 	if s.UpstreamTimeout <= 0 {
 		s.UpstreamTimeout = 300
+	}
+	if c.Debug.RetentionHours <= 0 {
+		c.Debug.RetentionHours = 24
+	}
+	if c.Debug.MaxKB <= 0 {
+		c.Debug.MaxKB = 1024
 	}
 
 	for n, t := range c.Targets {

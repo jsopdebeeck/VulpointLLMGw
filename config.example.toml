@@ -67,6 +67,16 @@ models = ["glm-*"]
 [privacy]
 allow = ["Claude", "Claude Code", "GitHub", "Anthropic", "OpenAI", "Mistral"]
 
+# ---------------------------------------------------------------- debug
+# Archive complète des échanges pour le dépannage (onglet Debug du dashboard) :
+# requête vue par le LLM, réponse brute, correspondances jeton → valeur, mots détectés.
+# ATTENTION : les valeurs d'origine sont stockées EN CLAIR. À activer le temps d'un diagnostic.
+
+[debug]
+enabled = false
+retention_hours = 24      # purge automatique
+max_kb = 1024             # taille max archivée par requête / réponse
+
 # ---------------------------------------------------------------- détecteurs
 # Types intégrés : email, phone, iban, niss (NISS belge, avec contrôle), card (Luhn), ipv4,
 #   person_title     : nom après un titre (fautes tolérées : Moniseur) ou un mot de contexte (patient, client, nommé…)

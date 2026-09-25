@@ -53,6 +53,9 @@ func OpenStore(path string) (*Store, error) {
 		return nil, err
 	}
 	s := &Store{db: db, ch: make(chan *Rec, 10000), done: make(chan struct{})}
+	if err := s.initDebug(); err != nil {
+		return nil, err
+	}
 	go s.writer()
 	return s, nil
 }

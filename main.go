@@ -86,6 +86,9 @@ func main() {
 	mux.HandleFunc("PUT /admin/api/config", g.admin(g.handlePutConfig))
 	mux.HandleFunc("GET /admin/api/usage", g.admin(g.handleUsage))
 	mux.HandleFunc("POST /admin/api/target-test", g.admin(g.handleTargetTest))
+	mux.HandleFunc("GET /admin/api/debug", g.admin(g.handleDebugList))
+	mux.HandleFunc("GET /admin/api/debug/{id}", g.admin(g.handleDebugGet))
+	mux.HandleFunc("DELETE /admin/api/debug", g.admin(g.handleDebugClear))
 	mux.HandleFunc("GET /admin/api/learned", g.admin(func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"count": learner.Count()})
 	}))

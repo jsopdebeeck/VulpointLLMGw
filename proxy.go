@@ -181,6 +181,9 @@ func (g *Gateway) handleLLM(api string) http.HandlerFunc {
 		rec := &Rec{TS: t0, API: api, User: "?"}
 		var inDur, upDur time.Duration
 		admitted := false
+		var dbg *DebugEntry
+		var dbgResp strings.Builder
+		var sess *Session
 		rec.Dets = map[string]map[string]int{}
 		quotaEvent := func(limit, act string) {
 			k := "QUOTA_" + limit
@@ -194,6 +197,16 @@ func (g *Gateway) handleLLM(api string) http.HandlerFunc {
 			rec.GwMs = max(0, rec.TotalMs-rec.InMs-rec.UpMs)
 			if admitted {
 				g.meter.AddTokens(rec.TokIn+rec.TokOut, "u:"+rec.User, "t:"+rec.Target)
+			}
+			if dbg != nil {
+				dbg.TS, dbg.User, dbg.Profile, dbg.Target, dbg.Model, dbg.API = t0.Unix(), rec.User, rec.Profile, rec.Target, rec.Model, api
+				dbg.Status, dbg.Conv, dbg.Blocked, dbg.Err = rec.Status, rec.Anon, rec.Blocked, rec.Err
+				dbg.Resp = truncKB(dbgResp.String(), cfg.Debug.MaxKB)
+				dbg.Mapping = sess.rev
+				for _, e := range sess.Events {
+					dbg.Events = append(dbg.Events, e)
+				}
+				go g.store.AddDebug(dbg, cfg.Debug.RetentionHours)
 			}
 			g.store.Add(rec)
 			log.Printf("%s %s → %s/%s %d in=%dms gw=%dms llm=%dms tok=%d/%d conv=%d viol=%d %s",
@@ -276,8 +289,12 @@ func (g *Gateway) handleLLM(api string) http.HandlerFunc {
 		cands = ok2
 		rec.Target = cands[0].name
 
-		sess := NewSession(cfg, prof)
+		sess = NewSession(cfg, prof)
+		sess.Debug = cfg.Debug.Enabled
 		sess.Process(body, api)
+		if cfg.Debug.Enabled {
+			dbg = &DebugEntry{Req: debugBody(encodeJSON(body), cfg.Debug.MaxKB)}
+		}
 		for k, m := range sess.Stats {
 			rec.Dets[k] = m
 		}
@@ -346,7 +363,11 @@ func (g *Gateway) handleLLM(api string) http.HandlerFunc {
 			w.Header().Set("Cache-Control", "no-cache")
 			w.Header().Set("X-Accel-Buffering", "no")
 			w.WriteHeader(200)
-			if err := relaySSE(w, resp.Body, api, sess, rec); err != nil {
+			var raw *strings.Builder
+			if dbg != nil {
+				raw = &dbgResp
+			}
+			if err := relaySSE(w, resp.Body, api, sess, rec, raw); err != nil {
 				rec.Err = strings.TrimSpace(rec.Err + " stream:" + err.Error())
 			}
 		} else {
@@ -355,6 +376,13 @@ func (g *Gateway) handleLLM(api string) http.HandlerFunc {
 				rec.Err = strings.TrimSpace(rec.Err + " read:" + err.Error())
 			}
 			out := data
+			if dbg != nil {
+				if v, err := decodeJSON(data); err == nil && responseText(v) != "" {
+					dbgResp.WriteString(responseText(v))
+				} else {
+					dbgResp.Write(data)
+				}
+			}
 			if v, err := decodeJSON(data); err == nil {
 				restoreAll(v, sess.Restore)
 				if m, ok := v.(map[string]any); ok {
@@ -393,9 +421,10 @@ func (g *Gateway) handleLLM(api string) http.HandlerFunc {
 
 // ---------- SSE relay with on-the-fly restore ----------
 
-func relaySSE(w http.ResponseWriter, body io.Reader, api string, s *Session, rec *Rec) error {
+func relaySSE(w http.ResponseWriter, body io.Reader, api string, s *Session, rec *Rec, raw *strings.Builder) error {
 	fl, _ := w.(http.Flusher)
 	rs := newRestorer(s)
+	rs.raw = raw
 	var tpl map[string]any
 	put := func(name, data string, extra []string) {
 		var b strings.Builder

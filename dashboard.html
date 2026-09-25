@@ -109,6 +109,16 @@ pre.out { white-space: pre-wrap; word-break: break-word; background: var(--bg); 
 .matrix select { min-width: 150px; }
 .matrix td:first-child { font-weight: 600; }
 .help { font-size: 12px; color: var(--text2); background: var(--bg); border-radius: 8px; padding: 8px 12px; }
+b.hl { font-weight: 700; border-radius: 3px; padding: 0 2px; }
+b.hl.anonymize { color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+b.hl.block { color: var(--critical); background: color-mix(in srgb, var(--critical) 14%, transparent); }
+b.hl.log { color: #b26b00; background: color-mix(in srgb, var(--warning) 22%, transparent); }
+b.hl.strip, b.hl.pass { color: var(--text2); background: var(--grid); }
+.dbgmsg { border: 1px solid var(--border); border-radius: 10px; margin: 8px 0; background: var(--bg); }
+.dbgmsg > summary, .dbgmsg > .role { cursor: pointer; padding: 6px 10px; font-size: 12px; color: var(--text2); font-weight: 600; }
+.dbgmsg .txt { white-space: pre-wrap; word-break: break-word; padding: 4px 12px 10px; font-size: 13px; max-height: 480px; overflow: auto; }
+tr.click { cursor: pointer; } tr.click:hover td { background: var(--grid); } tr.sel td { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.dbgbanner { background: var(--critical); color: #fff; font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; cursor: pointer; }
 @media (max-width: 640px) { .hbar, nav.tabs, main { padding-left: 16px; padding-right: 16px; } .fields { grid-template-columns: 1fr; } }
 </style>
 </head>
@@ -117,6 +127,7 @@ pre.out { white-space: pre-wrap; word-break: break-word; background: var(--bg); 
   <div class="hbar">
     <h1>LLM Gateway</h1>
     <span class="spacer"></span>
+    <span id="dbgflag" class="dbgbanner" hidden onclick="go('debug')" title="Des échanges complets sont archivés en clair">DEBUG actif</span>
     <span id="upd" style="color:var(--muted);font-size:12px"></span>
     <button class="btn" id="theme" title="Thème clair / sombre">◐</button>
   </div>
@@ -126,6 +137,7 @@ pre.out { white-space: pre-wrap; word-break: break-word; background: var(--bg); 
     <button data-tab="privacy" role="tab">Filtrage &amp; privacy</button>
     <button data-tab="quotas" role="tab">Quotas</button>
     <button data-tab="report" role="tab">Reporting</button>
+    <button data-tab="debug" role="tab">Debug</button>
   </nav>
 </header>
 
@@ -299,13 +311,14 @@ const opts = (map, cur, extra = "") => extra + Object.entries(map).map(([k, v]) 
 const sortedNames = o => Object.keys(o || {}).sort((a, b) => a.localeCompare(b));
 
 function normalize(c) {
-  c.Targets ||= {}; c.Profiles ||= {}; c.Users ||= {}; c.Detectors ||= []; c.Privacy ||= {}; c.Privacy.Allow ||= [];
+  c.Targets ||= {}; c.Profiles ||= {}; c.Users ||= {}; c.Detectors ||= []; c.Privacy ||= {}; c.Privacy.Allow ||= []; c.Debug ||= { Enabled: false, RetentionHours: 24 };
   for (const p of Object.values(c.Profiles)) { p.Targets ||= []; p.Actions ||= {}; }
   for (const t of Object.values(c.Targets)) { t.Models ||= []; }
 }
 async function loadConfig() {
   const r = await api("/admin/api/config");
   S.meta = r; S.cfg = r.config; normalize(S.cfg); S.orig = JSON.stringify(S.cfg);
+  $("#dbgflag").hidden = !r.config.Debug?.Enabled;
   entityOrder.user = sortedNames(S.cfg.Users); entityOrder.target = sortedNames(S.cfg.Targets);
   markDirty();
 }
@@ -627,7 +640,80 @@ async function loadUsage() { try { S.usage = await api("/admin/api/usage"); } ca
 function stamp() { $("#upd").textContent = "Mis à jour " + new Date().toLocaleTimeString("fr-BE"); }
 
 // ---------- shell ----------
-const VIEWS = { users: viewUsers, targets: viewTargets, privacy: viewPrivacy, quotas: viewQuotas, report: viewReport };
+// ---------- tab: debug ----------
+const ACTL = { anonymize: "anonymisé", block: "bloqué", log: "journalisé", strip: "retiré", pass: "laissé passer" };
+function viewDebug() {
+  const c = S.cfg, D = S.dbg || {}, saved = S.meta.config.Debug?.Enabled;
+  const rows = (D.rows || []).map(r => `<tr class="click ${S.dbgSel?.ID === r.ID ? "sel" : ""}" data-act="dbg-open" data-id="${r.ID}">
+      <td>${new Date(r.TS * 1000).toLocaleString("fr-BE", { dateStyle: "short", timeStyle: "medium" })}</td><td>${esc(r.User)}</td><td>${esc(r.Target)}/${esc(r.Model)}</td>
+      <td class="n">${r.Blocked ? `<span class="badge bad">${r.Status}</span>` : r.Status >= 400 ? `<span class="badge warn">${r.Status}</span>` : r.Status}</td>
+      <td class="wrap">${Object.entries(r.Kinds || {}).map(([k, n]) => { const [kind, act] = k.split(":"); return `<b class="hl ${act}" title="${ACTL[act] || act}">${esc(kind)} ×${n}</b>`; }).join(" ") || '<span class="sub">—</span>'}</td>
+      <td class="n">${fmtB(r.Size)}</td><td class="err">${esc(r.Err)}</td></tr>`).join("");
+  return `<section class="card"><div class="chead"><div><h2>Mode DEBUG</h2><div class="sub">Archive chaque échange : requête telle que reçue par le LLM (anonymisée), réponse brute du LLM, correspondances jeton → valeur d'origine et mots détectés.<br>
+      <b style="color:var(--critical)">Les valeurs d'origine sont stockées en clair</b> : à activer le temps d'un diagnostic seulement. Purge automatique après la durée choisie.</div></div><span class="spacer"></span>
+      ${saved ? '<span class="dbgbanner">actif</span>' : '<span class="badge">inactif</span>'}</div>
+    <div class="fields" style="max-width:560px"><label>Activer</label><label><input type="checkbox" data-bind="Debug|Enabled" ${c.Debug.Enabled ? "checked" : ""} data-rerender> archiver les échanges ${c.Debug.Enabled !== saved ? '<span class="badge warn">à enregistrer</span>' : ""}</label>
+      <label>Conservation</label><div><input class="num" style="width:80px" data-type="num" data-bind="Debug|RetentionHours" value="${c.Debug.RetentionHours || 24}"> heures</div>
+      <label>Archive</label><div>${D.total ?? "…"} échange(s) <button class="btn danger" data-act="dbg-clear" style="margin-left:8px">Vider</button> <button class="btn" data-act="dbg-refresh">Rafraîchir</button></div></div></section>
+    <section class="card"><h2>Échanges archivés</h2><div class="sub">Cliquer une ligne pour le détail. Légende : <b class="hl anonymize">anonymisé</b> <b class="hl block">bloqué</b> <b class="hl log">journalisé</b> <b class="hl strip">retiré</b></div>
+      <div class="tw" style="max-height:340px;overflow:auto"><table><thead><tr><th>Heure</th><th>Utilisateur</th><th>LLM / modèle</th><th class="n">Statut</th><th>Détections</th><th class="n">Taille</th><th>Remarque</th></tr></thead>
+      <tbody>${rows || `<tr><td colspan="7" class="sub">${saved ? "Aucun échange archivé pour l'instant." : "Mode DEBUG inactif."}</td></tr>`}</tbody></table></div></section>
+    ${S.dbgSel ? viewDebugDetail(S.dbgSel) : ""}`;
+}
+// highlight placeholders (and, in original view, restore them) + blocked/logged values, in bold.
+function hlText(text, e, original) {
+  const vals = (e.Events || []).filter(x => x.Action !== "anonymize" && x.Value && !x.Value.startsWith("[")).map(x => x.Value).sort((a, b) => b.length - a.length);
+  const actOf = Object.fromEntries((e.Events || []).map(x => [x.Value, x.Action]));
+  const re = new RegExp(["«\\s?([A-Z][A-Z0-9_]*_\\d+)\\s?»", ...vals.map(v => v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))].join("|"), "g");
+  let out = "", last = 0, m;
+  while ((m = re.exec(text))) {
+    if (!m[0]) { re.lastIndex++; continue; }
+    out += esc(text.slice(last, m.index));
+    if (m[1]) { const orig = e.Mapping?.[m[1]]; out += original && orig != null ? `<b class="hl anonymize" title="«${esc(m[1])}»">${esc(orig)}</b>` : `<b class="hl anonymize" title="${esc(orig ?? "?")}">${esc(m[0])}</b>`; }
+    else { const a = actOf[m[0]] || "log"; out += `<b class="hl ${a}" title="${ACTL[a]}">${esc(m[0])}</b>`; }
+    last = m.index + m[0].length;
+  }
+  return out + esc(text.slice(last));
+}
+function partsText(c) {
+  if (typeof c === "string") return c;
+  if (!Array.isArray(c)) return c == null ? "" : JSON.stringify(c, null, 1);
+  return c.map(p => p.text ?? (p.type === "tool_use" ? `[outil ${p.name}] ` + JSON.stringify(p.input) : p.type === "tool_result" ? "[résultat d'outil] " + partsText(p.content) : `[${p.type}]`)).join("\n");
+}
+function debugMessages(e) {
+  let body; try { body = JSON.parse(e.Req); } catch { return [{ role: "brut", text: e.Req }]; }
+  const out = [];
+  if (body.system) out.push({ role: "system", text: partsText(body.system) });
+  for (const m of body.messages || []) {
+    let t = partsText(m.content);
+    for (const tc of m.tool_calls || []) t += `\n[appel d'outil ${tc.function?.name}] ${tc.function?.arguments}`;
+    out.push({ role: m.role, text: t });
+  }
+  if (body.input && !body.messages) out.push({ role: "input", text: partsText(body.input) });
+  return out;
+}
+function viewDebugDetail(e) {
+  const orig = !!S.dbgOrig, msgs = debugMessages(e);
+  const ev = (e.Events || []).map(x => `<tr><td class="mono">${esc(x.Kind)}</td><td><b class="hl ${x.Action}">${ACTL[x.Action] || esc(x.Action)}</b></td><td><b>${esc(x.Value)}</b></td><td class="mono">${x.Placeholder ? "«" + esc(x.Placeholder) + "»" : "—"}</td><td class="n">${x.N}</td></tr>`).join("");
+  const msgHTML = msgs.map((m, i) => { const long = m.text.length > 1500 && i < msgs.length - 1;
+    return `<details class="dbgmsg" ${long ? "" : "open"}><summary>${esc(m.role)} · ${fmt(m.text.length)} car.</summary><div class="txt">${hlText(m.text, e, orig)}</div></details>`; }).join("");
+  return `<section class="card"><div class="chead"><div><h2>Échange #${e.ID}</h2><div class="sub">${new Date(e.TS * 1000).toLocaleString("fr-BE")} · ${esc(e.User)} (${esc(e.Profile)}) → ${esc(e.Target)}/${esc(e.Model)} · statut ${e.Status} · ${e.Conv} conversion(s)${e.Blocked ? " · BLOQUÉ" : ""}${e.Err ? " · " + esc(e.Err) : ""}</div></div><span class="spacer"></span>
+      <div class="seg"><button data-act="dbg-view" data-o="0" aria-pressed="${!orig}">Vue anonymisée</button><button data-act="dbg-view" data-o="1" aria-pressed="${orig}">Vue d'origine</button></div><button class="icon" data-act="dbg-close" title="Fermer">✕</button></div>
+    <h3>Mots détectés</h3><div class="tw" style="max-height:260px;overflow:auto;margin:6px 0 14px"><table><thead><tr><th>Type</th><th>Action</th><th>Valeur d'origine</th><th>Jeton</th><th class="n">Occurrences</th></tr></thead><tbody>${ev || '<tr><td colspan="5" class="sub">Aucune détection</td></tr>'}</tbody></table></div>
+    <h3>Requête ${orig ? "(valeurs d'origine en gras)" : "(telle que reçue par le LLM)"}</h3>${msgHTML}
+    <h3 style="margin-top:14px">Réponse du LLM ${orig ? "(restaurée)" : "(brute, avant restauration)"}</h3><div class="dbgmsg"><div class="txt">${e.Resp ? hlText(e.Resp, e, orig) : '<span class="sub">vide</span>'}</div></div>
+    <details style="margin-top:10px"><summary class="sub" style="cursor:pointer">JSON brut envoyé au LLM</summary><pre class="out" style="max-height:400px;overflow:auto">${esc(e.Req)}</pre></details></section>`;
+}
+async function loadDebug() { try { S.dbg = await api("/admin/api/debug"); } catch (e) { if (e.message !== "401") toast(e.message, true); } }
+Object.assign(ACTIONS, {
+  async "dbg-open"(d) { try { S.dbgSel = await api("/admin/api/debug/" + d.id); } catch (e) { toast(e.message, true); } },
+  "dbg-close"() { S.dbgSel = null; },
+  "dbg-view"(d) { S.dbgOrig = d.o === "1"; },
+  async "dbg-refresh"() { await loadDebug(); },
+  async "dbg-clear"() { if (!confirm("Vider toute l'archive DEBUG ?")) return; await api("/admin/api/debug", { method: "DELETE" }); S.dbgSel = null; await loadDebug(); toast("Archive vidée"); },
+});
+
+const VIEWS = { users: viewUsers, targets: viewTargets, privacy: viewPrivacy, quotas: viewQuotas, report: viewReport, debug: viewDebug };
 function render() {
   if (!S.cfg) return;
   const y = scrollY, a = document.activeElement?.id;
@@ -639,6 +725,7 @@ function render() {
 async function go(tab) {
   S.tab = tab; store.set("gwtab", tab); render(); scrollTo(0, 0);
   if (tab === "report") await loadStats();
+  if (tab === "debug") { await loadDebug(); render(); }
   if (tab === "privacy") { try { S.learned = (await api("/admin/api/learned")).count; render(); } catch {} }
   if (tab === "quotas" || tab === "users") { await loadUsage(); if (!document.activeElement?.closest("#view")) render(); }
 }

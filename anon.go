@@ -231,6 +231,8 @@ type Session struct {
 	learnOn   bool // a person_learned detector is configured
 	NoLearn   bool
 	Stats     map[string]map[string]int // kind -> action -> count
+	Debug     bool                      // record every detected value (debug archive)
+	Events    map[string]*DebugEvent
 	Anon      int
 	Blocked   int
 }
@@ -262,6 +264,27 @@ func (s *Session) count(kind, act string) {
 	case "block":
 		s.Blocked++
 	}
+}
+
+// DebugEvent: one detected value and what was done with it (debug mode only).
+type DebugEvent struct {
+	Kind, Action, Value, Placeholder string
+	N                                int
+}
+
+func (s *Session) event(kind, act, v, ph string) {
+	if !s.Debug {
+		return
+	}
+	if s.Events == nil {
+		s.Events = map[string]*DebugEvent{}
+	}
+	k := kind + "\x00" + act + "\x00" + v
+	if e := s.Events[k]; e != nil {
+		e.N++
+		return
+	}
+	s.Events[k] = &DebugEvent{kind, act, v, strings.Trim(ph, "«»"), 1}
 }
 
 func (s *Session) BlockedKinds() string {
@@ -429,13 +452,18 @@ func (s *Session) Anonymize(text string) string {
 	for _, sp := range sps {
 		act := s.action(sp.kind)
 		s.count(sp.kind, act)
+		if act != "anonymize" {
+			s.event(sp.kind, act, text[sp.s:sp.e], "")
+		}
 		if act == "anonymize" {
 			v := text[sp.s:sp.e]
 			if sp.canon != "" {
 				v = sp.canon
 			}
+			ph := s.placeholder(sp.kind, v)
+			s.event(sp.kind, act, text[sp.s:sp.e], ph)
 			b.WriteString(text[last:sp.s])
-			b.WriteString(s.placeholder(sp.kind, v))
+			b.WriteString(ph)
 			last = sp.e
 		}
 	}
@@ -457,7 +485,8 @@ func (s *Session) Restore(t string) string {
 	})
 }
 
-const hintText = "Note : certaines données ont été pseudonymisées et remplacées par des jetons de la forme «TYPE_n» (ex. «PERSON_1», «EMAIL_2»). Reprends ces jetons exactement tels quels, guillemets « » compris, sans les traduire, les modifier ni les commenter."
+// no concrete example (e.g. PERSON_1): it would collide with the real tokens of the request
+const hintText = "Note : certaines données ont été pseudonymisées et remplacées par des jetons de la forme «TYPE_numéro». Reprends ces jetons exactement tels quels, guillemets « » compris, sans les traduire, les modifier ni les commenter."
 
 // Process anonymizes a request body in place (both API formats).
 func (s *Session) Process(body map[string]any, api string) {
@@ -516,6 +545,7 @@ func (s *Session) media(v any) any {
 				if t, _ := m["type"].(string); mediaKinds[t] != "" {
 					kind := mediaKinds[t]
 					s.count(kind, s.prof.Images)
+					s.event(kind, s.prof.Images, "["+t+"]", "")
 					if s.prof.Images == "strip" {
 						x[i] = map[string]any{"type": "text", "text": "[" + strings.ToLower(kind) + " retiré(e) par le gateway]"}
 					}
@@ -605,11 +635,15 @@ type rkey struct {
 type Restorer struct {
 	s   *Session
 	buf map[rkey]string
+	raw *strings.Builder // debug: text as produced by the LLM, before restore
 }
 
 func newRestorer(s *Session) *Restorer { return &Restorer{s: s, buf: map[rkey]string{}} }
 
 func (r *Restorer) Push(k rkey, t string) string {
+	if r.raw != nil && (k.f == "content" || k.f == "text") {
+		r.raw.WriteString(t)
+	}
 	t = r.buf[k] + t
 	cut := len(t)
 	if i := strings.LastIndex(t, "«"); i >= 0 && !strings.Contains(t[i:], "»") && len(t)-i <= 64 {
