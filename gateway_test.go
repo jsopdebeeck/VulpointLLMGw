@@ -394,7 +394,7 @@ func TestNameHeuristics(t *testing.T) {
 		}
 	}
 	for _, in := range []string{"Paris est une belle ville.", "Monsieur le directeur, Bonjour.", "Le Conseil Européen se réunit.", "Microsoft Azure et Google Cloud",
-		"Il me parle du Brésil et du roster.", "Avec Claude Code, le code est prêt.", "Claude Cowork aide.", "Le dossier maître Brésil vit ici.", "CLIENT ROSTER (Vulpoint)"} {
+		"Il me parle du Portugal et du planning.", "Avec Claude Code, le code est prêt.", "Claude Console aide.", "Le fichier maître Portugal est ici.", "CLIENT LIST (Initech)"} {
 		if out := anon(in); out != in {
 			t.Errorf("faux positif : %q → %q", in, out)
 		}

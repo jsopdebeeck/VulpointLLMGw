@@ -165,7 +165,7 @@ func isTitle(w string) bool {
 	for _, t := range titles {
 		if f == t || editWithin1(f, t) {
 			// lowercase is only a title for forms of address ("bonjour monsieur Keizer");
-			// "maître", "docteur", "professeur" are also ordinary nouns ("le dossier maître Brésil")
+			// "maître", "docteur", "professeur" are also ordinary nouns ("le fichier maître Portugal")
 			return isCap(w) || addressForms[t]
 		}
 	}
@@ -205,7 +205,7 @@ func findTitled(s string) [][2]int {
 	var out [][2]int
 	for i := 0; i < len(ts)-1; i++ {
 		f := fold(ts[i].w)
-		if !isTitle(ts[i].w) && !(cues[f] && !isAllCaps(ts[i].w)) { // "CLIENT ROSTER" is a heading, not a cue
+		if !isTitle(ts[i].w) && !(cues[f] && !isAllCaps(ts[i].w)) { // "CLIENT LIST" is a heading, not a cue
 			continue
 		}
 		if f == "m" && !strings.HasPrefix(s[ts[i].e:], ".") { // "M." only
