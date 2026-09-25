@@ -459,3 +459,35 @@ func TestDebugArchive(t *testing.T) {
 		t.Errorf("%d entrées archivées au lieu de 2", n)
 	}
 }
+
+func TestContextDetectors(t *testing.T) {
+	cfg, err := LoadConfig("config.example.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := NewSession(cfg, cfg.Profiles["standard"])
+	in := "Dossier patient 676888-67 , monsieur Jeremy Vaillant né le 30/12/2006"
+	out := s.AnonymizeText(in)
+	for _, leak := range []string{"676888-67", "Jeremy", "Vaillant", "30/12/2006"} {
+		if strings.Contains(out, leak) {
+			t.Errorf("fuite de %q : %s", leak, out)
+		}
+	}
+	if s.Restore(out) != in {
+		t.Errorf("restauration : %q", s.Restore(out))
+	}
+	for _, c := range []struct{ in, want string }{
+		{"Réf. AB-2025/77 à traiter", "AB-2025/77"}, {"facture n° 2025-0142", "2025-0142"}, {"née le 3 mars 1985", "3 mars 1985"},
+	} {
+		s := NewSession(cfg, cfg.Profiles["standard"])
+		if out := s.AnonymizeText(c.in); strings.Contains(out, c.want) {
+			t.Errorf("%q non détecté : %s", c.want, out)
+		}
+	}
+	for _, in := range []string{"Le dossier contient 3 pages.", "Réunion le 30/12/2026 à 10h.", "Le patient va mieux depuis 2019."} {
+		s := NewSession(cfg, cfg.Profiles["standard"])
+		if out := s.AnonymizeText(in); out != in {
+			t.Errorf("faux positif : %q → %q", in, out)
+		}
+	}
+}

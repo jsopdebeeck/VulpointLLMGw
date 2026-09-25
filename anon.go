@@ -51,6 +51,9 @@ var builtins = map[string]builtin{
 	"person_title":     {find: findTitled, names: true},
 	"person_firstname": {find: findFirstnames, names: true},
 	"person_learned":   {find: func(s string) [][2]int { return learner.Find(s) }, names: true},
+	"ref_context":      {find: findRefContext},
+	"birthdate":        {find: findBirthdates},
+	"date":             {find: findDates},
 }
 
 func buildDetector(dc *DetectorCfg, base string, prio int) (*Detector, error) {

@@ -29,6 +29,9 @@ var builtinInfo = map[string]string{
 	"card": "Carte bancaire (Luhn)", "ipv4": "Adresse IPv4",
 	"person_title":     "Nom après un titre (Monsieur, Mme, Dr, Dhr… fautes de frappe tolérées) ou un mot de contexte (patient, client, nommé, né…)",
 	"person_firstname": "Prénom connu suivi d'un nom (Gérald Keizer) ou NOM + prénom (KEIZER Gérald) ; dictionnaire FR/NL/EN intégré",
+	"ref_context":      "Identifiant après un mot de contexte : dossier, patient, n°, réf., contrat, facture, matricule, client, sinistre… (Dossier patient 676888-67)",
+	"birthdate":        "Date après « né(e) le », « date de naissance », DOB, geboren… (30/12/2006, 2006-12-30, 30 décembre 2006)",
+	"date":             "Toutes les dates (30/12/2006, 2006-12-30, 30 décembre 2006)",
 	"person_learned":   "Mémoire des noms déjà repérés, fautes de frappe comprises ; seules des empreintes HMAC sont stockées",
 }
 

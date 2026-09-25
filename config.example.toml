@@ -134,6 +134,14 @@ name = "DOSSIER"
 regex = '\bDOS-\d{4}-\d{5}\b'
 
 [[detectors]]
+name = "REF"
+builtin = "ref_context"       # « Dossier patient 676888-67 », « n° 12345 », « réf. AB-2025/77 »
+
+[[detectors]]
+name = "BIRTHDATE"
+builtin = "birthdate"         # « né le 30/12/2006 » ; builtin = "date" pour toutes les dates
+
+[[detectors]]
 name = "ID"
 regex = '\b(?:CLI|PAT)-\d{6,}\b'
 
