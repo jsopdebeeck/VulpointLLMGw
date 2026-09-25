@@ -247,7 +247,7 @@ func nameAfterMode(s string, ts []tok, i int, strict bool) (int, int) {
 			break
 		}
 		w := ts[j].w
-		if isCap(w) && !notNames[fold(w)] && !isTitle(w) && !defaultAllow[fold(w)] && !(strict && commonWord(w)) {
+		if isCap(w) && utf8.RuneCountInString(w) >= 2 && !notNames[fold(w)] && !isTitle(w) && !defaultAllow[fold(w)] && !(strict && commonWord(w)) {
 			last, n = j, n+1
 			continue
 		}

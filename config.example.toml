@@ -161,6 +161,26 @@ name = "BIRTHDATE"
 builtin = "birthdate"         # « né le 30/12/2006 » ; builtin = "date" pour toutes les dates
 
 [[detectors]]
+name = "COMPANY"
+builtin = "be_health_orgs"    # HUB / H.U.B., Erasme, Bordet, HUDERF, CHU, UZ, AZ…
+
+[[detectors]]
+name = "ADDRESS"
+builtin = "address"           # rue de la Loi 16 · Kerkstraat 12 · 6041 Gosselies
+
+[[detectors]]
+name = "PLACE"
+builtin = "place"             # localités belges + « domicilié à X »
+
+[[detectors]]
+name = "PERSON"
+builtin = "firstname_alone"   # prénom seul : Luc, Els, Tom… (plus de faux positifs possibles)
+
+[[detectors]]
+name = "PET"
+builtin = "pet"               # mon chien Rex
+
+[[detectors]]
 name = "ID"
 regex = '\b(?:CLI|PAT)-\d{6,}\b'
 

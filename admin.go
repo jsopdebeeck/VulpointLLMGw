@@ -32,6 +32,11 @@ var builtinInfo = map[string]string{
 	"ref_context":      "Identifiant après un mot de contexte : dossier, patient, n°, réf., contrat, facture, matricule, client, sinistre… (Dossier patient 676888-67)",
 	"birthdate":        "Date après « né(e) le », « date de naissance », DOB, geboren… (30/12/2006, 2006-12-30, 30 décembre 2006)",
 	"date":             "Toutes les dates (30/12/2006, 2006-12-30, 30 décembre 2006)",
+	"address":          "Adresse : rue/avenue/chaussée/straat/laan + numéro, code postal + localité (1000 Bruxelles, B-6041 Gosselies)",
+	"place":            "Localité belge (liste intégrée : communes et sections courantes) ou lieu après « domicilié à », « habite à », « né à », « woont in »…",
+	"pet":              "Nom d'animal après chien, chat, cheval, hond, kat, dog, cat… (mon chien Rex)",
+	"firstname_alone":  "Prénom connu seul (Luc, Els, Tom, Liz…), FR/NL/EN ; sauf prénoms qui sont aussi des mots (Rose, Pierre, May, Will…)",
+	"be_health_orgs":   "Hôpitaux et réseaux de soins belges : HUB (aussi H.U.B.), Erasme, Bordet, HUDERF, CHU, UZ, AZ, Chirec, Humani, HELORA…",
 	"person_learned":   "Mémoire des noms déjà repérés, fautes de frappe comprises ; seules des empreintes HMAC sont stockées",
 }
 

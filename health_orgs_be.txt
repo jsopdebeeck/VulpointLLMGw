@@ -1,0 +1,61 @@
+# Établissements et réseaux de soins belges. Un sigle en MAJUSCULES n'est reconnu qu'en majuscules,
+# avec ou sans points (H.U.B.).
+HUB
+Hôpital Universitaire de Bruxelles
+Erasme
+Hôpital Erasme
+Bordet
+Institut Bordet
+Institut Jules Bordet
+HUDERF
+Hôpital Universitaire des Enfants Reine Fabiola
+Hôpital des Enfants
+Reine Fabiola
+CHU Saint-Pierre
+CHU Brugmann
+Brugmann
+Cliniques universitaires Saint-Luc
+Saint-Luc
+UZ Brussel
+UZ Leuven
+UZ Gent
+UZA
+CHU de Liège
+CHU Liège
+CHR Citadelle
+CHC
+MontLégia
+CHU de Charleroi
+CHU Charleroi
+Humani
+GHdC
+Grand Hôpital de Charleroi
+HELORA
+Epicura
+Vivalia
+CHU UCL Namur
+CHR Sambre et Meuse
+CHR Namur
+Chirec
+Hôpital Delta
+HIS
+Hôpitaux Iris Sud
+Ambroise Paré
+CHU Tivoli
+Tivoli
+Clinique Saint-Jean
+Europe Hospitals
+AZ Delta
+AZ Groeninge
+ZNA
+GZA
+AZ Sint-Jan
+AZ Sint-Lucas
+Jessa
+ZOL
+Ziekenhuis Oost-Limburg
+AZ Maria Middelares
+AZ Klina
+AZ Monica
+Vitaz
+AZ Rivierenland

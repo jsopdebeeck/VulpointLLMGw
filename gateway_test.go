@@ -647,3 +647,46 @@ func TestAcronymListAndSources(t *testing.T) {
 		t.Errorf("sources : %v", src)
 	}
 }
+
+func TestPlacesPetsOrgsFirstnames(t *testing.T) {
+	cfg, err := LoadConfig("config.example.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := len(cfg.dets)
+	for i, b := range []string{"address", "place", "pet", "firstname_alone", "be_health_orgs"} {
+		d, err := buildDetector(&DetectorCfg{Name: strings.ToUpper(strings.ReplaceAll(b, "be_health_orgs", "org")), Builtin: b}, ".", base+i)
+		if err != nil {
+			t.Fatal(b, err)
+		}
+		cfg.dets = append(cfg.dets, d)
+	}
+	anon := func(in string) string { return NewSession(cfg, cfg.Profiles["standard"]).AnonymizeText(in) }
+	for _, c := range []struct{ in, leak string }{
+		{"Il habite rue de la Loi 16, 1000 Bruxelles.", "Loi 16"},
+		{"Adresse : Kerkstraat 12, 9000 Gent", "Kerkstraat"},
+		{"Site de Gosselies, puis Erasme et Bordet.", "Gosselies"},
+		{"Site de Gosselies, puis Erasme et Bordet.", "Erasme"},
+		{"Réunion au HUB et à l'H.U.B. avec le HUDERF.", "HUB"},
+		{"Réunion au HUB et à l'H.U.B. avec le HUDERF.", "H.U.B"},
+		{"Réunion au HUB et à l'H.U.B. avec le HUDERF.", "HUDERF"},
+		{"Mon chien Rex et le chat nommé Félix.", "Rex"},
+		{"Mon chien Rex et le chat nommé Félix.", "Félix"},
+		{"Luc a rappelé, Els aussi.", "Luc"},
+		{"Luc a rappelé, Els aussi.", "Els"},
+		{"Ask Tom and Liz, then Jake.", "Liz"},
+		{"domicilié à Montignies-sur-Sambre depuis 2019", "Montignies"},
+	} {
+		if out := anon(c.in); strings.Contains(out, c.leak) {
+			t.Errorf("%q → %q (fuite de %q)", c.in, out, c.leak)
+		}
+	}
+	for _, in := range []string{
+		"May I help you? Will you come in June?", "Rose est une couleur, Pierre est dure.", "Le hub central du réseau.",
+		"En 2024 Microsoft a publié.", "The chat function and the dog-food build.", "Mark this as done, Grace period.",
+	} {
+		if out := anon(in); out != in {
+			t.Errorf("faux positif : %q → %q", in, out)
+		}
+	}
+}

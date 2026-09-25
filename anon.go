@@ -40,6 +40,7 @@ type builtin struct {
 	valid func(string) bool
 	names bool
 	find  func(string) [][2]int
+	words []string // built-in term list
 }
 
 var builtins = map[string]builtin{
@@ -53,6 +54,11 @@ var builtins = map[string]builtin{
 	"person_firstname": {find: findFirstnames, names: true},
 	"person_learned":   {find: func(s string) [][2]int { return learner.Find(s) }, names: true},
 	"ref_context":      {find: findRefContext},
+	"address":          {find: findAddresses},
+	"place":            {find: findPlaces},
+	"pet":              {find: findPets},
+	"firstname_alone":  {find: findFirstnameAlone, names: true},
+	"be_health_orgs":   {words: healthOrgs},
 	"birthdate":        {find: findBirthdates},
 	"date":             {find: findDates},
 }
@@ -64,6 +70,8 @@ func buildDetector(dc *DetectorCfg, base string, prio int) (*Detector, error) {
 	}
 	var err error
 	switch {
+	case dc.Builtin != "" && builtins[dc.Builtin].words != nil: // built-in list: same handling as words
+		return buildDetector(&DetectorCfg{Name: dc.Name, Words: append(append([]string{}, builtins[dc.Builtin].words...), dc.Words...)}, base, prio)
 	case dc.Builtin != "":
 		b, ok := builtins[dc.Builtin]
 		if !ok {
@@ -122,6 +130,17 @@ func wordsRegexCase(words []string, insensitive bool) *regexp.Regexp {
 	}
 	sort.Slice(ws, func(i, j int) bool { return len(ws[i]) > len(ws[j]) })
 	for i, w := range ws {
+		if isAllCaps(w) && !strings.ContainsAny(w, " .-") { // HUB also as H.U.B. / H.U.B
+			var p []string
+			for _, r := range w {
+				p = append(p, regexp.QuoteMeta(string(r)))
+			}
+			ws[i] = strings.Join(p, `\.?`) + `\.?`
+			if !insensitive {
+				ws[i] = `(?:` + regexp.QuoteMeta(w) + `|` + strings.Join(p, `\.`) + `\.?)`
+			}
+			continue
+		}
 		ws[i] = strings.ReplaceAll(regexp.QuoteMeta(w), " ", `\s+`)
 	}
 	flag := ""

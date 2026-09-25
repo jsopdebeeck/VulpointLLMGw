@@ -40,6 +40,8 @@ Modèle : `mistral-large` (routage automatique selon le profil) ou `mistral/mist
 - `log` : laissé passer, mais compté ;
 - `off` : ignoré.
 
+Détecteurs intégrés supplémentaires : adresses (`address`), localités belges et lieux de résidence (`place`), animaux (`pet`), prénoms seuls FR/NL/EN (`firstname_alone`), hôpitaux et réseaux de soins belges (`be_health_orgs`), identifiants après un mot de contexte (`ref_context`), dates de naissance (`birthdate`) ou toutes les dates (`date`). Termes jamais anonymisés : liste intégrée (produits, sigles techniques) et `[privacy] allow`.
+
 Un nom repéré une fois (« Mme Claire Dubois ») est aussi remplacé ailleurs dans la conversation (« Dubois »). La numérotation est stable pour une requête donnée, donc le cache de prompt des fournisseurs reste efficace. Images et fichiers : `pass`, `strip` ou `block` par profil.
 
 **Restauration.** Les jetons sont remplacés dans la réponse, y compris en streaming SSE : un jeton coupé entre deux morceaux est retenu jusqu'à être complet. Les blocs `thinking` signés ne sont pas modifiés.
