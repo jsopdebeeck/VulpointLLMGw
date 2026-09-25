@@ -230,6 +230,11 @@ func (g *Gateway) handleLLM(api string) http.HandlerFunc {
 		model, _ := body["model"].(string)
 		stream, _ := body["stream"].(bool)
 		rec.Model, rec.Stream = model, stream
+		if model == "" || strings.ContainsAny(model, " \t\n") {
+			rec.Status, rec.Err = 400, "model"
+			apiError(w, api, 400, "invalid_request_error", fmt.Sprintf("nom de modèle invalide %q (pas d'espace) : choisissez un modèle de GET /v1/models", model))
+			return
+		}
 
 		cands := route(cfg, prof, api, model)
 		if len(cands) == 0 {
@@ -620,18 +625,18 @@ func (g *Gateway) handleModels(w http.ResponseWriter, r *http.Request) {
 		apiError(w, "openai", 401, "authentication_error", "clé API gateway invalide")
 		return
 	}
+	// usable models only (target has a key or is local), each listed once
 	data := []any{}
 	seen := map[string]bool{}
 	for _, n := range cfg.Profiles[u.Profile].Targets {
-		for _, m := range cfg.Targets[n].Models {
-			if strings.Contains(m, "*") {
-				continue
-			}
-			for _, id := range []string{m, n + "/" + m} {
-				if !seen[id] {
-					seen[id] = true
-					data = append(data, map[string]any{"id": id, "object": "model", "owned_by": n})
-				}
+		t := cfg.Targets[n]
+		if t.Disabled || !t.Ready() {
+			continue
+		}
+		for _, m := range t.Models {
+			if !strings.Contains(m, "*") && !seen[m] {
+				seen[m] = true
+				data = append(data, map[string]any{"id": m, "object": "model", "owned_by": n})
 			}
 		}
 	}
@@ -657,12 +662,16 @@ func (g *Gateway) handleMe(w http.ResponseWriter, r *http.Request) {
 	var ts []tgt
 	for _, n := range p.Targets {
 		if t := cfg.Targets[n]; !t.Disabled {
-			local := strings.Contains(t.BaseURL, "localhost") || strings.Contains(t.BaseURL, "127.0.0.1")
-			ts = append(ts, tgt{n, t.API, t.Models, t.key != "" || local})
+			ts = append(ts, tgt{n, t.API, t.Models, t.Ready()})
 		}
 	}
 	us := g.meter.Snapshot()["u:"+name]
 	writeJSON(w, map[string]any{"user": name, "description": u.Description, "profile": u.Profile,
 		"profileDescription": p.Description, "images": p.Images, "targets": ts,
 		"quota": cfg.EffectiveQuota(u), "usage": us})
+}
+
+// Ready: the target has an API key, or is a local server that needs none.
+func (t *Target) Ready() bool {
+	return t.key != "" || strings.Contains(t.BaseURL, "localhost") || strings.Contains(t.BaseURL, "127.0.0.1")
 }
