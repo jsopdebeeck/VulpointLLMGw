@@ -64,6 +64,9 @@ func (g *Gateway) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 	if c.Server.AdminToken != "" {
 		c.Server.AdminToken = keepSecret
 	}
+	if c.Alerts.SMTPPassword != "" {
+		c.Alerts.SMTPPassword = keepSecret
+	}
 	writeJSON(w, map[string]any{"config": c, "keyHints": hints, "targetKeySet": keySet, "builtins": builtinInfo, "version": fileVersion(cur.path)})
 }
 
@@ -88,6 +91,9 @@ func (g *Gateway) handlePutConfig(w http.ResponseWriter, r *http.Request) {
 
 	if nc.Server.AdminToken == keepSecret {
 		nc.Server.AdminToken = cur.Server.AdminToken
+	}
+	if nc.Alerts.SMTPPassword == keepSecret {
+		nc.Alerts.SMTPPassword = cur.Alerts.SMTPPassword
 	}
 	for n, t := range nc.Targets {
 		if !nameRe.MatchString(n) {

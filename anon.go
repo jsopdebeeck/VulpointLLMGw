@@ -507,6 +507,9 @@ func (s *Session) Process(body map[string]any, api string) {
 	if s.prof.Hint && len(s.rev) > 0 {
 		injectHint(body, api)
 	}
+	if p := strings.TrimSpace(s.prof.SystemPrompt); p != "" { // after anonymization: the admin's text is sent as is
+		injectSystem(body, api, p)
+	}
 	s.commitLearning()
 }
 
@@ -522,6 +525,23 @@ func (s *Session) AnonymizeText(t string) string {
 	s.learnFrom(t)
 	s.buildLearned()
 	return s.Anonymize(t)
+}
+
+// injectSystem puts the profile's behaviour prompt first, before the client's own instructions.
+func injectSystem(body map[string]any, api, text string) {
+	if api == "anthropic" {
+		switch sys := body["system"].(type) {
+		case string:
+			body["system"] = text + "\n\n" + sys
+		case []any:
+			body["system"] = append([]any{map[string]any{"type": "text", "text": text}}, sys...)
+		default:
+			body["system"] = text
+		}
+		return
+	}
+	msgs, _ := body["messages"].([]any)
+	body["messages"] = append([]any{map[string]any{"role": "system", "content": text}}, msgs...)
 }
 
 func injectHint(body map[string]any, api string) {

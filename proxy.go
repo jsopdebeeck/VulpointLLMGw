@@ -18,6 +18,7 @@ type Gateway struct {
 	cfg    atomic.Pointer[Config]
 	store  *Store
 	meter  *Meter
+	alerts *Alerter
 	client *http.Client
 	saveMu sync.Mutex
 }
@@ -209,6 +210,18 @@ func (g *Gateway) handleLLM(api string) http.HandlerFunc {
 				go g.store.AddDebug(dbg, cfg.Debug.RetentionHours)
 			}
 			g.store.Add(rec)
+			if g.alerts != nil {
+				kinds := ""
+				if sess != nil {
+					kinds = sess.BlockedKinds()
+				}
+				for k := range rec.Dets {
+					if strings.HasPrefix(k, "QUOTA_") && rec.Err == "quota" {
+						kinds = strings.TrimPrefix(k, "QUOTA_")
+					}
+				}
+				g.alerts.FromRec(rec, kinds)
+			}
 			log.Printf("%s %s → %s/%s %d in=%dms gw=%dms llm=%dms tok=%d/%d conv=%d viol=%d %s",
 				api, rec.User, rec.Target, rec.Model, rec.Status, rec.InMs, rec.GwMs, rec.UpMs, rec.TokIn, rec.TokOut, rec.Anon, rec.Blocked, rec.Err)
 		}()

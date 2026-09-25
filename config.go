@@ -20,6 +20,7 @@ type Config struct {
 	Users     map[string]*User    `toml:"users"`
 	Privacy   PrivacyCfg          `toml:"privacy"`
 	Debug     DebugCfg            `toml:"debug"`
+	Alerts    AlertsCfg           `toml:"alerts"`
 	Detectors []*DetectorCfg      `toml:"detectors"`
 
 	allow  map[string]bool   // folded terms never anonymized
@@ -77,6 +78,8 @@ type Profile struct {
 	DefaultAction string            `toml:"default_action"`
 	Actions       map[string]string `toml:"actions,omitempty"` // detector kind -> anonymize | block | log | off
 	Hint          bool              `toml:"placeholder_hint,omitempty"`
+	SystemPrompt  string            `toml:"system_prompt,omitempty"` // behaviour instructions added to every request
+	AlertEmails   []string          `toml:"alert_emails,omitempty"`
 	Quota         *Quota            `toml:"quota,omitempty"` // per user of this profile
 }
 
@@ -168,6 +171,21 @@ func ParseConfig(data []byte, base string) (*Config, error) {
 	}
 	if s.UpstreamTimeout <= 0 {
 		s.UpstreamTimeout = 300
+	}
+	for key, v := range map[string]*bool{"on_violation": &c.Alerts.OnViolation, "on_quota": &c.Alerts.OnQuota, "on_error": &c.Alerts.OnError} {
+		if !md.IsDefined("alerts", key) { // triggers default to on
+			*v = true
+		}
+	}
+	c.Alerts.password = os.ExpandEnv(c.Alerts.SMTPPassword)
+	if c.Alerts.SMTPPasswordEnv != "" {
+		c.Alerts.password = os.Getenv(c.Alerts.SMTPPasswordEnv)
+	}
+	if c.Alerts.IntervalMinutes <= 0 {
+		c.Alerts.IntervalMinutes = 15
+	}
+	if c.Alerts.Enabled && (c.Alerts.SMTPHost == "" || c.Alerts.From == "") {
+		return nil, fmt.Errorf("alertes : smtp_host et from sont requis quand enabled = true")
 	}
 	if c.Debug.RetentionHours <= 0 {
 		c.Debug.RetentionHours = 24

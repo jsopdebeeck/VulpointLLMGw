@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -532,5 +533,85 @@ func TestTechnicalFalsePositives(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 	if n := learner.Count(); n != 0 { // M. Transport: dictionary word; Gérald Keizer: a guess from a first name
 		t.Errorf("mémoire des noms : %d entrée(s), 0 attendue", n)
+	}
+}
+
+// fakeSMTP: minimal SMTP server capturing messages.
+func fakeSMTP(t *testing.T) (string, int, *[]string) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { ln.Close() })
+	var msgs []string
+	var mu sync.Mutex
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go func(c net.Conn) {
+				defer c.Close()
+				r := bufio.NewReader(c)
+				fmt.Fprint(c, "220 fake\r\n")
+				for {
+					l, err := r.ReadString('\n')
+					if err != nil {
+						return
+					}
+					switch cmd := strings.ToUpper(strings.TrimSpace(l)); {
+					case strings.HasPrefix(cmd, "EHLO"), strings.HasPrefix(cmd, "HELO"):
+						fmt.Fprint(c, "250 fake\r\n")
+					case cmd == "DATA":
+						fmt.Fprint(c, "354 go\r\n")
+						var b strings.Builder
+						for {
+							l, _ := r.ReadString('\n')
+							if l == ".\r\n" {
+								break
+							}
+							b.WriteString(l)
+						}
+						mu.Lock()
+						msgs = append(msgs, b.String())
+						mu.Unlock()
+						fmt.Fprint(c, "250 ok\r\n")
+					case cmd == "QUIT":
+						fmt.Fprint(c, "221 bye\r\n")
+						return
+					default:
+						fmt.Fprint(c, "250 ok\r\n")
+					}
+				}
+			}(c)
+		}
+	}()
+	a := ln.Addr().(*net.TCPAddr)
+	return a.IP.String(), a.Port, &msgs
+}
+
+func TestSystemPromptAndAlerts(t *testing.T) {
+	gw, oai, _, g := setup(t)
+	host, port, msgs := fakeSMTP(t)
+	cfg := g.C()
+	cfg.Profiles["strict"].SystemPrompt = "Réponds toujours en français."
+	cfg.Profiles["strict"].AlertEmails = []string{"secu@example.test"}
+	cfg.Alerts = AlertsCfg{Enabled: true, SMTPHost: host, SMTPPort: port, From: "llmgw@example.test", OnViolation: true, OnQuota: true, OnError: true}
+	g.alerts = NewAlerter(g)
+	post(t, gw.URL+"/v1/chat/completions", "gw-bob-remplace-moi", map[string]any{
+		"model": "mistral-large", "messages": []any{map[string]any{"role": "user", "content": "Bonjour"}}})
+	if !strings.Contains(oai.last(), "Réponds toujours en français.") {
+		t.Error("prompt de comportement absent de la requête")
+	}
+	post(t, gw.URL+"/v1/chat/completions", "gw-bob-remplace-moi", map[string]any{ // NISS blocked for strict
+		"model": "mistral-large", "messages": []any{map[string]any{"role": "user", "content": pii}}})
+	g.alerts.flush()
+	if len(*msgs) != 1 {
+		t.Fatalf("%d email(s) au lieu de 1", len(*msgs))
+	}
+	m := (*msgs)[0]
+	if !strings.Contains(m, "secu@example.test") || !strings.Contains(m, "NISS") || strings.Contains(m, "123.95") {
+		t.Errorf("contenu de l'alerte :\n%s", m)
 	}
 }

@@ -312,6 +312,7 @@ const sortedNames = o => Object.keys(o || {}).sort((a, b) => a.localeCompare(b))
 
 function normalize(c) {
   c.Targets ||= {}; c.Profiles ||= {}; c.Users ||= {}; c.Detectors ||= []; c.Privacy ||= {}; c.Privacy.Allow ||= []; c.Debug ||= { Enabled: false, RetentionHours: 24 };
+  c.Alerts ||= { Enabled: false, OnViolation: true, OnQuota: true, OnError: true, IntervalMinutes: 15 };
   for (const p of Object.values(c.Profiles)) { p.Targets ||= []; p.Actions ||= {}; }
   for (const t of Object.values(c.Targets)) { t.Models ||= []; }
 }
@@ -408,6 +409,7 @@ const ACTIONS = {
   },
   "tgt-model"(d) { const t = S.cfg.Targets[d.n]; t.Models = (t.Models || []).filter(m => m !== "*"); if (!t.Models.includes(d.m)) t.Models.push(d.m); },
   async "learn-forget"() { if (!confirm("Effacer toute la mémoire des noms ?")) return; S.learned = (await api("/admin/api/learned", { method: "DELETE" })).count; toast("Mémoire des noms effacée"); },
+  async "alert-test"() { if (isDirty()) return toast("Enregistrez d'abord la configuration", true); try { const r = await api("/admin/api/alert-test", { method: "POST" }); toast("Email de test envoyé à : " + r.sent.join(", ")); } catch (e) { if (e.message !== "401") toast("Échec : " + e.message, true); } },
   "det-add"() { S.cfg.Detectors.push({ Name: "NOUVEAU", Description: "", Regex: "\\bXXX-\\d+\\b" }); },
   "det-up"(d) { const a = S.cfg.Detectors, i = +d.i; if (i > 0) [a[i - 1], a[i]] = [a[i], a[i - 1]]; },
   "det-down"(d) { const a = S.cfg.Detectors, i = +d.i; if (i < a.length - 1) [a[i + 1], a[i]] = [a[i], a[i + 1]]; },
@@ -467,6 +469,10 @@ function viewUsers() {
         <div class="order">${p.Targets.map((t, i) => `<div><span class="rank">${i + 1}</span><span class="nm">${esc(t)} <span class="sub">${esc(c.Targets[t]?.API || "?")}</span></span>
           <button class="icon" data-act="pt-up" data-p="${esc(pn)}" data-i="${i}" ${i ? "" : "disabled"}>↑</button><button class="icon" data-act="pt-down" data-p="${esc(pn)}" data-i="${i}" ${i < p.Targets.length - 1 ? "" : "disabled"}>↓</button><button class="icon" data-act="pt-del" data-p="${esc(pn)}" data-i="${i}">✕</button></div>`).join("")}
           ${avail.length ? `<select data-addtarget="${esc(pn)}"><option value="">+ ajouter un LLM…</option>${avail.map(t => `<option>${esc(t)}</option>`).join("")}</select>` : ""}</div>
+        <label>Prompt de comportement<br><span class="sub">ajouté en tête de chaque requête (non anonymisé)</span></label>
+        <textarea class="w100" style="min-height:70px" data-bind="Profiles|${esc(pn)}|SystemPrompt" placeholder="ex. Réponds en français, ton professionnel. Ne donne jamais de conseil médical ou juridique définitif.">${esc(p.SystemPrompt)}</textarea>
+        <label>Alerter<br><span class="sub">emails, séparés par des virgules</span></label>
+        <input class="w100" data-type="list" data-bind="Profiles|${esc(pn)}|AlertEmails" value="${esc((p.AlertEmails || []).join(", "))}" placeholder="securite@exemple.be">
         <label>Images, fichiers</label><select data-bind="Profiles|${esc(pn)}|Images">${opts(L.img, p.Images)}</select>
         <label>Données sensibles</label><div>${esc(L.act[p.DefaultAction] || p.DefaultAction)} par défaut · ${nRules} règle(s) spécifique(s) <button class="icon" onclick="go('privacy')">→ Filtrage</button></div>
         <label>Quota / utilisateur</label><div>${quotaText(p.Quota)} <button class="icon" onclick="go('quotas')">→ Quotas</button></div>
@@ -476,7 +482,25 @@ function viewUsers() {
   return `<section class="card"><div class="chead"><div><h2>Utilisateurs et applications clientes</h2><div class="sub">La clé gateway identifie le client ; le profil détermine les LLM autorisés, les règles de filtrage et le quota.</div></div><span class="spacer"></span><button class="btn primary" data-act="user-add">+ Utilisateur</button></div>
     ${nkNote}<div class="tw"><table><thead><tr><th>Nom</th><th>Type</th><th>Description</th><th>Profil</th><th>LLM accessibles</th><th>Clé gateway</th><th>Accès</th><th class="n">Aujourd'hui</th><th></th></tr></thead><tbody>${users || '<tr><td colspan="9" class="sub">Aucun utilisateur</td></tr>'}</tbody></table></div></section>
     <section><div class="chead"><div><h2 style="font-size:15px;margin:0">Profils : règles appliquées</h2><div class="sub">Un profil regroupe routage, politique de données et quota.</div></div><span class="spacer"></span><button class="btn" data-act="prof-add">+ Profil</button></div>
-    <div class="grid3">${profs}</div></section>`;
+    <div class="grid3">${profs}</div></section>
+    ${viewAlerts()}`;
+}
+function viewAlerts() {
+  const a = S.cfg.Alerts, b = "Alerts|", saved = S.meta.config.Alerts || {};
+  return `<section class="card"><div class="chead"><div><h2>Alertes par email</h2><div class="sub">Un récapitulatif toutes les N minutes, envoyé aux emails « Alerter » du profil concerné et aux destinataires par défaut ci-dessous. Aucune valeur sensible dans les messages.</div></div><span class="spacer"></span>
+      ${saved.Enabled ? '<span class="badge ok">actives</span>' : '<span class="badge">inactives</span>'}<button class="btn" data-act="alert-test" ${saved.Enabled || saved.SMTPHost ? "" : 'disabled title="Enregistrer d\'abord"'}>Envoyer un test</button></div>
+    <div class="grid2"><div class="fields">
+      <label>Activer</label><label><input type="checkbox" data-bind="${b}Enabled" ${a.Enabled ? "checked" : ""}> envoyer des alertes</label>
+      <label>Déclencheurs</label><div><label><input type="checkbox" data-bind="${b}OnViolation" ${a.OnViolation ? "checked" : ""}> violation</label> &nbsp; <label><input type="checkbox" data-bind="${b}OnQuota" ${a.OnQuota ? "checked" : ""}> quota</label> &nbsp; <label><input type="checkbox" data-bind="${b}OnError" ${a.OnError ? "checked" : ""}> erreur LLM</label></div>
+      <label>Destinataires par défaut</label><input class="w100" data-type="list" data-bind="${b}To" value="${esc((a.To || []).join(", "))}" placeholder="rssi@exemple.be, admin@exemple.be">
+      <label>Fréquence</label><div><input class="num" style="width:80px" data-type="num" data-bind="${b}IntervalMinutes" value="${a.IntervalMinutes || 15}"> minutes (récapitulatif)</div>
+    </div><div class="fields">
+      <label>Serveur SMTP</label><div style="display:flex;gap:6px"><input class="mono" style="flex:1" data-bind="${b}SMTPHost" value="${esc(a.SMTPHost)}" placeholder="smtp.office365.com"><input class="num" style="width:80px" data-type="num" data-bind="${b}SMTPPort" value="${a.SMTPPort || ""}" placeholder="587"></div>
+      <label>Compte</label><input class="w100 mono" data-bind="${b}SMTPUser" value="${esc(a.SMTPUser)}" placeholder="llmgw@exemple.be">
+      <label>Mot de passe : env.</label><input class="w100 mono" data-bind="${b}SMTPPasswordEnv" value="${esc(a.SMTPPasswordEnv)}" placeholder="SMTP_PASSWORD (recommandé)">
+      <label>Mot de passe : valeur</label><input class="w100 mono" type="password" autocomplete="new-password" data-type="secret" ${a.SMTPPassword === KEEP ? "data-had=1" : ""} data-bind="${b}SMTPPassword" value="${a.SMTPPassword === KEEP ? "" : esc(a.SMTPPassword)}" placeholder="${a.SMTPPassword === KEEP ? "enregistré (vide = conserver)" : "écrit dans config.toml"}">
+      <label>Expéditeur</label><input class="w100 mono" data-bind="${b}From" value="${esc(a.From)}" placeholder="llmgw@exemple.be">
+    </div></div></section>`;
 }
 document.addEventListener("change", e => {
   const el = e.target.closest("[data-addtarget]"); if (!el || !el.value) return;

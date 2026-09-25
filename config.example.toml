@@ -77,6 +77,23 @@ enabled = false
 retention_hours = 24      # purge automatique
 max_kb = 1024             # taille max archivée par requête / réponse
 
+# ---------------------------------------------------------------- alertes
+# Récapitulatif par email (violations, quotas, erreurs LLM) toutes les interval_minutes,
+# envoyé aux alert_emails du profil concerné et aux destinataires "to". Sans valeur sensible.
+
+[alerts]
+enabled = false
+smtp_host = "smtp.office365.com"
+smtp_port = 587                     # 587 STARTTLS, 465 TLS
+smtp_user = "llmgw@exemple.be"
+smtp_password_env = "SMTP_PASSWORD"
+from = "llmgw@exemple.be"
+to = ["rssi@exemple.be"]
+interval_minutes = 15
+on_violation = true
+on_quota = true
+on_error = true
+
 # ---------------------------------------------------------------- détecteurs
 # Types intégrés : email, phone, iban, niss (NISS belge, avec contrôle), card (Luhn), ipv4,
 #   person_title     : nom après un titre (fautes tolérées : Moniseur) ou un mot de contexte (patient, client, nommé…)
@@ -151,6 +168,8 @@ regex = '\b(?:CLI|PAT)-\d{6,}\b'
 # actions          : action par type de donnée
 # images           : pass | strip (remplacées par un texte) | block (requête refusée)
 # placeholder_hint : ajoute une consigne demandant au LLM de conserver les «JETONS»
+# system_prompt    : prompt de comportement ajouté en tête de chaque requête du profil
+# alert_emails     : destinataires des alertes pour ce profil (voir [alerts])
 
 [profiles.interne]
 description = "Données sensibles autorisées, LLM local uniquement"
@@ -167,6 +186,8 @@ placeholder_hint = true
 
 [profiles.strict]
 description = "Cloud, NISS/IBAN/carte interdits"
+system_prompt = "Tu assistes des professionnels de santé. Réponds en français, de façon factuelle ; ne pose jamais de diagnostic."
+alert_emails = ["rssi@exemple.be"]
 targets = ["mistral", "local"]
 images = "block"
 default_action = "anonymize"

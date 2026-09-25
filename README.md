@@ -52,6 +52,8 @@ Un nom repéré une fois (« Mme Claire Dubois ») est aussi remplacé ailleurs 
 
 **Chat (`/chat`).** Fenêtre de chat pour les utilisateurs : connexion avec la clé gateway, choix du modèle autorisé, pièces jointes (txt, md, csv, json, PDF, docx : texte extrait dans le navigateur, puis anonymisé par le gateway ; images selon le profil). Sous chaque échange, le nombre de données pseudonymisées et le LLM qui a répondu. L'extraction PDF/docx charge pdf.js et mammoth depuis cdnjs.
 
+**Prompt de comportement et alertes.** Chaque profil peut porter un `system_prompt`, ajouté en tête de toutes ses requêtes (après l'anonymisation, donc non modifié), et des `alert_emails`. Section `[alerts]` : serveur SMTP (587 STARTTLS ou 465 TLS), destinataires par défaut, déclencheurs (violation, quota, erreur LLM) et fréquence du récapitulatif. Les emails ne contiennent aucune valeur sensible. Bouton « Envoyer un test » dans le dashboard.
+
 **Mode DEBUG (onglet Debug).** Désactivé par défaut. Une fois activé, chaque échange est archivé : la requête telle que reçue par le LLM (anonymisée), la réponse brute du LLM avant restauration, les correspondances jeton → valeur d'origine et chaque mot détecté avec l'action appliquée. La vue détaillée bascule entre « vue anonymisée » (jetons en gras) et « vue d'origine » (valeurs en gras, en bleu si anonymisées, en rouge si bloquées, en orange si journalisées). Les valeurs sont stockées **en clair** : purge automatique après `retention_hours` (24 h par défaut), bandeau « DEBUG actif » dans le dashboard, bouton pour vider l'archive.
 
 **Configuration.** `config.toml` est rechargé à chaud : une configuration invalide est refusée et l'ancienne reste active.

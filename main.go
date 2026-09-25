@@ -58,11 +58,13 @@ func main() {
 		ForceAttemptHTTP2:     true,
 	}}}
 	g.cfg.Store(cfg)
+	g.alerts = NewAlerter(g)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	go g.watch(ctx, *cfgPath)
 	go g.maintenance(ctx)
+	go g.alerts.Run(ctx.Done())
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/chat/completions", g.handleLLM("openai"))
@@ -86,6 +88,31 @@ func main() {
 	mux.HandleFunc("PUT /admin/api/config", g.admin(g.handlePutConfig))
 	mux.HandleFunc("GET /admin/api/usage", g.admin(g.handleUsage))
 	mux.HandleFunc("POST /admin/api/target-test", g.admin(g.handleTargetTest))
+	mux.HandleFunc("POST /admin/api/alert-test", g.admin(func(w http.ResponseWriter, r *http.Request) {
+		ac := g.C().Alerts
+		var to []string
+		to = append(to, ac.To...)
+		for _, p := range g.C().Profiles {
+			to = append(to, p.AlertEmails...)
+		}
+		if len(to) == 0 {
+			http.Error(w, "aucun destinataire configuré", 400)
+			return
+		}
+		seen := map[string]bool{}
+		var uniq []string
+		for _, t := range to {
+			if !seen[t] {
+				seen[t] = true
+				uniq = append(uniq, t)
+			}
+		}
+		if err := sendMail(ac, uniq, "[llmgw] Test des alertes", "Ceci est un message de test du gateway LLM.\nLes alertes arriveront à cette adresse.\n"); err != nil {
+			http.Error(w, err.Error(), 502)
+			return
+		}
+		writeJSON(w, map[string]any{"sent": uniq})
+	}))
 	mux.HandleFunc("GET /admin/api/debug", g.admin(g.handleDebugList))
 	mux.HandleFunc("GET /admin/api/debug/{id}", g.admin(g.handleDebugGet))
 	mux.HandleFunc("DELETE /admin/api/debug", g.admin(g.handleDebugClear))
