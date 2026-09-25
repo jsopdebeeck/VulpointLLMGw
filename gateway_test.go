@@ -491,3 +491,46 @@ func TestContextDetectors(t *testing.T) {
 		}
 	}
 }
+
+func TestTechnicalFalsePositives(t *testing.T) {
+	cfg, err := LoadConfig("config.example.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, _ := OpenStore(filepath.Join(t.TempDir(), "m.db"))
+	learner, _ = NewLearner(st.db)
+	defer func() { learner = nil }()
+	cfg.Privacy.Allow = nil // the built-in list alone must be enough
+	anon := func(in string) string {
+		s := NewSession(cfg, cfg.Profiles["standard"])
+		body := map[string]any{"messages": []any{map[string]any{"role": "user", "content": in}}}
+		s.Process(body, "openai")
+		return lastUserText(body)
+	}
+	// strong detections still work, including a common word after a title
+	for _, c := range []struct{ in, leak string }{{"M. Transport a appelé", "Transport"}, {"Gérald Keizer arrive", "Keizer"}, {"KEIZER Gérald", "KEIZER"}} {
+		if out := anon(c.in); strings.Contains(out, c.leak) {
+			t.Errorf("%q → %q", c.in, out)
+		}
+	}
+	for _, in := range []string{
+		"Claude répond via l'API des providers.",
+		"Claude",
+		`{"id": 622, "status": 201, "count": 317, "patient_id": 617}`,
+		"Transport: Custom provider",
+		"Custom Transport for Claude Code",
+		"API Claude et SDK Claude",
+		"No 617 errors in file 317, case 201",
+		"Voir le dossier 3 et la facture 12.",
+		"Claude Transport Custom Provider",
+		"Mistral Providers, Jean Settings et Marie Endpoints",
+	} {
+		if out := anon(in); out != in {
+			t.Errorf("faux positif : %q → %q", in, out)
+		}
+	}
+	time.Sleep(200 * time.Millisecond)
+	if n := learner.Count(); n != 0 { // M. Transport: dictionary word; Gérald Keizer: a guess from a first name
+		t.Errorf("mémoire des noms : %d entrée(s), 0 attendue", n)
+	}
+}

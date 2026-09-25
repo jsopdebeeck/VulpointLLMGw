@@ -1,0 +1,83 @@
+# Termes jamais anonymisés (toujours actifs, en plus de [privacy] allow). Un terme par ligne.
+# Produits et fournisseurs IA
+Claude
+Claude Code
+Claude Cowork
+Claude Console
+ChatGPT
+Gemini
+Copilot
+Hermes
+Anthropic
+OpenAI
+DeepSeek
+Mistral
+Grok
+Llama
+Ollama
+Kimi
+Qwen
+Perplexity
+# Éditeurs, plateformes, outils
+GitHub
+GitLab
+Google
+Microsoft
+Apple
+Amazon
+Azure
+Linux
+Windows
+Python
+JavaScript
+TypeScript
+Docker
+Kubernetes
+Slack
+Notion
+Jira
+Confluence
+Dropbox
+Outlook
+Teams
+SharePoint
+Excel
+Word
+PowerPoint
+# Sigles
+API
+APIs
+HTTP
+HTTPS
+JSON
+YAML
+XML
+HTML
+CSS
+URL
+URI
+SQL
+LLM
+LLMs
+MCP
+CLI
+SDK
+UI
+UX
+AI
+IA
+CEO
+CTO
+CIO
+CISO
+RSSI
+DPO
+GDPR
+RGPD
+NIS2
+ISO
+PDF
+CSV
+README
+TODO
+FAQ

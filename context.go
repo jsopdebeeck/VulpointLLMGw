@@ -9,11 +9,30 @@ import (
 // Context detectors: identifiers introduced by a keyword ("Dossier patient 676888-67")
 // and dates (all of them, or birth dates only: "né le 30/12/2006").
 
+// French/Dutch business keywords only: English "id", "no", "file", "case"… are everywhere in technical text.
 var refKeywords = map[string]bool{"dossier": true, "patient": true, "patiente": true, "client": true, "cliente": true,
 	"contrat": true, "facture": true, "commande": true, "matricule": true, "reference": true, "ref": true, "numero": true,
-	"n°": true, "no": true, "num": true, "nr": true, "nummer": true, "dossiernummer": true, "file": true, "case": true,
-	"id": true, "identifiant": true, "ticket": true, "sinistre": true, "police": true, "badge": true, "employe": true,
-	"adherent": true, "affilie": true, "membre": true, "mutuelle": true, "patientnummer": true, "klantnummer": true, "account": true}
+	"n°": true, "nr": true, "nummer": true, "dossiernummer": true, "identifiant": true, "sinistre": true, "police": true,
+	"badge": true, "employe": true, "adherent": true, "affilie": true, "membre": true, "mutuelle": true,
+	"patientnummer": true, "klantnummer": true}
+
+// looksLikeRef: 5+ digits, or 3+ digits in a structured form (AB-123, 2025/77).
+func looksLikeRef(t string) bool {
+	if !reIdent.MatchString(t) || isDate(t) {
+		return false
+	}
+	d := digits(t)
+	return d >= 5 || (d >= 3 && (strings.ContainsAny(t, "-/._") || d < len(t)))
+}
+
+// inCode: the keyword is part of code or JSON ("id": 622, patient_id=622, obj.patient).
+func inCode(s string, a, b int) bool {
+	if a > 0 && strings.ContainsRune("\"'_.$`", rune(s[a-1])) {
+		return true
+	}
+	rest := strings.TrimLeft(s[b:], " ")
+	return strings.HasPrefix(rest, "\"") || strings.HasPrefix(rest, "=") || strings.HasPrefix(rest, "_")
+}
 
 var (
 	reWordTok = regexp.MustCompile(`[^\s,;:()\[\]{}"«»]+`)
@@ -36,12 +55,12 @@ func findRefContext(s string) [][2]int {
 	var out [][2]int
 	for i := 0; i < len(locs); i++ {
 		w := strings.TrimRight(fold(s[locs[i][0]:locs[i][1]]), ".:#")
-		if !refKeywords[w] {
+		if !refKeywords[w] || inCode(s, locs[i][0], locs[i][1]) {
 			continue
 		}
 		for j := i + 1; j < len(locs) && j <= i+3; j++ {
 			t := strings.TrimRight(s[locs[j][0]:locs[j][1]], ".")
-			if reIdent.MatchString(t) && digits(t) >= 3 && !isDate(t) {
+			if looksLikeRef(t) {
 				out = append(out, [2]int{locs[j][0], locs[j][0] + len(t)})
 				i = j
 				break

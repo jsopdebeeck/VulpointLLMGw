@@ -196,6 +196,9 @@ func ParseConfig(data []byte, base string) (*Config, error) {
 	}
 
 	c.allow = map[string]bool{}
+	for a := range defaultAllow {
+		c.allow[a] = true
+	}
 	for _, a := range c.Privacy.Allow {
 		if a = strings.TrimSpace(a); a != "" {
 			c.allow[fold(a)] = true

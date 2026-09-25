@@ -1,12 +1,15 @@
 package main
 
 import (
+	"bytes"
+	"compress/gzip"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
 	_ "embed"
 	"encoding/binary"
+	"io"
 	"log"
 	"strings"
 	"sync"
@@ -20,6 +23,63 @@ import (
 
 //go:embed firstnames.txt
 var firstnamesTxt string
+
+//go:embed lexicon.txt.gz
+var lexiconGz []byte
+
+// lexicon: common (lowercase) English dictionary words. A capitalized common word
+// ("Transport", "Custom", "Provider") is not taken for a surname on weak evidence.
+var lexicon = func() map[string]bool {
+	m := map[string]bool{}
+	zr, err := gzip.NewReader(bytes.NewReader(lexiconGz))
+	if err != nil {
+		return m
+	}
+	b, _ := io.ReadAll(zr)
+	for _, w := range strings.Split(string(b), "\n") {
+		if w != "" {
+			m[w] = true
+		}
+	}
+	for _, w := range surnameWords {
+		delete(m, w)
+	}
+	return m
+}()
+
+// surnames that are also dictionary words: still accepted as names
+var surnameWords = []string{"martin", "rose", "baker", "smith", "miller", "carpenter", "cook", "hunter", "wood", "young",
+	"king", "bishop", "fisher", "mason", "turner", "walker", "white", "black", "brown", "green", "gray", "grey", "bell",
+	"hill", "noble", "blanc", "petit", "lambert", "roland", "vincent", "marchand", "baron", "prince", "page", "gentil"}
+
+// commonWord: dictionary word, acronym, product or all-caps token: not a name without strong evidence.
+func commonWord(w string) bool {
+	f := fold(w)
+	if lexicon[f] || defaultAllow[f] || notNames[f] {
+		return true
+	}
+	// the dictionary holds base forms: providers, settings, configured, endpoints…
+	for _, suf := range []string{"s", "es", "ed", "d", "ing", "ers", "er"} {
+		if b := strings.TrimSuffix(f, suf); b != f && len(b) >= 4 && (lexicon[b] || lexicon[b+"e"]) {
+			return true
+		}
+	}
+	return false
+}
+
+//go:embed allow_default.txt
+var allowDefaultTxt string
+
+// defaultAllow: products, vendors and acronyms that are never person names (folded).
+var defaultAllow = func() map[string]bool {
+	m := map[string]bool{}
+	for _, l := range strings.Split(allowDefaultTxt, "\n") {
+		if l = strings.TrimSpace(l); l != "" && !strings.HasPrefix(l, "#") {
+			m[fold(l)] = true
+		}
+	}
+	return m
+}()
 
 var firstnames = func() map[string]bool {
 	m := map[string]bool{}
@@ -177,14 +237,17 @@ var addressForms = map[string]bool{"monsieur": true, "madame": true, "mademoisel
 
 // nameAfter returns the end of the name that starts at token i (1 to 3 capitalized
 // words, particles allowed inside), or -1.
-func nameAfter(s string, ts []tok, i int) (int, int) {
+func nameAfter(s string, ts []tok, i int) (int, int) { return nameAfterMode(s, ts, i, false) }
+
+// nameAfterMode: strict (weak evidence, e.g. a first name) refuses common words as surnames.
+func nameAfterMode(s string, ts []tok, i int, strict bool) (int, int) {
 	last, n := -1, 0
 	for j := i; j < len(ts) && n < 3; j++ {
 		if j > i && !gapOK(s[ts[j-1].e:ts[j].s]) {
 			break
 		}
 		w := ts[j].w
-		if isCap(w) && !notNames[fold(w)] && !isTitle(w) {
+		if isCap(w) && !notNames[fold(w)] && !isTitle(w) && !defaultAllow[fold(w)] && !(strict && commonWord(w)) {
 			last, n = j, n+1
 			continue
 		}
@@ -228,7 +291,7 @@ func findFirstnames(s string) [][2]int {
 	ts := tokenize(s)
 	var out [][2]int
 	isFirst := func(w string) bool {
-		if !isCap(w) {
+		if !isCap(w) || defaultAllow[fold(w)] {
 			return false
 		}
 		f := fold(w)
@@ -246,12 +309,13 @@ func findFirstnames(s string) [][2]int {
 		if !isFirst(ts[i].w) {
 			continue
 		}
-		if i > 0 && isAllCaps(ts[i-1].w) && !notNames[fold(ts[i-1].w)] && gapOK(s[ts[i-1].e:ts[i].s]) {
+		if i > 0 && isAllCaps(ts[i-1].w) && utf8.RuneCountInString(ts[i-1].w) >= 3 && !commonWord(ts[i-1].w) &&
+			gapOK(s[ts[i-1].e:ts[i].s]) {
 			out = append(out, [2]int{ts[i-1].s, ts[i].e})
 			continue
 		}
 		if i+1 < len(ts) && gapOK(s[ts[i].e:ts[i+1].s]) {
-			if last, _ := nameAfter(s, ts, i+1); last >= 0 {
+			if last, _ := nameAfterMode(s, ts, i+1, true); last >= 0 {
 				out = append(out, [2]int{ts[i].s, ts[last].e})
 				i = last
 			}
@@ -265,7 +329,7 @@ func nameTokens(v string) []string {
 	var out []string
 	for _, t := range tokenize(v) {
 		f := fold(t.w)
-		if utf8.RuneCountInString(f) >= 4 && isCap(t.w) && !particles[f] && !notNames[f] && !isTitle(t.w) {
+		if utf8.RuneCountInString(f) >= 4 && isCap(t.w) && !particles[f] && !isTitle(t.w) && !commonWord(t.w) && !isAllCaps(t.w) {
 			out = append(out, t.w)
 		}
 	}
@@ -344,7 +408,7 @@ func (l *Learner) Match(w string) bool {
 		return false
 	}
 	f := fold(w)
-	if notNames[f] || particles[f] || isTitle(w) {
+	if particles[f] || isTitle(w) || commonWord(w) {
 		return false
 	}
 	l.mu.RLock()

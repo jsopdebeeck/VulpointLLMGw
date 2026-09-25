@@ -127,6 +127,11 @@ func boundary(s string, a, b int) bool {
 	return true
 }
 
+// strong: evidence good enough to feed the persistent name memory (title, context word, explicit list).
+func (d *Detector) strong() bool {
+	return d.words || d.builtin == "person_title"
+}
+
 func (d *Detector) Find(s string) []span {
 	var out []span
 	if d.custom != nil {
@@ -394,7 +399,7 @@ func (s *Session) learnFrom(text string) string {
 		s.learn[strings.ToLower(v)] = sp.kind
 		if s.isNames(sp.kind) {
 			for _, t := range strings.FieldsFunc(v, func(r rune) bool { return unicode.IsSpace(r) || r == '-' }) {
-				if r, _ := utf8.DecodeRuneInString(t); utf8.RuneCountInString(t) >= 3 && unicode.IsUpper(r) && !particles[fold(t)] {
+				if r, _ := utf8.DecodeRuneInString(t); utf8.RuneCountInString(t) >= 3 && unicode.IsUpper(r) && !particles[fold(t)] && !commonWord(t) {
 					lt := strings.ToLower(t)
 					if _, ok := s.learn[lt]; !ok {
 						s.learn[lt] = sp.kind
@@ -407,7 +412,9 @@ func (s *Session) learnFrom(text string) string {
 					}
 				}
 			}
-			s.toLearn = append(s.toLearn, nameTokens(v)...)
+			if sp.prio < len(s.dets) && s.dets[sp.prio].strong() { // guesses from a first name are not persisted
+				s.toLearn = append(s.toLearn, nameTokens(v)...)
+			}
 		}
 	}
 	return text
