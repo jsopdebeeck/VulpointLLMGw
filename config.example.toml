@@ -46,6 +46,7 @@ base_url = "https://api.deepseek.com/v1"
 api_key_env = "DEEPSEEK_API_KEY"
 models = ["deepseek-flash", "deepseek-v4-pro"]
 stream_usage = true
+downgrade_json_schema = true
 
 [targets.grok]
 api = "openai"

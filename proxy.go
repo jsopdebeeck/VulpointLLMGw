@@ -313,7 +313,7 @@ func (g *Gateway) handleLLM(api string) http.HandlerFunc {
 			}
 			rec.Target, rec.Model = c.name, c.model
 			upStart = time.Now()
-			resp, err = g.send(r, c, api, encodeJSON(body))
+			resp, err = g.send(r, c, api, encodeJSON(adaptBody(body, c.t, api)))
 			last := i == len(cands)-1
 			if err == nil && (last || (resp.StatusCode < 500 && resp.StatusCode != 429)) {
 				rec.TtfbMs = ms(time.Since(upStart))
@@ -630,7 +630,7 @@ func (g *Gateway) handleModels(w http.ResponseWriter, r *http.Request) {
 	seen := map[string]bool{}
 	for _, n := range cfg.Profiles[u.Profile].Targets {
 		t := cfg.Targets[n]
-		if t.Disabled || !t.Ready() {
+		if t.Disabled || !g.ready(t) {
 			continue
 		}
 		for _, m := range t.Models {
@@ -662,7 +662,7 @@ func (g *Gateway) handleMe(w http.ResponseWriter, r *http.Request) {
 	var ts []tgt
 	for _, n := range p.Targets {
 		if t := cfg.Targets[n]; !t.Disabled {
-			ts = append(ts, tgt{n, t.API, t.Models, t.Ready()})
+			ts = append(ts, tgt{n, t.API, t.Models, g.ready(t)})
 		}
 	}
 	us := g.meter.Snapshot()["u:"+name]
@@ -671,7 +671,59 @@ func (g *Gateway) handleMe(w http.ResponseWriter, r *http.Request) {
 		"quota": cfg.EffectiveQuota(u), "usage": us})
 }
 
-// Ready: the target has an API key, or is a local server that needs none.
-func (t *Target) Ready() bool {
-	return t.key != "" || strings.Contains(t.BaseURL, "localhost") || strings.Contains(t.BaseURL, "127.0.0.1")
+func (t *Target) local() bool {
+	return strings.Contains(t.BaseURL, "localhost") || strings.Contains(t.BaseURL, "127.0.0.1")
+}
+
+var probeCache sync.Map // base URL -> probeResult
+
+type probeResult struct {
+	ok bool
+	at time.Time
+}
+
+// ready: the target has an API key, or is a local server (no key) that answers right now.
+func (g *Gateway) ready(t *Target) bool {
+	if t.key != "" {
+		return true
+	}
+	if !t.local() {
+		return false
+	}
+	if v, ok := probeCache.Load(t.BaseURL); ok && time.Since(v.(probeResult).at) < 20*time.Second {
+		return v.(probeResult).ok
+	}
+	url := strings.TrimRight(t.BaseURL, "/") + "/models"
+	if t.API == "anthropic" {
+		url = strings.TrimRight(t.BaseURL, "/") + "/v1/models"
+	}
+	cl := &http.Client{Timeout: 800 * time.Millisecond}
+	resp, err := cl.Get(url)
+	ok := err == nil && resp.StatusCode < 500
+	if err == nil {
+		resp.Body.Close()
+	}
+	probeCache.Store(t.BaseURL, probeResult{ok, time.Now()})
+	return ok
+}
+
+// adaptBody applies per-target compatibility tweaks on a shallow copy of the request.
+func adaptBody(body map[string]any, t *Target, api string) map[string]any {
+	rf, _ := body["response_format"].(map[string]any)
+	if api != "openai" || !t.DowngradeJSONSchema || rf == nil || rf["type"] != "json_schema" {
+		return body
+	}
+	out := make(map[string]any, len(body))
+	for k, v := range body {
+		out[k] = v
+	}
+	out["response_format"] = map[string]any{"type": "json_object"}
+	schema := rf["json_schema"]
+	if js, ok := schema.(map[string]any); ok && js["schema"] != nil {
+		schema = js["schema"]
+	}
+	note := "Réponds uniquement avec un objet JSON valide (json), sans texte autour, conforme à ce schéma JSON : " + string(encodeJSON(schema))
+	msgs, _ := body["messages"].([]any)
+	out["messages"] = append(append([]any{}, msgs...), map[string]any{"role": "system", "content": note})
+	return out
 }

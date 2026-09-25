@@ -413,3 +413,15 @@ func TestNameHeuristics(t *testing.T) {
 		t.Error("aucun nom appris")
 	}
 }
+
+func TestDowngradeJSONSchema(t *testing.T) {
+	body := map[string]any{"messages": []any{map[string]any{"role": "user", "content": "x"}},
+		"response_format": map[string]any{"type": "json_schema", "json_schema": map[string]any{"name": "r", "schema": map[string]any{"type": "object"}}}}
+	out := adaptBody(body, &Target{DowngradeJSONSchema: true}, "openai")
+	if out["response_format"].(map[string]any)["type"] != "json_object" || len(out["messages"].([]any)) != 2 {
+		t.Errorf("conversion : %v", out)
+	}
+	if body["response_format"].(map[string]any)["type"] != "json_schema" || len(body["messages"].([]any)) != 1 {
+		t.Error("la requête d'origine ne doit pas être modifiée (repli sur une autre cible)")
+	}
+}

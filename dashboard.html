@@ -345,7 +345,7 @@ function cleanup(c) {
 $("#save").onclick = async () => {
   cleanup(S.cfg);
   try {
-    const r = await api("/admin/api/config", { method: "PUT", body: JSON.stringify({ Config: S.cfg }) });
+    const r = await api("/admin/api/config", { method: "PUT", body: JSON.stringify({ Config: S.cfg, Version: S.meta.version }) });
     await loadConfig(); render();
     toast("Configuration enregistrée et appliquée." + (r.notes?.length ? "\n" + r.notes.join("\n") : ""));
   } catch (e) { if (e.message !== "401") toast("Non enregistré : " + e.message, true); }
@@ -496,7 +496,7 @@ function viewTargets() {
         <label>Clé : valeur directe</label><input class="w100 mono" type="password" autocomplete="new-password" data-type="secret" ${t.APIKey === KEEP ? "data-had=1" : ""} data-bind="${b}APIKey" value="${t.APIKey === KEEP ? "" : esc(t.APIKey)}" placeholder="${t.APIKey === KEEP ? "enregistrée (vide = conserver)" : "écrite dans config.toml"}">
         <label>État</label><div>${keyState}</div>
         <label>En-têtes HTTP<br><span class="sub">une ligne « nom: valeur »</span></label><textarea class="w100 mono" style="min-height:44px" data-type="kv" data-bind="${b}Headers">${esc(Object.entries(t.Headers || {}).map(([k, v]) => k + ": " + v).join("\n"))}</textarea>
-        <label>Options</label><div><label><input type="checkbox" data-bind="${b}StreamUsage" ${t.StreamUsage ? "checked" : ""}> tokens en streaming</label> &nbsp; <label><input type="checkbox" data-bind="${b}Disabled" ${t.Disabled ? "checked" : ""} data-rerender> désactivée</label></div>
+        <label>Options</label><div><label><input type="checkbox" data-bind="${b}StreamUsage" ${t.StreamUsage ? "checked" : ""}> tokens en streaming</label> &nbsp; <label title="Pour les LLM qui ne gèrent que le mode JSON simple (DeepSeek…)"><input type="checkbox" data-bind="${b}DowngradeJSONSchema" ${t.DowngradeJSONSchema ? "checked" : ""}> json_schema → json_object</label> &nbsp; <label><input type="checkbox" data-bind="${b}Disabled" ${t.Disabled ? "checked" : ""} data-rerender> désactivée</label></div>
         <label>Utilisée par</label><div>${profs.map(esc).join(", ") || '<span class="sub">aucun profil</span>'}</div>
         <label>Connexion</label><div>${test || '<span class="sub">« Tester » interroge /models avec la clé enregistrée</span>'}</div>
       </div></div>`;

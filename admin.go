@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -60,16 +61,23 @@ func (g *Gateway) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 	if c.Server.AdminToken != "" {
 		c.Server.AdminToken = keepSecret
 	}
-	writeJSON(w, map[string]any{"config": c, "keyHints": hints, "targetKeySet": keySet, "builtins": builtinInfo})
+	writeJSON(w, map[string]any{"config": c, "keyHints": hints, "targetKeySet": keySet, "builtins": builtinInfo, "version": fileVersion(cur.path)})
 }
 
 func (g *Gateway) handlePutConfig(w http.ResponseWriter, r *http.Request) {
 	g.saveMu.Lock()
 	defer g.saveMu.Unlock()
 	cur := g.C()
-	var in struct{ Config *Config }
+	var in struct {
+		Config  *Config
+		Version string
+	}
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.Config == nil {
 		http.Error(w, "JSON invalide", 400)
+		return
+	}
+	if v := fileVersion(cur.path); in.Version != "" && in.Version != v { // optimistic locking
+		http.Error(w, "config.toml a été modifié depuis l'ouverture du dashboard (à la main ou dans un autre onglet). Rechargez la page, puis refaites vos modifications.", 409)
 		return
 	}
 	nc := in.Config
@@ -221,4 +229,14 @@ func (g *Gateway) handleTargetTest(w http.ResponseWriter, r *http.Request) {
 		res["error"] = strings.TrimSpace(string(body[:min(len(body), 300)]))
 	}
 	writeJSON(w, res)
+}
+
+// fileVersion identifies the current content of config.toml.
+func fileVersion(path string) string {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	h := sha256.Sum256(b)
+	return fmt.Sprintf("%x", h[:8])
 }

@@ -47,8 +47,11 @@ type Target struct {
 	Models      []string          `toml:"models,omitempty"` // glob, "*" = any
 	Headers     map[string]string `toml:"headers,omitempty"`
 	StreamUsage bool              `toml:"stream_usage,omitempty"` // ask OpenAI-style servers for usage in streams
-	Disabled    bool              `toml:"disabled,omitempty"`
-	Quota       *Quota            `toml:"quota,omitempty"` // shared by all users of this target
+	// DowngradeJSONSchema turns response_format json_schema into json_object plus an instruction
+	// (DeepSeek and other servers that only support plain JSON mode).
+	DowngradeJSONSchema bool   `toml:"downgrade_json_schema,omitempty"`
+	Disabled            bool   `toml:"disabled,omitempty"`
+	Quota               *Quota `toml:"quota,omitempty"` // shared by all users of this target
 
 	key  string
 	pats []*regexp.Regexp
