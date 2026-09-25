@@ -101,6 +101,8 @@ on_error = true
 #   person_learned   : mémoire des noms déjà vus, fautes de frappe comprises (empreintes HMAC seulement)
 # Personnalisés   : regex = '…' (group = n pour ne garder qu'un groupe)
 #                   words = [...] et/ou words_file = "fichier.txt" (1 terme par ligne)
+#                   un terme en MAJUSCULES est un sigle : reconnu seulement en majuscules
+#                   (« HUB » oui, « hub » non) ; ajoutez la forme minuscule pour l'inclure
 # Le nom devient le type du jeton : «EMAIL_1», «PERSON_2»…
 # Ordre = priorité en cas de chevauchement de même longueur.
 

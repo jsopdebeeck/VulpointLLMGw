@@ -23,6 +23,7 @@ type Detector struct {
 	capOnly map[string]bool   // learned name words: only match when capitalized
 	prio    int
 	custom  func(string) [][2]int // heuristic finders (names)
+	reCS    *regexp.Regexp        // case-sensitive list terms (acronyms that are also words)
 	builtin string
 }
 
@@ -87,14 +88,29 @@ func buildDetector(dc *DetectorCfg, base string, prio int) (*Detector, error) {
 			}
 			words = append(append([]string{}, words...), more...)
 		}
-		d.re, d.words, d.names = wordsRegex(words), true, true
+		// an all-caps term is an acronym: it only matches in capitals (HUB, not "hub");
+		// list the lowercase form explicitly to catch it too
+		var ci, cs []string
+		for _, w := range words {
+			if w = strings.TrimSpace(w); isAllCaps(w) {
+				cs = append(cs, w)
+			} else {
+				ci = append(ci, w)
+			}
+		}
+		d.re, d.words, d.names = wordsRegex(ci), true, true
+		if len(cs) > 0 {
+			d.reCS = wordsRegexCase(cs, false)
+		}
 	default:
 		return nil, fmt.Errorf("builtin, regex ou words requis")
 	}
 	return d, err
 }
 
-func wordsRegex(words []string) *regexp.Regexp {
+func wordsRegex(words []string) *regexp.Regexp { return wordsRegexCase(words, true) }
+
+func wordsRegexCase(words []string, insensitive bool) *regexp.Regexp {
 	ws := make([]string, 0, len(words))
 	for _, w := range words {
 		if w = strings.TrimSpace(w); w != "" {
@@ -108,7 +124,11 @@ func wordsRegex(words []string) *regexp.Regexp {
 	for i, w := range ws {
 		ws[i] = strings.ReplaceAll(regexp.QuoteMeta(w), " ", `\s+`)
 	}
-	return regexp.MustCompile(`(?i)(?:` + strings.Join(ws, "|") + `)`)
+	flag := ""
+	if insensitive {
+		flag = "(?i)"
+	}
+	return regexp.MustCompile(flag + `(?:` + strings.Join(ws, "|") + `)`)
 }
 
 func isWordRune(r rune) bool { return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' }
@@ -140,7 +160,13 @@ func (d *Detector) Find(s string) []span {
 		}
 		return out
 	}
-	for _, m := range d.re.FindAllStringSubmatchIndex(s, -1) {
+	var ms [][]int
+	for _, re := range []*regexp.Regexp{d.re, d.reCS} {
+		if re != nil {
+			ms = append(ms, re.FindAllStringSubmatchIndex(s, -1)...)
+		}
+	}
+	for _, m := range ms {
 		a, b := m[0], m[1]
 		if d.group > 0 && len(m) > 2*d.group+1 && m[2*d.group] >= 0 {
 			a, b = m[2*d.group], m[2*d.group+1]
@@ -240,6 +266,7 @@ type Session struct {
 	NoLearn   bool
 	Stats     map[string]map[string]int // kind -> action -> count
 	Debug     bool                      // record every detected value (debug archive)
+	cur       string                    // part of the request being processed (debug)
 	Events    map[string]*DebugEvent
 	Anon      int
 	Blocked   int
@@ -278,6 +305,7 @@ func (s *Session) count(kind, act string) {
 type DebugEvent struct {
 	Kind, Action, Value, Placeholder string
 	N                                int
+	Sources                          map[string]int // where in the request: "system", "user #3"…
 }
 
 func (s *Session) event(kind, act, v, ph string) {
@@ -288,11 +316,15 @@ func (s *Session) event(kind, act, v, ph string) {
 		s.Events = map[string]*DebugEvent{}
 	}
 	k := kind + "\x00" + act + "\x00" + v
-	if e := s.Events[k]; e != nil {
-		e.N++
-		return
+	e := s.Events[k]
+	if e == nil {
+		e = &DebugEvent{kind, act, v, strings.Trim(ph, "«»"), 0, map[string]int{}}
+		s.Events[k] = e
 	}
-	s.Events[k] = &DebugEvent{kind, act, v, strings.Trim(ph, "«»"), 1}
+	e.N++
+	if s.cur != "" {
+		e.Sources[s.cur]++
+	}
 }
 
 func (s *Session) BlockedKinds() string {
@@ -396,6 +428,9 @@ func (s *Session) learnFrom(text string) string {
 			continue
 		}
 		v := text[sp.s:sp.e]
+		if isAllCaps(v) && sp.prio < len(s.dets) && s.dets[sp.prio].words { // list acronym: must not be learned case-insensitively
+			continue
+		}
 		s.learn[strings.ToLower(v)] = sp.kind
 		if s.isNames(sp.kind) {
 			for _, t := range strings.FieldsFunc(v, func(r rune) bool { return unicode.IsSpace(r) || r == '-' }) {
@@ -503,7 +538,11 @@ func (s *Session) Process(body map[string]any, api string) {
 	s.media(body)
 	walk(body, 0, s.learnFrom)
 	s.buildLearned()
-	walk(body, 0, s.Anonymize)
+	if s.Debug {
+		s.walkParts(body, s.Anonymize)
+	} else {
+		walk(body, 0, s.Anonymize)
+	}
 	if s.prof.Hint && len(s.rev) > 0 {
 		injectHint(body, api)
 	}
@@ -518,6 +557,30 @@ func (s *Session) commitLearning() {
 	if s.learnOn && !s.NoLearn {
 		learner.Learn(s.toLearn)
 	}
+}
+
+// walkParts is walk with the current part recorded (message role and position) for the debug view.
+func (s *Session) walkParts(body map[string]any, fn func(string) string) {
+	for _, k := range sortedKeys(body) {
+		if msgs, ok := body[k].([]any); ok && k == "messages" {
+			for i, m := range msgs {
+				role := "?"
+				if mm, ok := m.(map[string]any); ok {
+					if r, _ := mm["role"].(string); r != "" {
+						role = r
+					}
+				}
+				s.cur = fmt.Sprintf("%s #%d", role, i+1)
+				msgs[i] = walk(m, 0, fn)
+			}
+			continue
+		}
+		s.cur = k
+		w := map[string]any{k: body[k]}
+		walk(w, 0, fn)
+		body[k] = w[k]
+	}
+	s.cur = ""
 }
 
 // AnonymizeText is Process for a bare string (dashboard test panel).

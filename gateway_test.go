@@ -615,3 +615,35 @@ func TestSystemPromptAndAlerts(t *testing.T) {
 		t.Errorf("contenu de l'alerte :\n%s", m)
 	}
 }
+
+func TestAcronymListAndSources(t *testing.T) {
+	cfg, err := LoadConfig("config.example.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := buildDetector(&DetectorCfg{Name: "COMPANY", Words: []string{"HUB", "CNDG", "cndg", "Globex"}}, ".", len(cfg.dets))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.dets = append(cfg.dets, d)
+	s := NewSession(cfg, cfg.Profiles["standard"])
+	s.Debug = true
+	body := map[string]any{"messages": []any{
+		map[string]any{"role": "system", "content": "Clients : HUB, CNDG, globex."},
+		map[string]any{"role": "user", "content": "Le hub réseau de cndg est en panne."},
+	}}
+	s.Process(body, "openai")
+	out := lastUserText(body)
+	if !strings.Contains(out, "hub réseau") || strings.Contains(out, "cndg") {
+		t.Errorf("sigles : %q", out)
+	}
+	src := map[string]string{}
+	for _, e := range s.Events {
+		for k := range e.Sources {
+			src[e.Value] += k + " "
+		}
+	}
+	if !strings.Contains(src["HUB"], "system #1") || !strings.Contains(src["cndg"], "user #2") {
+		t.Errorf("sources : %v", src)
+	}
+}
