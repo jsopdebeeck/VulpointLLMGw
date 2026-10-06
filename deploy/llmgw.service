@@ -1,0 +1,35 @@
+# llmgw : service systemd. Installé par deploy/deploy.sh dans /etc/systemd/system/.
+# Clés des LLM cibles : /opt/llmgw/secrets.env (droits 600), une variable par ligne.
+
+[Unit]
+Description=llmgw, gateway LLM avec anonymisation
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=llmgw
+Group=llmgw
+WorkingDirectory=/opt/llmgw
+ExecStart=/opt/llmgw/llmgw -config /opt/llmgw/config.toml
+EnvironmentFile=/opt/llmgw/secrets.env
+# agrégats journaliers et reporting à l'heure belge
+Environment=TZ=Europe/Brussels
+Restart=on-failure
+RestartSec=3
+
+# durcissement : seul /opt/llmgw est accessible en écriture (config.toml, .bak-*, gateway.db)
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+ReadWritePaths=/opt/llmgw
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

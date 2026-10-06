@@ -1,0 +1,46 @@
+# llmgw derrière Caddy : HTTPS automatique (Let's Encrypt).
+# deploy/deploy.sh --domain remplace LLMGW_DOMAIN et ADMIN_IPS, puis installe ce fichier
+# dans /etc/caddy/Caddyfile.
+
+LLMGW_DOMAIN {
+	# pas de « encode » : la compression retarderait le streaming SSE
+
+	# dashboard et API d'admin : seulement depuis les IP autorisées
+	# (en plus de admin_token ; sinon passer par un tunnel SSH)
+	@admin {
+		path /dashboard* /admin/*
+		not remote_ip ADMIN_IPS
+	}
+	respond @admin 403
+
+	reverse_proxy 127.0.0.1:8080 {
+		# streaming SSE : envoyer chaque morceau sans attendre
+		flush_interval -1
+		transport http {
+			# réponses longues des LLM (aligné sur upstream_timeout_sec)
+			response_header_timeout 300s
+		}
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		-Server
+	}
+
+	log {
+		output file /var/log/caddy/llmgw.log
+		# Caddy ne journalise pas les corps ; on retire en plus les clés des en-têtes
+		format filter {
+			wrap json
+			fields {
+				request>headers>Authorization delete
+				request>headers>X-Api-Key delete
+				request>headers>X-Admin-Token delete
+				request>headers>Cookie delete
+				response>headers>Set-Cookie delete
+			}
+		}
+	}
+}
