@@ -483,6 +483,14 @@ func (g *Gateway) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "fournisseur inconnu", 404)
 		return
 	}
+	if p.secret == "" {
+		src := "client_secret"
+		if p.ClientSecretEnv != "" {
+			src = "la variable d'environnement " + p.ClientSecretEnv
+		}
+		authFail(w, 500, "Le code secret du fournisseur "+p.display()+" n'est pas défini ("+src+"). Définissez-le, puis relancez la passerelle.")
+		return
+	}
 	c, err := discover(p.issuer)
 	if err != nil {
 		authFail(w, 502, "Le fournisseur d'identité est injoignable : "+err.Error())

@@ -43,6 +43,9 @@ func main() {
 	}
 	for _, p := range cfg.Auth.Providers {
 		log.Printf("SSO %s (%s) : adresse de retour à déclarer : %s/auth/callback/%s", p.ID, p.Type, cfg.Auth.BaseURL, p.ID)
+		if p.secret == "" {
+			log.Printf("ATTENTION : SSO %s sans code secret (%s vide) : la connexion échouera", p.ID, p.ClientSecretEnv)
+		}
 	}
 	store, err := OpenStore(cfg.dbPath)
 	if err != nil {
