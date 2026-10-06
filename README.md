@@ -1,130 +1,208 @@
-# LLMGW by Vulpoint.com : gateway LLM avec anonymisation
+# LLMGW by Vulpoint.com: LLM gateway with anonymisation
 
-Version **1.0.1** · notes de version dans [RELEASE_NOTES.md](RELEASE_NOTES.md) · documentation intégrée sur `/docs/` (administration) et `/docs/chat.html` (guide utilisateur du chat), sources dans [docs/](docs/).
+[Version française](README.fr.md)
 
-Un seul binaire Go, sans dépendance externe (SQLite et dashboard embarqués), pour Mac et Linux.
+Version **1.0.1** · release notes in [RELEASE_NOTES.md](RELEASE_NOTES.md) (French) · built-in documentation at `/docs/` (administration) and `/docs/chat.html` (chat user guide), sources in [docs/](docs/) (French).
+
+A single Go binary with no external dependency (SQLite, dashboard, chat and documentation are embedded), for macOS and Linux.
 
 ```
-clients (API OpenAI / Anthropic)  →  llmgw  →  LLM cibles (OpenAI, Anthropic, Mistral, Ollama, vLLM…)
-          clé gateway → utilisateur → profil → cibles autorisées (ordre = repli)
-          anonymisation à l'aller, restauration au retour (streaming compris)
-          métriques SQLite → /dashboard
+clients (OpenAI / Anthropic API)  →  llmgw  →  target LLMs (OpenAI, Anthropic, Mistral, DeepSeek, Ollama, vLLM…)
+          gateway key → user → profile → allowed targets (order = fallback)
+          anonymisation on the way out, restoration on the way back (streaming included)
+          SQLite metrics → /dashboard
 ```
 
-## Démarrer
+## Getting started
 
 ```bash
-cp config.example.toml config.toml     # puis adapter cibles, profils, utilisateurs
+cp config.example.toml config.toml     # then adapt targets, profiles and users
 export MISTRAL_API_KEY=… ANTHROPIC_API_KEY=… OPENAI_API_KEY=…
-./llmgw -config config.toml -check     # valide la configuration
+./llmgw -config config.toml -check     # validates the configuration
 ./llmgw -config config.toml            # http://127.0.0.1:8080/dashboard
+./llmgw -version                       # prints the version
 ```
 
-Construire : `go build -o llmgw .`. Pour Linux depuis le Mac : `GOOS=linux GOARCH=amd64 go build -o dist/llmgw-linux-amd64 .` (ou directement `deploy/deploy.sh`, voir plus bas).
+Build with `go build -o llmgw .`. For Linux from a Mac: `GOOS=linux GOARCH=amd64 go build -o dist/llmgw-linux-amd64 .`, or run `deploy/deploy.sh` directly (see below).
 
-Côté client, il suffit de changer l'URL et la clé :
+On the client side, only the URL and the key change:
 
-| Client | Réglage |
+| Client | Setting |
 |---|---|
-| SDK OpenAI / outils compatibles | `base_url = http://gateway:8080/v1`, `api_key = <clé gateway>` |
-| SDK Anthropic / Claude Code | `ANTHROPIC_BASE_URL=http://gateway:8080`, `ANTHROPIC_API_KEY=<clé gateway>` |
+| OpenAI SDK / compatible tools | `base_url = http://gateway:8080/v1`, `api_key = <gateway key>` |
+| Anthropic SDK / Claude Code | `ANTHROPIC_BASE_URL=http://gateway:8080`, `ANTHROPIC_AUTH_TOKEN=<gateway key>` |
 
-Modèle : `mistral-large` (routage automatique selon le profil) ou `mistral/mistral-large` (cible imposée).
-`GET /v1/models` liste les modèles autorisés pour l'utilisateur, `GET /v1/me` son profil, ses quotas et sa consommation.
+Model: `mistral-large` (routed automatically according to the profile) or `mistral/mistral-large` (forced target).
+`GET /v1/models` lists the models allowed for the user, and `GET /v1/me` returns their profile, quotas and usage. `GET /version` returns the version.
 
-## Déployer sur un VPS
+## Deploying on a VPS
 
-Un VPS Linux (Debian 12 ou Ubuntu 24.04, systemd) suffit : 1 vCPU et 1 à 2 Go de RAM. Le gateway voit passer les données en clair avant l'anonymisation : choisir un hébergeur UE sous droit UE (OVHcloud, Scaleway, Hetzner, Infomaniak…) et signer un contrat de sous-traitance (art. 28 RGPD). Le PaaS avec volume est possible ; le serverless ne convient pas (pas de disque persistant, ni de tâches de fond, ni de streaming long garanti).
+A Linux VPS (Debian 12 or Ubuntu 24.04, systemd) is enough: 1 vCPU and 1 to 2 GB of RAM. The gateway sees the data in clear text before anonymisation, so choose an EU host under EU law (OVHcloud, Scaleway, Hetzner, Infomaniak…) and sign a data processing agreement (GDPR art. 28). A PaaS with a persistent volume also works. Serverless does not, because it offers no persistent disk, no background tasks and no guaranteed long streaming.
 
-Seul le binaire part sur le serveur, compilé depuis le Mac. Go n'est pas nécessaire côté serveur. `deploy/deploy.sh` fait tout en une commande :
+Only the binary goes to the server, compiled on the Mac; the server does not need Go. `deploy/deploy.sh` does everything in one command:
 
 ```bash
-deploy/deploy.sh --config config.toml --domain gateway.mondomaine.be --admin-ip 203.0.113.7 root@mon-vps
+deploy/deploy.sh --config config.toml --domain gateway.example.com --admin-ip 203.0.113.7 root@my-vps
 ```
 
-1. `go vet` et `go test`, puis compilation pour l'architecture du serveur (amd64 ou arm64, détectée).
-2. Copie, puis sur le serveur : utilisateur système `llmgw`, dossier `/opt/llmgw` (700), service `deploy/llmgw.service` (systemd durci, `TZ=Europe/Brussels`).
-3. Le nouveau binaire valide la configuration (`-check`) **avant** de remplacer l'ancien. S'il ne démarre pas, le script revient à la version précédente (`llmgw.prev`).
-4. Avec `--domain`, Caddy est installé et configuré (`deploy/Caddyfile`) : HTTPS Let's Encrypt, streaming SSE sans tampon, clés retirées des journaux, `/dashboard` et `/admin` réservés aux IP `--admin-ip`. Sans `--admin-ip`, on y accède seulement par tunnel SSH : `ssh -L 8080:127.0.0.1:8080 mon-vps`, puis `http://127.0.0.1:8080/dashboard`.
+1. Runs `go vet` and `go test`, then compiles for the server architecture (amd64 or arm64, detected).
+2. Copies the files, then on the server creates the `llmgw` system user, the `/opt/llmgw` folder (700) and the `deploy/llmgw.service` unit (hardened systemd, `TZ=Europe/Brussels`).
+3. The new binary validates the configuration (`-check`) **before** replacing the old one. If it fails to start, the script rolls back to the previous version (`llmgw.prev`).
+4. With `--domain`, it installs and configures Caddy (`deploy/Caddyfile`):
+   - Let's Encrypt HTTPS;
+   - unbuffered SSE streaming;
+   - keys removed from the logs;
+   - `/dashboard` and `/admin` restricted to the `--admin-ip` addresses.
 
-**Premier déploiement.** `--config` est obligatoire. Le script crée `/opt/llmgw/secrets.env` vide (root, 600) : y mettre les clés (`MISTRAL_API_KEY=…`, une par ligne), puis `systemctl restart llmgw`. Les fichiers `words_file` relatifs doivent être copiés à côté de `config.toml`. Avant d'ouvrir le serveur : un `admin_token` long et aléatoire (vide = administration ouverte ; le script prévient), `listen = "127.0.0.1:8080"`, un pare-feu limité à 22, 80 et 443 (`ufw allow OpenSSH && ufw allow 80,443/tcp && ufw enable`) et SSH par clé seulement. Le DNS du domaine doit pointer vers le VPS pour que Let's Encrypt délivre le certificat.
+   Without `--admin-ip`, the dashboard is only reachable through an SSH tunnel: `ssh -L 8080:127.0.0.1:8080 my-vps`, then open `http://127.0.0.1:8080/dashboard`.
 
-**Mises à jour.** `deploy/deploy.sh root@mon-vps` (sans `--config`) remplace le binaire et garde la configuration du serveur, modifiée depuis le dashboard. Avec `--config`, l'ancienne est gardée en `config.toml.bak-deploy-*`. Un compte non root avec `sudo` fonctionne aussi.
+**First deployment.** `--config` is required. The script creates an empty `/opt/llmgw/secrets.env` (root, 600). Put the keys there (`MISTRAL_API_KEY=…`, one per line), then run `systemctl restart llmgw`. Relative `words_file` paths must be copied next to `config.toml`. The domain's DNS must point to the VPS for Let's Encrypt to issue the certificate.
 
-**Sauvegardes.** Sauvegarder `config.toml` et la base : `sqlite3 /opt/llmgw/gateway.db ".backup /chemin/gateway-$(date +%F).db"`, et non une simple copie du fichier pendant que le service tourne. Ne pas placer la base dans un dossier synchronisé (Dropbox…) ou réseau : SQLite en mode WAL s'y corrompt.
+Before opening the server to users:
+- set a long random `admin_token` (empty means the administration is open; the script warns about it);
+- set `listen = "127.0.0.1:8080"`;
+- limit the firewall to ports 22, 80 and 443: `ufw allow OpenSSH && ufw allow 80,443/tcp && ufw enable`;
+- allow SSH with keys only.
 
-**Exploitation.** `systemctl status llmgw`, `journalctl -u llmgw -f`. Si le paquet `caddy` manque (Ubuntu 22.04), l'installer depuis le dépôt officiel de Caddy, puis relancer le script.
+**Updates.** `deploy/deploy.sh root@my-vps` (without `--config`) replaces the binary and keeps the server's configuration, edited from the dashboard. With `--config`, the previous configuration is kept as `config.toml.bak-deploy-*`. A non-root account with `sudo` also works.
 
-**Windows.** Le binaire compile (`GOOS=windows`), mais trois limites restent : chemins absolus de `words_file` mal gérés, pas de service Windows natif (passer par NSSM ou WinSW) et droits `0600` sans effet. Linux reste la cible recommandée.
+**Backups.** Back up `config.toml` and the database with `sqlite3 /opt/llmgw/gateway.db ".backup /path/gateway-$(date +%F).db"`. A plain file copy while the service runs is not a safe backup. Do not keep the database in a synchronised folder (Dropbox…) or on a network share: SQLite in WAL mode gets corrupted there.
 
-## Authentification SSO (Entra ID, Google)
+**Operations.** `systemctl status llmgw`, `journalctl -u llmgw -f`. If the `caddy` package is missing (Ubuntu 22.04), install it from Caddy's official repository, then run the script again.
 
-Le portail `/chat` et le dashboard acceptent une connexion **Microsoft Entra ID**, **Google** ou tout fournisseur **OpenID Connect**, en plus des clés gateway (toujours utilisées par l'API) et de `admin_token`. Section `[auth]` de `config.toml` (exemple commenté dans `config.example.toml`).
+**Windows.** The binary compiles (`GOOS=windows`), but three limits remain: absolute `words_file` paths are handled poorly, there is no native Windows service (use NSSM or WinSW), and `0600` permissions have no effect. Linux remains the recommended target.
 
-- **Profil** : un `[users.x]` avec `email = …` garde son profil et ses quotas ; sinon la première règle `mappings` qui correspond (groupe Entra, rôle d'application, motif d'email) ; sinon `default_profile` ; sinon refus.
-- **Administrateurs** : `admin_roles`, `admin_groups` ou `admin_emails`. Ils accèdent au dashboard sans jeton.
-- **Sécurité** : code d'autorisation avec PKCE, `state` et `nonce` ; signature RS256 du jeton d'identité vérifiée sur les clés publiées par le fournisseur ; cookie de session signé, `HttpOnly`, `SameSite=Lax`, `Secure` en HTTPS ; les appels de l'interface exigent en plus l'en-tête `X-LLMGW-Session`, ce qui bloque les requêtes intersites.
-- La correspondance groupes → profil est évaluée à la connexion : un changement de groupe s'applique à la session suivante (`session_hours`, 12 h par défaut).
+## SSO authentication (Entra ID, Google)
 
-**Entra ID** : Portail Azure → Entra ID → Inscriptions d'applications → Nouvelle inscription, type « Web », adresse de retour `https://<passerelle>/auth/callback/entra`. Noter l'ID de tenant et l'ID client, créer un secret client (`ENTRA_CLIENT_SECRET`). Pour les profils par groupe : « Configuration du jeton » → ajouter la revendication de groupes (de préférence « Groupes affectés à l'application », pour rester sous la limite de 200 groupes du jeton). Pour l'administration : déclarer un rôle d'application (par exemple `LLMGW.Admin`) et l'affecter dans « Applications d'entreprise ».
+The `/chat` portal and the dashboard accept sign-in with **Microsoft Entra ID**, **Google** or any **OpenID Connect** provider. Gateway keys (always used by the API) and `admin_token` keep working alongside SSO. SSO is configured in the `[auth]` section of `config.toml`; a commented example is in `config.example.toml`.
 
-**Google** : Google Cloud Console → API et services → Identifiants → ID client OAuth, type « Application Web », URI de redirection `https://<passerelle>/auth/callback/google`. Écran de consentement « Interne » pour un Google Workspace. Google ne transmet pas les groupes : les profils s'attribuent par domaine (`allowed_domains`, `default_profile`), par email (`mappings`) ou par utilisateur déclaré.
+- **Profile**: a `[users.x]` entry with `email = …` keeps its profile and quotas. Otherwise the first matching `mappings` rule applies (Entra group, app role, email pattern), then `default_profile`. Without any of these, sign-in is refused.
+- **Administration**: `[[admins]]` accounts with the Admin (everything) or Support (users, statistics, Debug when granted) role. The providers' `admin_roles`, `admin_groups` and `admin_emails` rules also apply.
+- **Security**:
+  - authorisation code flow with PKCE, `state` and `nonce`;
+  - RS256 signature of the ID token checked against the keys published by the provider;
+  - signed session cookie: `HttpOnly`, `SameSite=Lax`, and `Secure` over HTTPS;
+  - interface calls must also carry the `X-LLMGW-Session` header, which blocks cross-site requests.
+- Group-to-profile mapping is evaluated at sign-in, so a group change applies from the next session (`session_hours`, 12 h by default).
 
-Au démarrage, le journal rappelle l'adresse de retour de chaque fournisseur. L'onglet Utilisateurs et règles du dashboard les affiche aussi.
+**Entra ID**
+1. In the Azure portal, go to Entra ID → App registrations → New registration. Choose the « Web » type and set the redirect URI to `https://<gateway>/auth/callback/entra`.
+2. Note the tenant ID and the client ID, and create a client secret (`ENTRA_CLIENT_SECRET`).
+3. For profiles per group: in « Token configuration », add the groups claim. Prefer « Groups assigned to the application », to stay under the token's 200-group limit.
+4. For administration: declare an app role (for example `LLMGW.Admin`) and assign it in « Enterprise applications ».
 
-## Fonctionnement
+**Google**
+1. In the Google Cloud Console, go to APIs & Services → Credentials → OAuth client ID. Choose the « Web application » type and set the redirect URI to `https://<gateway>/auth/callback/google`.
+2. Use an « Internal » consent screen for a Google Workspace.
 
-**Routage.** La clé identifie l'utilisateur, l'utilisateur a un profil, le profil liste les cibles autorisées dans l'ordre de préférence. La première cible qui accepte le format d'API et le modèle est utilisée. En cas d'erreur réseau, 5xx ou 429, la suivante prend le relais.
+Google does not send groups, so profiles are assigned by domain (`allowed_domains`, `default_profile`), by email (`mappings`) or by declared user.
 
-**Anonymisation.** Les détecteurs (`[[detectors]]`) repèrent emails, téléphones, IBAN, NISS, cartes, IP, noms précédés d'un titre, listes de noms ou d'entreprises et motifs personnalisés (numéros de dossier, identifiants…). Selon le profil, chaque type est :
-- `anonymize` : remplacé par `«TYPE_n»`, puis restauré dans la réponse ;
-- `block` : requête refusée (403) et comptée comme violation ;
-- `log` : laissé passer, mais compté ;
-- `off` : ignoré.
+At startup, the log shows the redirect URI of each provider. The Alerts and SSO page of the dashboard shows them too.
 
-Détecteurs intégrés supplémentaires : adresses (`address`), localités belges et lieux de résidence (`place`), animaux (`pet`), prénoms seuls FR/NL/EN (`firstname_alone`), hôpitaux et réseaux de soins belges (`be_health_orgs`), identifiants après un mot de contexte (`ref_context`), dates de naissance (`birthdate`) ou toutes les dates (`date`). Termes jamais anonymisés : liste intégrée (produits, sigles techniques) et `[privacy] allow`.
+## How it works
 
-Un nom repéré une fois (« Mme Claire Dubois ») est aussi remplacé ailleurs dans la conversation (« Dubois »). La numérotation est stable pour une requête donnée, donc le cache de prompt des fournisseurs reste efficace. Images et fichiers : `pass`, `strip` ou `block` par profil.
+**Routing.** The key identifies the user, the user has a profile, and the profile lists the allowed targets in order of preference. The gateway uses the first target that accepts the API format and the model. On a network error, a 5xx or a 429, the next one takes over. Model aliases per target (`claude-*` → `deepseek-flash`) and a `json_schema` → `json_object` downgrade are available for providers that need them.
 
-**Restauration.** Les jetons sont remplacés dans la réponse, y compris en streaming SSE : un jeton coupé entre deux morceaux est retenu jusqu'à être complet. Les blocs `thinking` signés ne sont pas modifiés.
+**Anonymisation.** Detectors (`[[detectors]]`) find:
+- emails, phone numbers, IBANs, Belgian national numbers (NISS), cards and IP addresses;
+- names (title, known first name in FR/NL/EN, lists) and companies;
+- addresses, Belgian places and pets;
+- Belgian healthcare organisations;
+- identifiers after a context word (« file », « patient », « n° »…);
+- dates of birth, or all dates;
+- custom regular expressions and term lists.
 
-**Métriques.** Chaque requête enregistre utilisateur, cible, modèle, statut, octets, tokens et temps IN (lecture client), GATEWAY (traitement), LLM (cible) et premier octet, avec les compteurs de détection par type. **Aucune valeur sensible n'est stockée.** Après `raw_retention_days` (30 j), le détail est agrégé par jour × utilisateur × cible. Le modèle et les percentiles sont alors perdus, et les agrégats sont conservés environ 6 mois (`agg_retention_days = 200`). Le dashboard propose 48 h, 60 j, 6 semaines et 6 mois (profondeur maximale).
+Depending on the profile, each data type is:
+- `anonymize`: replaced by `«TYPE_n»`, then restored in the answer;
+- `block`: request refused (403) and counted as a violation;
+- `log`: let through, but counted;
+- `off`: ignored.
 
-**Quotas.** Par profil (pour chaque utilisateur), surchargeables par utilisateur, et par LLM cible (budget partagé) : requêtes/minute, requêtes/jour, tokens/jour, tokens/mois. Si un quota est dépassé, la requête est bloquée (429) ou simplement journalisée (alerte). Une cible saturée est sautée au profit de la suivante du profil.
+A name found once (« Mrs Claire Dubois ») is also replaced elsewhere in the conversation (« Dubois »). A name memory of HMAC fingerprints recognises it later, typos included, without storing any name in clear text. Terms that are never anonymised come from a built-in list (products, technical acronyms) and from `[privacy] allow`. Numbering is stable for a given request, so the providers' prompt cache stays effective.
 
-**Dashboard (`/dashboard`).** Cinq onglets : Utilisateurs & règles (clients, clés, profils, ordre des LLM), LLM cibles (connexion, clés, test `/models`), Filtrage & privacy (détecteurs et matrice type × profil, test d'anonymisation), Quotas (limites et jauges en direct), Reporting. Les modifications sont validées puis écrites dans `config.toml` (10 dernières versions gardées en `.bak-*`) et appliquées à chaud. Les clés ne sont jamais renvoyées au navigateur.
+**Images and files.** Each profile sets:
+- `images`: `pass` (unchanged), `blank` (replaced by a white square before reaching the LLM) or `block` (refused and logged);
+- `files`, per extension: `pass_log` (sent unchanged and logged), `blank` (white square), `block` (refused and logged) or `block_alert` (refused, email alert and log);
+- `files_default`: the action for extensions that are not listed.
 
-**Chat (`/chat`).** Fenêtre de chat pour les utilisateurs : connexion avec la clé gateway, choix du modèle autorisé, pièces jointes (txt, md, csv, json, PDF, docx : texte extrait dans le navigateur, puis anonymisé par le gateway ; images selon le profil). Sous chaque échange, le nombre de données pseudonymisées et le LLM qui a répondu. L'extraction PDF/docx charge pdf.js et mammoth depuis cdnjs.
+The file log records the date, user, profile, LLM, file name, extension, size, SHA-256 and action. It is kept 30 days, even without Debug mode, and never stores the content.
 
-**Prompt de comportement et alertes.** Chaque profil peut porter un `system_prompt`, ajouté en tête de toutes ses requêtes (après l'anonymisation, donc non modifié), et des `alert_emails`. Section `[alerts]` : serveur SMTP (587 STARTTLS ou 465 TLS), destinataires par défaut, déclencheurs (violation, quota, erreur LLM) et fréquence du récapitulatif. Les emails ne contiennent aucune valeur sensible. Bouton « Envoyer un test » dans le dashboard.
+**Restoration.** Tokens are replaced in the answer, including in SSE streaming: a token split between two chunks is held until it is complete. Signed `thinking` blocks are left untouched.
 
-**Mode DEBUG (onglet Debug).** Désactivé par défaut. Une fois activé, chaque échange est archivé : la requête telle que reçue par le LLM (anonymisée), la réponse brute du LLM avant restauration, les correspondances jeton → valeur d'origine et chaque mot détecté avec l'action appliquée. La vue détaillée bascule entre « vue anonymisée » (jetons en gras) et « vue d'origine » (valeurs en gras, en bleu si anonymisées, en rouge si bloquées, en orange si journalisées). Les valeurs sont stockées **en clair** : purge automatique après `retention_hours` (24 h par défaut), bandeau « DEBUG actif » dans le dashboard, bouton pour vider l'archive.
+**Metrics.** Each request records the user, target, model, status, bytes, tokens and timings, along with detection counters per type. The timings are IN (reading the client), GATEWAY (processing), LLM (target) and first byte. **No sensitive value is stored.**
 
-**Configuration.** `config.toml` est rechargé à chaud : une configuration invalide est refusée et l'ancienne reste active.
+After `raw_retention_days` (30 days), the detail is aggregated per day × user × target. The model and the percentiles are then lost, and the aggregates are kept for about 6 months (`agg_retention_days = 200`). The dashboard offers 48 h, 60 days, 6 weeks and 6 months (maximum depth).
 
-## Limites actuelles
+**Quotas.** Quotas can be set per profile (for each user), overridden per user, and per target LLM (shared budget): requests per minute, requests per day, tokens per day and tokens per month. When a quota is exceeded, the request is blocked (429) or only logged (alert). A saturated target is skipped in favour of the profile's next one.
 
-- Noms et entreprises : détectés s'ils figurent dans une liste ou suivent un titre (M., Mme, Dr…). Sans liste, il faudrait un modèle NER (Presidio, spaCy…) branché en service.
-- Logos dans les images : pas d'analyse d'image. On choisit par profil de laisser passer, retirer ou bloquer.
-- Le LLM doit recopier les jetons `«…»`. La consigne `placeholder_hint` le lui demande. Un jeton reformulé par le modèle (traduit, sans guillemets) n'est pas restauré.
-- Pas de traduction entre formats : un client OpenAI n'est routé que vers des cibles `api = "openai"`, et un client Anthropic que vers des cibles `api = "anthropic"`.
+**Dashboard (`/dashboard`).** The pages are grouped as follows:
+- **Monitoring**: Overview, Reporting.
+- **Access**: Users, Profiles.
+- **Models**: Target LLMs (with a connection light), Quotas.
+- **Data**: Filtering and privacy (detectors, rules per profile, files per extension, exceptions, test bench), File log, Debug.
+- **Settings**: Alerts and SSO, Administration accounts, Audit log.
 
-## Fichiers
+Changes are validated, then written to `config.toml` and applied without a restart. The last 10 versions are kept as `.bak-*`, and a save is refused if the file changed in the meantime. Provider keys are never sent to the browser. A Documentation button and the version appear at the bottom of the menu.
 
-| Fichier | Rôle |
+**Chat (`/chat`).** A chat window for users:
+- sign-in with SSO or a gateway key, and choice of an allowed model;
+- attachments: txt, md, csv, json, PDF, docx and images. The text is extracted in the browser, then anonymised by the gateway; images follow the profile;
+- history of the last 10 conversations, kept in the browser;
+- under each exchange, the number of pseudonymised values and the LLM that answered;
+- a « ? Help » button that opens the user guide.
+
+PDF and docx extraction loads pdf.js and mammoth from cdnjs.
+
+**Behaviour prompt and alerts.** Each profile can carry:
+- a `system_prompt`, added at the top of all its requests after anonymisation, so it is never modified;
+- `alert_emails`.
+
+The `[alerts]` section sets the SMTP server (587 STARTTLS or 465 TLS), the default recipients, the triggers (violation, quota, LLM error) and the summary frequency. Files set to `block_alert` are always reported. Emails contain no sensitive value.
+
+**Administration accounts and audit.** Admin and Support roles are enforced on the server side. The audit log records sign-ins, configuration saves (with the list of changes, without secrets), Debug views and purges, and alert tests. It is kept 400 days.
+
+**DEBUG mode (Debug page).** Off by default. When enabled, every exchange is archived:
+- the request as received by the LLM (anonymised);
+- the raw LLM answer, before restoration;
+- the token → original value mapping;
+- every detected word, with the action applied.
+
+The detail view switches between the anonymised view and the original view, with values highlighted by action. Values are stored **in clear text**, so the archive is protected in three ways: automatic purge after `retention_hours` (24 h by default), a « DEBUG on » banner in the dashboard, and a button to empty the archive.
+
+**Interface languages.** The dashboard and the chat are available in English (default), French and Dutch, through a selector in each interface. Data (names, descriptions, prompts, answers) is never translated.
+
+**Configuration.** `config.toml` is reloaded without a restart. An invalid configuration is refused and the previous one stays active.
+
+## Current limitations
+
+- Names and companies are detected when they appear in a list, follow a title (Mr, Mrs, Dr…) or a known first name, or were seen before. A name with none of these clues, the first time, would need an NER model (Presidio, spaCy…) plugged in as a service.
+- There is no image analysis (logos, text in images). The profile chooses to let images through, replace them with a white square or block them.
+- The LLM must copy the `«…»` tokens back. The `placeholder_hint` instruction asks it to. A token the model rewrites (translated, without quotes) is not restored.
+- A model without image support may reject a request that contains the white square.
+- There is no translation between formats: an OpenAI client is only routed to `api = "openai"` targets, and an Anthropic client only to `api = "anthropic"` targets.
+
+## Files
+
+| File | Role |
 |---|---|
-| `main.go` | serveur, rechargement à chaud |
-| `admin.go` | API d'admin : configuration, quotas, test des cibles |
-| `quota.go` | compteurs de consommation et quotas |
-| `chat.html` | fenêtre de chat (embarquée) |
-| `proxy.go` | authentification, routage, repli, relais normal et SSE |
-| `anon.go` | détecteurs, anonymisation, restauration |
-| `store.go` | SQLite, agrégation, statistiques |
-| `config.go` | chargement et validation de la configuration |
-| `auth.go` | SSO OpenID Connect (Entra ID, Google, OIDC), sessions |
-| `dashboard.html` | dashboard (embarqué dans le binaire) |
-| `gateway_test.go` | tests de bout en bout avec faux LLM : `go test ./...` |
-| `deploy/deploy.sh` | compilation, copie et redémarrage sur un VPS (`--help`) |
-| `deploy/remote-install.sh` | partie serveur de `deploy.sh` : validation, installation, retour arrière |
-| `deploy/llmgw.service` | service systemd durci |
-| `deploy/Caddyfile` | HTTPS, streaming SSE et accès admin restreint |
+| `main.go` | server, routes, hot reload, version |
+| `proxy.go` | authentication, routing, fallback, plain and SSE relay |
+| `anon.go` | detectors, anonymisation, restoration, images and files |
+| `names.go`, `context.go`, `places.go` | name, context and place heuristics |
+| `config.go` | configuration loading and validation |
+| `auth.go` | OpenID Connect SSO (Entra ID, Google, OIDC), sessions |
+| `audit.go` | administration accounts, roles, audit log |
+| `admin.go` | admin API: configuration, usage, target tests |
+| `filelog.go` | file log (30 days) |
+| `debug.go` | DEBUG archive |
+| `quota.go` | usage counters and quotas |
+| `alerts.go` | email alerts |
+| `store.go` | SQLite, aggregation, statistics |
+| `dashboard.html`, `chat.html`, `i18n.js` | dashboard, chat and EN/FR/NL translations (embedded) |
+| `docs/` | built-in documentation (French): administration, chat user guide, screenshots |
+| `RELEASE_NOTES.md` | release notes (French) |
+| `gateway_test.go` | end-to-end tests with fake LLMs: `go test ./...` |
+| `deploy/deploy.sh` | build, copy and restart on a VPS (`--help`) |
+| `deploy/remote-install.sh` | server side of `deploy.sh`: validation, installation, rollback |
+| `deploy/llmgw.service` | hardened systemd unit |
+| `deploy/Caddyfile` | HTTPS, SSE streaming and restricted admin access |
