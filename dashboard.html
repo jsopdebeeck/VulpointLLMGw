@@ -79,6 +79,10 @@ body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 -ap
 .phead .psum { color: var(--text2); font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
 .pcard .fields { padding: 16px 18px 18px 44px; border-top: 1px solid var(--grid); }
 @media (prefers-reduced-motion: reduce) { .phead .chev { transition: none; } }
+.ldot { width: 11px; height: 11px; border-radius: 50%; flex: none; background: var(--muted); box-shadow: 0 0 0 3px color-mix(in srgb, var(--muted) 18%, transparent); }
+.ldot.ok { background: var(--good); box-shadow: 0 0 0 3px color-mix(in srgb, var(--good) 22%, transparent); }
+.ldot.ko { background: var(--critical); box-shadow: 0 0 0 3px color-mix(in srgb, var(--critical) 22%, transparent); }
+.ldot.run { background: var(--warning); }
 .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface); }
 .seg button { border: 0; background: none; color: var(--text2); padding: 6px 12px; font: inherit; cursor: pointer; }
 .seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
@@ -211,6 +215,8 @@ tr.click { cursor: pointer; } tr.click:hover td { background: var(--grid); } tr.
       <button data-tab="debug"><span class="ic">⌕</span>Debug</button>
       <div class="grp">Paramètres</div>
       <button data-tab="settings"><span class="ic">⚙</span>Alertes et SSO</button>
+      <button data-tab="accounts"><span class="ic">⚿</span>Comptes d'administration</button>
+      <button data-tab="audit"><span class="ic">≡</span>Journal d'audit</button>
     </nav>
     <div class="side-foot">
       <div id="who"></div>
@@ -236,7 +242,7 @@ const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "
 const store = { get(k) { try { return localStorage.getItem(k) } catch { return null } }, set(k, v) { try { localStorage.setItem(k, v) } catch {} } };
 let token = store.get("gwtok") || "", range = store.get("gwrange") || "48h", data = null;
 if (!["48h", "60d", "6w", "6m"].includes(range)) range = "6m"; // former 12-month / 3-year views
-const S = { cfg: null, orig: "", meta: null, usage: null, tab: store.get("gwtab") || "overview", privTab: store.get("gwpriv") || "detectors", profOpen: new Set((() => { try { return JSON.parse(store.get("gwprofopen") || "[]"); } catch { return []; } })()), newKeys: {}, tests: {}, testOut: "" };
+const S = { cfg: null, orig: "", meta: null, usage: null, tab: store.get("gwtab") || "overview", privTab: store.get("gwpriv") || "detectors", tgtOpen: new Set((() => { try { return JSON.parse(store.get("gwtgtopen") || "[]"); } catch { return []; } })()), profOpen: new Set((() => { try { return JSON.parse(store.get("gwprofopen") || "[]"); } catch { return []; } })()), newKeys: {}, tests: {}, testOut: "" };
 
 const nf = new Intl.NumberFormat("fr-BE");
 const fmt = n => { n = +n || 0; const a = Math.abs(n); return a >= 1e9 ? (n / 1e9).toFixed(1) + " G" : a >= 1e6 ? (n / 1e6).toFixed(1) + " M" : a >= 1e4 ? (n / 1e3).toFixed(1) + " k" : nf.format(Math.round(n)); };
@@ -264,7 +270,7 @@ async function showWho() {
   try {
     const r = await fetch("/auth/session"); if (!r.ok) return;
     const s = await r.json();
-    $("#who").innerHTML = `${esc(s.email)} · <a href="#" id="ssoout" style="color:inherit">déconnexion</a>`;
+    $("#who").innerHTML = `${esc(s.email)}${S.me?.role ? ` · <b>${S.me.role === "admin" ? "Admin" : "Support"}</b>` : ""}<br><a href="#" id="ssoout" style="color:inherit">déconnexion</a>`;
     $("#ssoout").onclick = async e => { e.preventDefault(); await fetch("/auth/logout", { method: "POST", headers: { "X-LLMGW-Session": "1" } }); location.reload(); };
   } catch {}
 }
@@ -406,6 +412,7 @@ const sortedNames = o => Object.keys(o || {}).sort((a, b) => a.localeCompare(b))
 function normalize(c) {
   c.Targets ||= {}; c.Profiles ||= {}; c.Users ||= {}; c.Detectors ||= []; c.Privacy ||= {}; c.Privacy.Allow ||= []; c.Debug ||= { Enabled: false, RetentionHours: 24 };
   c.Alerts ||= { Enabled: false, OnViolation: true, OnQuota: true, OnError: true, IntervalMinutes: 15 };
+  c.Admins ||= [];
   for (const p of Object.values(c.Profiles)) { p.Targets ||= []; p.Actions ||= {}; }
   for (const t of Object.values(c.Targets)) { t.Models ||= []; }
 }
@@ -497,15 +504,28 @@ const ACTIONS = {
   "tgt-add"() {
     const n = askName("Nom de la cible (ex. mistral, ollama, azure-gpt)", S.cfg.Targets); if (!n) return;
     S.cfg.Targets[n] = { API: "openai", BaseURL: "https://", Models: ["*"], StreamUsage: true };
+    S.tgtOpen.add(n); store.set("gwtgtopen", JSON.stringify([...S.tgtOpen]));
   },
   "tgt-del"(d) { if (usedBy.target(d.n).length) return toast("Cible utilisée par les profils : " + usedBy.target(d.n).join(", "), true); if (confirm(`Supprimer la cible ${d.n} ?`)) delete S.cfg.Targets[d.n]; },
   async "tgt-test"(d) {
     S.tests[d.n] = { running: true }; render();
     try { S.tests[d.n] = await api("/admin/api/target-test", { method: "POST", body: JSON.stringify({ Name: d.n }) }); } catch (e) { S.tests[d.n] = { error: e.message }; }
+    S.tests[d.n].at = Date.now();
   },
+  "tgt-toggle"(d) { S.tgtOpen.has(d.n) ? S.tgtOpen.delete(d.n) : S.tgtOpen.add(d.n); store.set("gwtgtopen", JSON.stringify([...S.tgtOpen])); },
+  "tgt-all"(d) { S.tgtOpen = new Set(d.v === "1" ? Object.keys(S.cfg.Targets) : []); store.set("gwtgtopen", JSON.stringify([...S.tgtOpen])); },
+  async "tgt-testall"() { await testTargets(true); },
   "tgt-model"(d) { const t = S.cfg.Targets[d.n]; t.Models = (t.Models || []).filter(m => m !== "*"); if (!t.Models.includes(d.m)) t.Models.push(d.m); },
   async "learn-forget"() { if (!confirm("Effacer toute la mémoire des noms ?")) return; S.learned = (await api("/admin/api/learned", { method: "DELETE" })).count; toast("Mémoire des noms effacée"); },
   async "alert-test"() { if (isDirty()) return toast("Enregistrez d'abord la configuration", true); try { const r = await api("/admin/api/alert-test", { method: "POST" }); toast("Email de test envoyé à : " + r.sent.join(", ")); } catch (e) { if (e.message !== "401") toast("Échec : " + e.message, true); } },
+  "acc-add"() {
+    const e = (prompt("Adresse email du compte (celle de sa connexion SSO)") || "").trim().toLowerCase(); if (!e) return;
+    if (!e.includes("@")) return toast("Adresse email invalide", true);
+    if (S.cfg.Admins.some(a => a.Email === e)) return toast("Ce compte existe déjà", true);
+    S.cfg.Admins.push({ Email: e, Role: "support" });
+  },
+  "acc-del"(d) { const a = S.cfg.Admins[+d.i]; if (confirm(`Supprimer le compte ${a.Email} ?`)) S.cfg.Admins.splice(+d.i, 1); },
+  async "audit-refresh"() { await loadAudit(); },
   "priv-tab"(d) { S.privTab = d.k; store.set("gwpriv", d.k); },
   "det-add"() { S.cfg.Detectors.push({ Name: "NOUVEAU", Description: "", Regex: "\\bXXX-\\d+\\b" }); },
   "det-up"(d) { const a = S.cfg.Detectors, i = +d.i; if (i > 0) [a[i - 1], a[i]] = [a[i], a[i - 1]]; },
@@ -658,9 +678,21 @@ function viewTargets() {
     if (tr?.running) test = `<span class="sub">test en cours…</span>`;
     else if (tr) test = tr.error ? `<div class="err" style="font-size:12px;white-space:normal">✕ ${esc(tr.status ? "HTTP " + tr.status + " : " : "")}${esc(tr.error)}</div>`
       : `<div style="font-size:12px"><span class="badge ok">HTTP ${tr.status} · ${tr.ms} ms</span> ${tr.models?.length ? `${tr.models.length} modèles (cliquer pour autoriser) :<div style="max-height:110px;overflow:auto;margin-top:4px">${tr.models.map(m => `<span class="chip" data-act="tgt-model" data-n="${esc(n)}" data-m="${esc(m)}">${esc(m)}</span>`).join("")}</div>` : ""}</div>`;
-    return `<div class="card"><div class="chead"><h3>${esc(n)}</h3>${t.Disabled ? '<span class="badge warn">désactivée</span>' : ""}<span class="spacer"></span>
-      <button class="btn" data-act="tgt-test" data-n="${esc(n)}" ${saved ? "" : 'disabled title="Enregistrer d\'abord"'}>Tester</button><button class="icon" data-act="tgt-del" data-n="${esc(n)}" title="Supprimer">✕</button></div>
-      <div class="fields">
+    const open = S.tgtOpen.has(n), used = profs.length > 0;
+    const st = !saved ? ["", "à enregistrer"] : t.Disabled ? ["", "désactivée"] : tr?.running ? ["run", "test en cours…"] : !tr ? ["", "non testée"]
+      : tr.error ? ["ko", "injoignable" + (tr.status ? " (HTTP " + tr.status + ")" : "")] : ["ok", `connectée · ${tr.ms} ms`];
+    const sum = [t.API === "anthropic" ? "Anthropic" : "OpenAI", t.BaseURL, profs.length ? "profils : " + profs.join(", ") : "aucun profil"].filter(Boolean).join(" · ");
+    return `<div class="card pcard ${open ? "open" : ""}">
+      <div class="phead" data-act="tgt-toggle" data-n="${esc(n)}" role="button" tabindex="0" aria-expanded="${open}" title="${open ? "Replier" : "Afficher les paramètres"}">
+        <span class="chev" aria-hidden="true">▸</span>
+        <span class="ldot ${st[0]}" title="${esc(st[1])}" role="img" aria-label="${esc(st[1])}"></span>
+        <h3 class="pname ${used ? "on" : "off"}">${esc(n)}</h3>
+        <span class="badge" style="${st[0] === "ko" ? "color:var(--critical)" : st[0] === "ok" ? "" : "color:var(--muted)"}">${esc(st[1])}</span>
+        <span class="psum">${esc(sum)}</span>
+        <button class="btn" data-act="tgt-test" data-n="${esc(n)}" ${saved && !t.Disabled ? "" : 'disabled title="Enregistrer d\'abord"'}>Tester</button>
+        <button class="icon" data-act="tgt-del" data-n="${esc(n)}" title="Supprimer la cible">✕</button>
+      </div>
+      ${open ? `<div class="fields">
         <label>Description</label><input class="w100" data-bind="${b}Description" value="${esc(t.Description)}">
         <label>Format d'API</label><select data-bind="${b}API" data-rerender>${opts({ openai: "OpenAI (compatible)", anthropic: "Anthropic" }, t.API)}</select>
         <label>URL de base</label><input class="w100 mono" data-bind="${b}BaseURL" value="${esc(t.BaseURL)}" placeholder="${t.API === "anthropic" ? "https://api.anthropic.com" : "https://…/v1"}">
@@ -673,10 +705,24 @@ function viewTargets() {
         <label>Options</label><div><label><input type="checkbox" data-bind="${b}StreamUsage" ${t.StreamUsage ? "checked" : ""}> tokens en streaming</label> &nbsp; <label title="Pour les LLM qui ne gèrent que le mode JSON simple (DeepSeek…)"><input type="checkbox" data-bind="${b}DowngradeJSONSchema" ${t.DowngradeJSONSchema ? "checked" : ""}> json_schema → json_object</label> &nbsp; <label><input type="checkbox" data-bind="${b}Disabled" ${t.Disabled ? "checked" : ""} data-rerender> désactivée</label></div>
         <label>Utilisée par</label><div>${profs.map(esc).join(", ") || '<span class="sub">aucun profil</span>'}</div>
         <label>Connexion</label><div>${test || '<span class="sub">« Tester » interroge /models avec la clé enregistrée</span>'}</div>
-      </div></div>`;
+      </div>` : ""}</div>`;
   }).join("");
   return `<section><div class="chead"><div><h2 style="font-size:15px;margin:0">Gateways de sortie : LLM cibles</h2><div class="sub">OpenAI, Mistral, Azure, Ollama, vLLM, LM Studio… au format OpenAI ; Claude au format Anthropic. Un client OpenAI n'est routé que vers des cibles OpenAI, et inversement.</div></div><span class="spacer"></span><button class="btn primary" data-act="tgt-add">+ Cible</button></div>
-    <div class="grid3">${cards || '<p class="sub">Aucune cible</p>'}</div></section>`;
+    <div style="display:flex;gap:8px;margin:-4px 0 10px;flex-wrap:wrap;align-items:center"><button class="btn" data-act="tgt-all" data-v="1">Tout déplier</button><button class="btn" data-act="tgt-all" data-v="0">Tout replier</button><button class="btn" data-act="tgt-testall">Tout retester</button>
+      <span class="sub" style="margin:0 0 0 8px"><span class="ldot ok" style="display:inline-block;vertical-align:-1px"></span> connectée · <span class="ldot ko" style="display:inline-block;vertical-align:-1px"></span> injoignable ou clé refusée · <span class="ldot" style="display:inline-block;vertical-align:-1px"></span> désactivée ou non testée · nom <b style="color:var(--good)">vert</b> : utilisée par un profil</span></div>
+    <div class="plist">${cards || '<p class="sub">Aucune cible</p>'}</div></section>`;
+}
+// test every saved, enabled target (at most once a minute unless forced)
+async function testTargets(force) {
+  const names = Object.keys(S.meta.config.Targets || {}).filter(n => !S.meta.config.Targets[n].Disabled && (force || !S.tests[n] || Date.now() - (S.tests[n].at || 0) > 60000));
+  if (!names.length) return;
+  for (const n of names) S.tests[n] = { running: true };
+  render();
+  await Promise.all(names.map(async n => {
+    try { S.tests[n] = await api("/admin/api/target-test", { method: "POST", body: JSON.stringify({ Name: n }) }); } catch (e) { S.tests[n] = { error: e.message }; }
+    S.tests[n].at = Date.now();
+    if (S.tab === "targets") render();
+  }));
 }
 
 // ---------- tab: privacy ----------
@@ -963,7 +1009,7 @@ function viewOverview() {
   // alerts
   add(saved.Alerts?.Enabled ? "" : "i", saved.Alerts?.Enabled ? "Alertes email actives" : "Alertes email inactives",
     saved.Alerts?.Enabled ? "Récapitulatif toutes les " + (saved.Alerts.IntervalMinutes || 15) + " min." : "Les violations et les pannes ne sont pas signalées par email.", "settings", "Paramètres");
-  const status = items.sort((a, b) => ({ c: 0, w: 1, i: 2, "": 3 }[a.lvl] - { c: 0, w: 1, i: 2, "": 3 }[b.lvl])).map(x => `<div class="it"><span class="dot ${x.lvl}"></span><div><div class="t">${x.t}</div><div class="d">${x.desc}</div></div><button class="btn go" onclick="go('${x.tab}')">${x.label}</button></div>`).join("");
+  const status = items.sort((a, b) => ({ c: 0, w: 1, i: 2, "": 3 }[a.lvl] - { c: 0, w: 1, i: 2, "": 3 }[b.lvl])).map(x => `<div class="it"><span class="dot ${x.lvl}"></span><div><div class="t">${x.t}</div><div class="d">${x.desc}</div></div>${allowed(x.tab) ? `<button class="btn go" onclick="go('${x.tab}')">${x.label}</button>` : ""}</div>`).join("");
   const rec = (d?.recent || []).slice(0, 8).map(r => `<tr><td>${new Date(r.TS * 1000).toLocaleTimeString("fr-BE", { hour: "2-digit", minute: "2-digit" })}</td><td>${esc(r.User)}</td><td>${esc(r.Target)}<span class="sub"> / ${esc(r.Model)}</span></td>
       <td class="n">${r.Blocked ? `<span class="badge bad">${r.Status}</span>` : r.Status >= 400 || !r.Status ? `<span class="badge warn">${r.Status}</span>` : r.Status}</td><td class="n">${r.Anon || ""}</td></tr>`).join("");
   const top = sumRows(d?.user || []).slice(0, 5).map(r => `<tr><td>${esc(r.G)}</td><td class="n">${fmt(r.N)}</td><td class="n">${fmt(r.TI + r.TO)}</td><td class="n">${fmt(r.An)}</td><td class="n">${r.Bl ? `<span class="badge bad">${r.Bl}</span>` : "0"}</td></tr>`).join("");
@@ -986,7 +1032,49 @@ function viewOverview() {
     </section>`;
 }
 
-const VIEWS = { overview: viewOverview, users: viewUsers, profiles: viewProfiles, targets: viewTargets, privacy: viewPrivacy, quotas: viewQuotas, report: viewReport, debug: viewDebug, settings: viewSettings };
+// ---------- tab: administration accounts ----------
+async function loadAudit() { try { S.audit = await api("/admin/api/audit?limit=1000"); } catch (e) { if (e.message !== "401") toast(e.message, true); } }
+function viewAccounts() {
+  const A = S.cfg.Admins, aud = S.audit || [], P = S.meta.config.Auth?.Providers || [];
+  const last = email => { const x = aud.find(e => e.Action === "connexion" && e.Actor.toLowerCase() === (email || "").toLowerCase()); return x ? new Date(x.TS * 1000).toLocaleString("fr-BE", { dateStyle: "short", timeStyle: "short" }) : "—"; };
+  const rows = A.map((a, i) => { const b = `Admins|${i}|`;
+    return `<tr><td><input class="mono" style="min-width:220px" data-bind="${b}Email" value="${esc(a.Email)}" placeholder="prenom.nom@exemple.be"></td>
+      <td><input data-bind="${b}Name" value="${esc(a.Name)}" placeholder="nom affiché"></td>
+      <td><select data-bind="${b}Role" data-rerender>${opts({ admin: "Admin (tout)", support: "Support" }, a.Role)}</select></td>
+      <td>${a.Role === "admin" ? '<span class="sub">inclus</span>' : `<label><input type="checkbox" data-bind="${b}Debug" ${a.Debug ? "checked" : ""}> autorisé</label>`}</td>
+      <td><label><input type="checkbox" data-bind="${b}Disabled" ${a.Disabled ? "checked" : ""}> désactivé</label></td>
+      <td>${last(a.Email)}</td>
+      <td><button class="icon" data-act="acc-del" data-i="${i}" title="Supprimer">✕</button></td></tr>`; }).join("");
+  const ruleList = (label, xs) => xs.length ? `<div><b>${label}</b> : ${xs.map(esc).join(", ")}</div>` : "";
+  const prov = P.map(p => { const r = ruleList("Admin", [...(p.AdminEmails || []), ...(p.AdminRoles || []).map(x => "rôle " + x), ...(p.AdminGroups || []).map(x => "groupe " + x)]) + ruleList("Support", [...(p.SupportEmails || []), ...(p.SupportRoles || []).map(x => "rôle " + x), ...(p.SupportGroups || []).map(x => "groupe " + x)]);
+    return r ? `<div style="margin:6px 0"><span class="badge">${esc(p.Label || p.ID)}</span> ${r}</div>` : ""; }).join("");
+  return `<section class="card"><div class="chead"><div><h2>Comptes</h2><div class="sub">Connexion par SSO : l'adresse email identifie le compte. Un compte listé ici prime sur les règles SSO ; le désactiver coupe l'accès immédiatement.</div></div><button class="btn primary" data-act="acc-add">+ Compte</button></div>
+      <div class="tw"><table><thead><tr><th>Email</th><th>Nom</th><th>Rôle</th><th>Accès Debug</th><th>État</th><th>Dernière connexion</th><th></th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="7" class="sub">Aucun compte. Ajoutez au moins un Admin avant de retirer le jeton d\'administration.</td></tr>'}</tbody></table></div></section>
+    <section class="grid2">
+      <div class="card"><h2>Droits par rôle</h2><div class="tw" style="margin-top:8px"><table><thead><tr><th>Écran</th><th>Admin</th><th>Support</th></tr></thead><tbody>
+        <tr><td>Vue d'ensemble, Reporting</td><td>✓</td><td>✓ consultation</td></tr>
+        <tr><td>Utilisateurs</td><td>✓</td><td>✓ créer, bloquer, clés, profil</td></tr>
+        <tr><td>Profils, Quotas</td><td>✓</td><td>consultation</td></tr>
+        <tr><td>Debug (données en clair)</td><td>✓</td><td>si autorisé, chaque consultation journalisée</td></tr>
+        <tr><td>LLM cibles, Filtrage, Alertes et SSO, Comptes, Audit</td><td>✓</td><td>✗</td></tr></tbody></table></div></div>
+      <div class="card"><h2>Autres accès</h2>
+        <p class="sub" style="margin-top:6px">Règles des fournisseurs SSO (section [auth]), utilisées pour les adresses absentes de la liste :</p>${prov || '<p class="sub">Aucune.</p>'}
+        <p class="sub">Jeton d'administration (<code>admin_token</code>) : accès de secours avec le rôle Admin. ${S.meta.config.Server?.AdminToken === KEEP ? "Défini." : "<b>Non défini.</b>"}</p></div>
+    </section>`;
+}
+// ---------- tab: audit log ----------
+function viewAudit() {
+  const q = (S.auditFilter || "").toLowerCase(), A = (S.audit || []).filter(e => !q || [e.Actor, e.Action, e.Target, e.Detail].join(" ").toLowerCase().includes(q));
+  return `<section class="card"><div class="chead"><div><h2>Événements</h2><div class="sub">${(S.audit || []).length} événement(s) récents, conservés 400 jours. Aucune valeur sensible n'y figure.</div></div>
+      <input id="auditfilter" placeholder="filtrer…" value="${esc(S.auditFilter || "")}" style="width:200px"><button class="btn" data-act="audit-refresh">Rafraîchir</button></div>
+    <div class="tw"><table><thead><tr><th>Date</th><th>Acteur</th><th>Rôle</th><th>Action</th><th>Cible</th><th>Détail</th></tr></thead><tbody>${A.slice(0, 1000).map(e =>
+      `<tr><td>${new Date(e.TS * 1000).toLocaleString("fr-BE", { dateStyle: "short", timeStyle: "medium" })}</td><td>${esc(e.Actor)}</td><td>${e.Role ? `<span class="badge">${e.Role === "admin" ? "Admin" : e.Role === "support" ? "Support" : esc(e.Role)}</span>` : ""}</td>
+       <td><b>${esc(e.Action)}</b></td><td>${esc(e.Target)}</td><td class="wrap" style="min-width:280px">${esc(e.Detail).replace(/ ; /g, "<br>")}</td></tr>`).join("") || '<tr><td colspan="6" class="sub">Aucun événement</td></tr>'}</tbody></table></div></section>`;
+}
+document.addEventListener("input", e => { if (e.target.id === "auditfilter") { S.auditFilter = e.target.value; const p = e.target.selectionStart; render(); const f = $("#auditfilter"); f.focus(); f.setSelectionRange(p, p); } });
+
+const VIEWS = { overview: viewOverview, users: viewUsers, profiles: viewProfiles, targets: viewTargets, privacy: viewPrivacy, quotas: viewQuotas, report: viewReport, debug: viewDebug, settings: viewSettings, accounts: viewAccounts, audit: viewAudit };
 const PAGES = {
   overview: ["Vue d'ensemble", "État de la passerelle et points d'attention sur les dernières 48 heures."],
   report: ["Reporting", "Volumes, temps de réponse, conversions et violations, par utilisateur et par LLM."],
@@ -997,23 +1085,48 @@ const PAGES = {
   privacy: ["Filtrage et privacy", "Ce qui est détecté, ce qui en est fait selon le profil, et un banc de test."],
   debug: ["Debug", "Archive temporaire des échanges complets, pour le dépannage."],
   settings: ["Alertes et SSO", "Alertes par email et connexion avec Microsoft Entra ID ou Google."],
+  accounts: ["Comptes d'administration", "Qui peut ouvrir ce dashboard, et avec quels droits : Admin (tout) ou Support (utilisateurs, statistiques, Debug sur autorisation)."],
+  audit: ["Journal d'audit", "Qui a fait quoi, et quand : connexions, modifications, consultations de l'archive Debug."],
 };
+// rights in the interface (the server enforces the same rules)
+function allowed(tab) {
+  const r = S.me?.role || "admin";
+  if (r === "admin") return true;
+  return ["overview", "report", "users", "profiles", "quotas"].includes(tab) || (tab === "debug" && S.me?.debug);
+}
+function applyRole() {
+  document.querySelectorAll("#tabs button").forEach(b => b.hidden = !allowed(b.dataset.tab));
+  document.querySelectorAll("#tabs .grp").forEach(g => {
+    let n = g.nextElementSibling, any = false;
+    while (n && !n.classList.contains("grp")) { any = any || !n.hidden; n = n.nextElementSibling; }
+    g.hidden = !any;
+  });
+  if (S.me?.role !== "support" || !["profiles", "quotas"].includes(S.tab)) return;
+  const v = $("#view");
+  v.querySelectorAll("input, select, textarea").forEach(e => e.disabled = true);
+  v.querySelectorAll("[data-act]").forEach(e => { if (!["prof-toggle", "prof-all"].includes(e.dataset.act)) e.hidden = true; });
+  v.insertAdjacentHTML("afterbegin", `<p class="help">Lecture seule : votre rôle Support permet de consulter cette page, pas de la modifier.</p>`);
+}
 function render() {
   if (!S.cfg) return;
   const y = scrollY, a = document.activeElement?.id;
-  if (!VIEWS[S.tab]) S.tab = "overview";
+  if (!VIEWS[S.tab] || !allowed(S.tab)) S.tab = "overview";
   document.querySelectorAll("#tabs button").forEach(b => b.dataset.tab === S.tab ? b.setAttribute("aria-current", "page") : b.removeAttribute("aria-current"));
   const [t, d] = PAGES[S.tab]; $("#ptitle").textContent = t; $("#pdesc").textContent = d; document.title = t + " · LLMGW";
   $("#cnt-users").textContent = Object.keys(S.cfg.Users).length || "";
   $("#cnt-profiles").textContent = Object.keys(S.cfg.Profiles).length || "";
   $("#cnt-targets").textContent = Object.keys(S.cfg.Targets).length || "";
   $("#view").innerHTML = VIEWS[S.tab]();
+  applyRole();
   if (S.tab === "report") drawReport();
   scrollTo(0, y); if (a && $("#" + a)) $("#" + a).focus();
 }
 async function go(tab) {
   S.tab = tab; store.set("gwtab", tab); render(); scrollTo(0, 0);
+  if (!allowed(tab)) tab = S.tab = "overview";
   if (tab === "report") await loadStats();
+  if (tab === "audit" || tab === "accounts") { await loadAudit(); render(); }
+  if (tab === "targets") testTargets(false);
   if (tab === "overview") { await Promise.all([loadOverview(), loadUsage()]); render(); }
   if (tab === "debug") { await loadDebug(); render(); }
   if (tab === "privacy") { try { S.learned = (await api("/admin/api/learned")).count; render(); } catch {} }
@@ -1031,6 +1144,7 @@ setInterval(async () => {
 async function boot() {
   try {
     await loadConfig();
+    S.me = await api("/admin/api/me");
     $("#login").hidden = true; $("#app").hidden = false;
     await loadUsage(); await go(S.tab); stamp(); showWho();
   } catch (e) { if (e.message !== "401") toast("Erreur : " + e.message, true); }

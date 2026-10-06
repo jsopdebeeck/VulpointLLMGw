@@ -906,3 +906,79 @@ func TestSSO(t *testing.T) {
 		t.Errorf("state falsifié : %d, 400 attendu", r.StatusCode)
 	}
 }
+
+func TestRolesAndAudit(t *testing.T) {
+	_, _, _, g := setup(t)
+	cfg := g.C()
+	cfg.Server.AdminToken = "tok"
+	cfg.Admins = []*AdminAccount{{Email: "boss@x.be", Role: "admin"}, {Email: "help@x.be", Role: "support"},
+		{Email: "help2@x.be", Role: "support", Debug: true}, {Email: "gone@x.be", Role: "admin", Disabled: true}}
+	g.sessKey = []byte("0123456789abcdef0123456789abcdef")
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /admin/api/config", g.staff(g.handleGetConfig))
+	mux.HandleFunc("PUT /admin/api/config", g.staff(g.handlePutConfig))
+	mux.HandleFunc("GET /admin/api/debug", g.guard(roleDebug, g.handleDebugList))
+	mux.HandleFunc("GET /admin/api/audit", g.admin(g.handleAudit))
+	mux.HandleFunc("POST /admin/api/test", g.admin(g.handleTest))
+	gw := httptest.NewServer(mux)
+	defer gw.Close()
+	call := func(email, method, path, body string) (int, string) {
+		req, _ := http.NewRequest(method, gw.URL+path, strings.NewReader(body))
+		if email != "" {
+			req.AddCookie(&http.Cookie{Name: sessionCookie, Value: g.seal(webSession{User: email, Email: email, Exp: time.Now().Add(time.Hour).Unix()})})
+			req.Header.Set(sessionHeader, "1")
+		}
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, _ := io.ReadAll(r.Body)
+		return r.StatusCode, string(b)
+	}
+	// support: reads the configuration, saves users, but any other change is ignored
+	st, body := call("help@x.be", "GET", "/admin/api/config", "")
+	if st != 200 {
+		t.Fatalf("support GET config : %d", st)
+	}
+	var got struct {
+		Config  map[string]any
+		Version string
+	}
+	json.Unmarshal([]byte(body), &got)
+	got.Config["Users"].(map[string]any)["nouveau"] = map[string]any{"Key": "gw-nouveau-123456789", "Profile": "standard"}
+	got.Config["Profiles"].(map[string]any)["standard"].(map[string]any)["DefaultAction"] = "off"
+	pl, _ := json.Marshal(map[string]any{"Config": got.Config, "Version": got.Version})
+	if st, b := call("help@x.be", "PUT", "/admin/api/config", string(pl)); st != 200 {
+		t.Fatalf("support PUT config : %d %s", st, b)
+	}
+	if g.C().Users["nouveau"] == nil {
+		t.Error("le support doit pouvoir créer un utilisateur")
+	}
+	if g.C().Profiles["standard"].DefaultAction != "anonymize" {
+		t.Error("le support ne doit pas pouvoir modifier un profil")
+	}
+	// debug: refused to support, allowed to support with debug access and to admin
+	if st, _ := call("help@x.be", "GET", "/admin/api/debug", ""); st != 403 {
+		t.Errorf("support sans accès Debug : %d, 403 attendu", st)
+	}
+	if st, _ := call("help2@x.be", "GET", "/admin/api/debug", ""); st != 200 {
+		t.Errorf("support avec accès Debug : %d", st)
+	}
+	if st, _ := call("help@x.be", "POST", "/admin/api/test", `{"Profile":"standard","Text":"x"}`); st != 403 {
+		t.Errorf("support sur un écran admin : %d, 403 attendu", st)
+	}
+	if st, _ := call("gone@x.be", "GET", "/admin/api/config", ""); st != 401 {
+		t.Errorf("compte désactivé : %d, 401 attendu", st)
+	}
+	if st, _ := call("intrus@x.be", "GET", "/admin/api/config", ""); st != 401 {
+		t.Errorf("compte inconnu : %d, 401 attendu", st)
+	}
+	// audit: readable by admin only, records the support save
+	if st, _ := call("help@x.be", "GET", "/admin/api/audit", ""); st != 403 {
+		t.Errorf("journal d'audit pour le support : %d, 403 attendu", st)
+	}
+	st, body = call("boss@x.be", "GET", "/admin/api/audit", "")
+	if st != 200 || !strings.Contains(body, "utilisateurs enregistrés") || !strings.Contains(body, "utilisateur nouveau créé") || !strings.Contains(body, "help@x.be") {
+		t.Errorf("journal d'audit : %d %s", st, body)
+	}
+}

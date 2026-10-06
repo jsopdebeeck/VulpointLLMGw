@@ -49,7 +49,10 @@ type ProviderCfg struct {
 	AdminEmails     []string       `toml:"admin_emails,omitempty"`
 	AdminGroups     []string       `toml:"admin_groups,omitempty"` // Entra group object IDs
 	AdminRoles      []string       `toml:"admin_roles,omitempty"`  // Entra app roles
-	Mappings        []*AuthMapping `toml:"mappings,omitempty"`     // first match wins
+	SupportEmails   []string       `toml:"support_emails,omitempty"`
+	SupportGroups   []string       `toml:"support_groups,omitempty"`
+	SupportRoles    []string       `toml:"support_roles,omitempty"`
+	Mappings        []*AuthMapping `toml:"mappings,omitempty"` // first match wins
 
 	secret string
 	issuer string
@@ -277,7 +280,8 @@ func verifyIDToken(c *oidcClient, p *ProviderCfg, tok, nonce string) (map[string
 
 type webSession struct {
 	User, Email, Name, Provider, Profile string
-	Admin                                bool
+	Admin                                bool   // kept for sessions opened before roles existed
+	Role                                 string // admin | support | ""
 	Exp                                  int64
 }
 
@@ -420,14 +424,29 @@ func (cfg *Config) resolveSSO(p *ProviderCfg, claims map[string]any) (*webSessio
 	}
 	name, _ := claims["name"].(string)
 	groups, roles := strList(claims["groups"]), strList(claims["roles"])
-	admin := contains(p.AdminEmails, email)
-	for _, gr := range groups {
-		admin = admin || contains(p.AdminGroups, gr)
+	// dashboard role: the account list first, then the provider's admin / support rules
+	matches := func(emails, grps, rls []string) bool {
+		ok := contains(emails, email)
+		for _, gr := range groups {
+			ok = ok || contains(grps, gr)
+		}
+		for _, ro := range roles {
+			ok = ok || contains(rls, ro)
+		}
+		return ok
 	}
-	for _, ro := range roles {
-		admin = admin || contains(p.AdminRoles, ro)
+	role := ""
+	if a := cfg.adminAccount(email); a != nil {
+		if !a.Disabled {
+			role = a.Role
+		}
+	} else if matches(p.AdminEmails, p.AdminGroups, p.AdminRoles) {
+		role = "admin"
+	} else if matches(p.SupportEmails, p.SupportGroups, p.SupportRoles) {
+		role = "support"
 	}
-	s := &webSession{User: email, Email: email, Name: name, Provider: p.display(), Admin: admin}
+	admin := role != ""
+	s := &webSession{User: email, Email: email, Name: name, Provider: p.display(), Admin: role == "admin", Role: role}
 	for n, u := range cfg.Users { // declared user with this email: its own profile and quotas
 		if strings.EqualFold(u.Email, email) {
 			if u.Disabled {
@@ -565,7 +584,8 @@ func (g *Gateway) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	s.Exp = time.Now().Add(time.Duration(cfg.Auth.SessionHours) * time.Hour).Unix()
 	g.setCookie(w, sessionCookie, g.seal(s), "/", cfg.Auth.SessionHours*3600)
-	log.Printf("sso %s : %s connecté (profil %q, admin %v)", p.ID, s.User, s.Profile, s.Admin)
+	log.Printf("sso %s : %s connecté (profil %q, rôle %q)", p.ID, s.User, s.Profile, s.Role)
+	g.audit(&Actor{Name: s.Email, Role: s.Role}, "connexion", p.display(), fmt.Sprintf("profil %q, rôle %q", s.Profile, s.Role))
 	http.Redirect(w, r, st.Next, http.StatusFound)
 }
 
@@ -578,7 +598,7 @@ func (g *Gateway) handleAuthSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]any{"user": s.User, "email": s.Email, "name": s.Name, "provider": s.Provider,
-		"profile": s.Profile, "admin": s.Admin, "expires": s.Exp})
+		"profile": s.Profile, "admin": s.Admin || s.Role == "admin", "role": s.Role, "expires": s.Exp})
 }
 
 func (g *Gateway) handleAuthLogout(w http.ResponseWriter, r *http.Request) {

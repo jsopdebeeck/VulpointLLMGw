@@ -22,6 +22,7 @@ type Config struct {
 	Debug     DebugCfg            `toml:"debug"`
 	Alerts    AlertsCfg           `toml:"alerts"`
 	Auth      AuthCfg             `toml:"auth"`
+	Admins    []*AdminAccount     `toml:"admins,omitempty"` // dashboard accounts (Admin / Support)
 	Detectors []*DetectorCfg      `toml:"detectors"`
 
 	allow  map[string]bool   // folded terms never anonymized
@@ -303,6 +304,9 @@ func ParseConfig(data []byte, base string) (*Config, error) {
 		c.keys[k] = n
 	}
 	if err := c.checkAuth(); err != nil {
+		return nil, err
+	}
+	if err := c.checkAdmins(); err != nil {
 		return nil, err
 	}
 	return &c, nil

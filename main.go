@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/subtle"
 	_ "embed"
 	"encoding/json"
 	"errors"
@@ -12,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -102,10 +102,12 @@ func main() {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Write(dashboardHTML)
 	})
-	mux.HandleFunc("GET /admin/api/stats", g.admin(g.handleStats))
-	mux.HandleFunc("GET /admin/api/config", g.admin(g.handleGetConfig))
-	mux.HandleFunc("PUT /admin/api/config", g.admin(g.handlePutConfig))
-	mux.HandleFunc("GET /admin/api/usage", g.admin(g.handleUsage))
+	mux.HandleFunc("GET /admin/api/me", g.staff(g.handleWhoami))
+	mux.HandleFunc("GET /admin/api/audit", g.admin(g.handleAudit))
+	mux.HandleFunc("GET /admin/api/stats", g.staff(g.handleStats))
+	mux.HandleFunc("GET /admin/api/config", g.staff(g.handleGetConfig))
+	mux.HandleFunc("PUT /admin/api/config", g.staff(g.handlePutConfig)) // support: Users section only
+	mux.HandleFunc("GET /admin/api/usage", g.staff(g.handleUsage))
 	mux.HandleFunc("POST /admin/api/target-test", g.admin(g.handleTargetTest))
 	mux.HandleFunc("POST /admin/api/alert-test", g.admin(func(w http.ResponseWriter, r *http.Request) {
 		ac := g.C().Alerts
@@ -126,15 +128,16 @@ func main() {
 				uniq = append(uniq, t)
 			}
 		}
+		g.audit(g.actor(r), "test des alertes", strings.Join(uniq, ", "), "")
 		if err := sendMail(ac, uniq, "[llmgw] Test des alertes", "Ceci est un message de test du gateway LLM.\nLes alertes arriveront à cette adresse.\n"); err != nil {
 			http.Error(w, err.Error(), 502)
 			return
 		}
 		writeJSON(w, map[string]any{"sent": uniq})
 	}))
-	mux.HandleFunc("GET /admin/api/debug", g.admin(g.handleDebugList))
-	mux.HandleFunc("GET /admin/api/debug/global", g.admin(g.handleDebugGlobal))
-	mux.HandleFunc("GET /admin/api/debug/{id}", g.admin(g.handleDebugGet))
+	mux.HandleFunc("GET /admin/api/debug", g.guard(roleDebug, g.handleDebugList))
+	mux.HandleFunc("GET /admin/api/debug/global", g.guard(roleDebug, g.handleDebugGlobal))
+	mux.HandleFunc("GET /admin/api/debug/{id}", g.guard(roleDebug, g.handleDebugGet))
 	mux.HandleFunc("DELETE /admin/api/debug", g.admin(g.handleDebugClear))
 	mux.HandleFunc("GET /admin/api/learned", g.admin(func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"count": learner.Count()})
@@ -144,6 +147,7 @@ func main() {
 			http.Error(w, err.Error(), 500)
 			return
 		}
+		g.audit(g.actor(r), "mémoire des noms vidée", "", "")
 		writeJSON(w, map[string]any{"count": learner.Count()})
 	}))
 	mux.HandleFunc("POST /admin/api/test", g.admin(g.handleTest))
@@ -152,6 +156,7 @@ func main() {
 			http.Error(w, err.Error(), 400)
 			return
 		}
+		g.audit(g.actor(r), "configuration rechargée", "", "")
 		w.Write([]byte("ok"))
 	}))
 
@@ -216,6 +221,7 @@ func (g *Gateway) maintenance(ctx context.Context) {
 		if err := learner.Forget(365); err != nil { // names unused for a year are forgotten
 			log.Print("mémoire des noms : ", err)
 		}
+		g.store.PurgeAudit(400) // audit log kept 400 days
 		select {
 		case <-ctx.Done():
 			return
@@ -226,27 +232,9 @@ func (g *Gateway) maintenance(ctx context.Context) {
 
 // ---------- admin API ----------
 
-// admin accepts the admin token, or an SSO session with the admin right.
-// Without token and without SSO provider, administration is open (warned at startup).
-func (g *Gateway) admin(h http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		cfg := g.C()
-		tok := cfg.Server.AdminToken
-		if tok == "" && len(cfg.Auth.Providers) == 0 {
-			h(w, r)
-			return
-		}
-		if tok != "" && subtle.ConstantTimeCompare([]byte(r.Header.Get("X-Admin-Token")), []byte(tok)) == 1 {
-			h(w, r)
-			return
-		}
-		if s := g.session(r); s != nil && s.Admin && r.Header.Get(sessionHeader) != "" {
-			h(w, r)
-			return
-		}
-		http.Error(w, "jeton d'administration ou connexion administrateur requis", 401)
-	}
-}
+// admin: endpoints reserved to the Admin role (see audit.go for roles).
+func (g *Gateway) admin(h http.HandlerFunc) http.HandlerFunc { return g.guard(roleAdmin, h) }
+func (g *Gateway) staff(h http.HandlerFunc) http.HandlerFunc { return g.guard(roleStaff, h) }
 
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")

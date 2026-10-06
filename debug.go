@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"regexp"
@@ -135,11 +136,13 @@ func (g *Gateway) handleDebugGet(w http.ResponseWriter, r *http.Request) {
 	}
 	json.Unmarshal([]byte(mp), &e.Mapping)
 	json.Unmarshal([]byte(ev), &e.Events)
+	g.audit(g.actor(r), "consultation Debug", fmt.Sprintf("échange #%d", e.ID), fmt.Sprintf("%s → %s/%s", e.User, e.Target, e.Model))
 	sort.Slice(e.Events, func(i, j int) bool { return e.Events[i].N > e.Events[j].N })
 	writeJSON(w, e)
 }
 
 func (g *Gateway) handleDebugClear(w http.ResponseWriter, r *http.Request) {
+	g.audit(g.actor(r), "archive Debug vidée", "", "")
 	g.store.db.Exec(`DELETE FROM debug`)
 	g.store.db.Exec(`VACUUM`)
 	writeJSON(w, map[string]any{"ok": true})

@@ -98,6 +98,12 @@ func (g *Gateway) handlePutConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	nc := in.Config
 	fail := func(f string, a ...any) { http.Error(w, fmt.Sprintf(f, a...), 400) }
+	actor := g.actor(r)
+	if !actor.admin() { // support: only the Users section is taken, whatever else was sent
+		base := cloneConfig(cur)
+		base.Users = nc.Users
+		nc = base
+	}
 
 	if nc.Server.AdminToken == keepSecret {
 		nc.Server.AdminToken = cur.Server.AdminToken
@@ -166,6 +172,11 @@ func (g *Gateway) handlePutConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	g.cfg.Store(parsed)
 	log.Print("configuration enregistrée depuis le dashboard")
+	action := "configuration enregistrée"
+	if !actor.admin() {
+		action = "utilisateurs enregistrés"
+	}
+	g.audit(actor, action, "", strings.Join(configChanges(cur, parsed), " ; "))
 	var notes []string
 	if parsed.Server.Listen != cur.Server.Listen || parsed.dbPath != cur.dbPath || parsed.Server.UpstreamTimeout != cur.Server.UpstreamTimeout {
 		notes = append(notes, "listen, db et upstream_timeout_sec seront pris en compte au prochain redémarrage")
