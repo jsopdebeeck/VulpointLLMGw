@@ -221,6 +221,7 @@ const $ = (s, el = document) => el.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const store = { get(k) { try { return localStorage.getItem(k) } catch { return null } }, set(k, v) { try { localStorage.setItem(k, v) } catch {} } };
 let token = store.get("gwtok") || "", range = store.get("gwrange") || "48h", data = null;
+if (!["48h", "60d", "6w", "6m"].includes(range)) range = "6m"; // former 12-month / 3-year views
 const S = { cfg: null, orig: "", meta: null, usage: null, tab: store.get("gwtab") || "overview", privTab: store.get("gwpriv") || "detectors", newKeys: {}, tests: {}, testOut: "" };
 
 const nf = new Intl.NumberFormat("fr-BE");
@@ -270,7 +271,7 @@ function shortLabel(b) {
   if (range === "48h") return b.slice(11, 13) + "h";
   if (range === "60d") return b.slice(8, 10) + "/" + b.slice(5, 7);
   if (range === "6w") return "S" + b.slice(6);
-  if (range === "12m") return ["janv", "févr", "mars", "avr", "mai", "juin", "juil", "août", "sept", "oct", "nov", "déc"][+b.slice(5, 7) - 1];
+  if (range === "6m") return ["janv", "févr", "mars", "avr", "mai", "juin", "juil", "août", "sept", "oct", "nov", "déc"][+b.slice(5, 7) - 1];
   return b;
 }
 function scale(v) { const step = niceMax(v / 4), k = Math.max(1, Math.ceil(v / step - 1e-9)); return { max: step * k, k }; }
@@ -710,7 +711,7 @@ function viewQuotas() {
 // ---------- tab: reporting ----------
 function viewReport() {
   return `<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><div class="seg" id="ranges" role="group" aria-label="Période">
-      ${[["48h", "48 h"], ["60d", "60 j"], ["6w", "6 sem"], ["12m", "12 mois"], ["3y", "3 ans"]].map(([r, l]) => `<button data-r="${r}" aria-pressed="${r === range}">${l}</button>`).join("")}</div>
+      ${[["48h", "48 h"], ["60d", "60 j"], ["6w", "6 sem"], ["6m", "6 mois"]].map(([r, l]) => `<button data-r="${r}" aria-pressed="${r === range}">${l}</button>`).join("")}</div>
       <span class="sub" style="margin:0">Détail par requête sur ${S.cfg.Server.RawRetentionDays} j, puis agrégats journaliers lissés.</span></div>
     <section class="kpis" id="kpis"></section>
     <section class="grid2">

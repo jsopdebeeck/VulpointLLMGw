@@ -331,7 +331,7 @@ func TestFallbackAndStats(t *testing.T) {
 	post(t, gw.URL+"/v1/chat/completions", "gw-alice-remplace-moi", map[string]any{
 		"model": "mistral-large", "messages": []any{map[string]any{"role": "user", "content": pii}}})
 	time.Sleep(1500 * time.Millisecond)
-	for _, rng := range []string{"48h", "60d", "6w", "12m", "3y"} {
+	for _, rng := range []string{"48h", "60d", "6w", "6m"} {
 		res, err := g.store.Stats(rng)
 		if err != nil {
 			t.Fatal(rng, err)

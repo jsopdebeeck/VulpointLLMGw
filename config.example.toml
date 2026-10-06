@@ -6,7 +6,7 @@ listen = "127.0.0.1:8080"
 db = "gateway.db"                 # SQLite, relatif à ce fichier
 admin_token = "change-moi"        # dashboard + /admin/api (vide = ouvert)
 raw_retention_days = 30           # détail par requête, puis agrégats journaliers
-agg_retention_days = 1127         # ~3 ans d'agrégats
+agg_retention_days = 200          # ~6 mois d'agrégats (profondeur maximale du reporting)
 max_body_mb = 50
 upstream_timeout_sec = 300
 

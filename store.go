@@ -187,8 +187,8 @@ var ranges = map[string]rangeDef{
 	"6w": {"%Y-W%W", func(t time.Time) time.Time {
 		return dayStart(t).AddDate(0, 0, -((int(t.Weekday())+6)%7)-35)
 	}, "day", false},
-	"12m": {"%Y-%m", func(t time.Time) time.Time { return time.Date(t.Year(), t.Month()-11, 1, 0, 0, 0, 0, t.Location()) }, "day", false},
-	"3y":  {"%Y", func(t time.Time) time.Time { return time.Date(t.Year()-2, 1, 1, 0, 0, 0, 0, t.Location()) }, "day", false},
+	// maximum depth: 6 months (current month + the 5 previous ones)
+	"6m": {"%Y-%m", func(t time.Time) time.Time { return time.Date(t.Year(), t.Month()-5, 1, 0, 0, 0, 0, t.Location()) }, "day", false},
 }
 
 // goLabel reproduces SQLite strftime for bucket labels (so empty buckets appear too).

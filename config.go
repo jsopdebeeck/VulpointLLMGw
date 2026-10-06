@@ -181,7 +181,7 @@ func ParseConfig(data []byte, base string) (*Config, error) {
 		s.RawRetentionDays = 30
 	}
 	if s.AggRetentionDays <= 0 {
-		s.AggRetentionDays = 3*366 + 31
+		s.AggRetentionDays = 200 // 6 months of reporting + margin
 	}
 	if s.MaxBodyMB <= 0 {
 		s.MaxBodyMB = 50
