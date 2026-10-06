@@ -158,6 +158,8 @@ pre.out { white-space: pre-wrap; word-break: break-word; background: var(--bg); 
   border-left: 4px solid var(--good); border-radius: 10px; padding: 10px 14px; box-shadow: 0 8px 28px rgba(0,0,0,.18); display: none; white-space: pre-wrap; }
 #toast.bad { border-left-color: var(--critical); }
 .matrix select { min-width: 150px; }
+.matrix.fm select { min-width: 0; width: 100%; font-size: 12.5px; padding-right: 22px; }
+.matrix.fm td { padding-left: 6px; padding-right: 6px; }
 .matrix select.dflt { color: var(--muted); }
 .matrix select.ovr { font-weight: 600; border-color: var(--accent); color: var(--text); }
 .matrix select.ovr.blk { border-color: var(--critical); color: var(--critical); }
@@ -213,6 +215,7 @@ tr.click { cursor: pointer; } tr.click:hover td { background: var(--grid); } tr.
       <button data-tab="quotas"><span class="ic">◔</span>Quotas</button>
       <div class="grp">Données</div>
       <button data-tab="privacy"><span class="ic">⇄</span>Filtrage et privacy</button>
+      <button data-tab="filelog"><span class="ic">▤</span>Journal des fichiers</button>
       <button data-tab="debug"><span class="ic">⌕</span>Debug</button>
       <div class="grp">Paramètres</div>
       <button data-tab="settings"><span class="ic">⚙</span>Alertes et SSO</button>
@@ -407,7 +410,8 @@ function recentTable(el, rec) {
 // ---------- config draft: binding, dirty state, save ----------
 const L = {
   act: { anonymize: "Anonymiser", block: "Bloquer", log: "Journaliser", off: "Ignorer" },
-  img: { pass: "Laisser passer", strip: "Retirer", block: "Bloquer" },
+  img: { pass: "Non changée", blank: "Carré blanc", block: "Bloquée + journal" },
+  file: { pass_log: "Transmis + journal", blank: "Carré blanc", block: "Bloqué + journal", block_alert: "Bloqué + alerte + journal" },
   meth: { builtin: "Intégré", regex: "Expression régulière", words: "Liste de termes" },
 };
 const opts = (map, cur, extra = "") => extra + Object.entries(map).map(([k, v]) => `<option value="${esc(k)}" ${k === cur ? "selected" : ""}>${esc(v)}</option>`).join("");
@@ -496,7 +500,7 @@ const ACTIONS = {
   copy(d, el) { navigator.clipboard?.writeText(d.v).then(() => toast("Clé copiée")); },
   "prof-add"() {
     const n = askName("Nom du profil", S.cfg.Profiles); if (!n) return;
-    S.cfg.Profiles[n] = { Description: "", Targets: [], Images: "strip", DefaultAction: "anonymize", Actions: {}, Hint: true };
+    S.cfg.Profiles[n] = { Description: "", Targets: [], Images: "blank", Files: {}, FilesDefault: "pass_log", DefaultAction: "anonymize", Actions: {}, Hint: true };
     S.profOpen.add(n); saveProfOpen();
   },
   "prof-toggle"(d) { S.profOpen.has(d.n) ? S.profOpen.delete(d.n) : S.profOpen.add(d.n); saveProfOpen(); },
@@ -530,6 +534,8 @@ const ACTIONS = {
   },
   "acc-del"(d) { const a = S.cfg.Admins[+d.i]; if (confirm(`Supprimer le compte ${a.Email} ?`)) S.cfg.Admins.splice(+d.i, 1); },
   async "audit-refresh"() { await loadAudit(); },
+  async "filelog-refresh"() { await loadFileLog(); },
+  "ext-add"() { const v = ($("#newext")?.value || "").split(",").map(normExt).filter(x => /^[a-z0-9]{1,10}$/.test(x)); if (!v.length) return toast("Extension invalide", true); S.extraExt = [...new Set([...(S.extraExt || []), ...v])]; },
   "priv-tab"(d) { S.privTab = d.k; store.set("gwpriv", d.k); },
   "det-add"() { S.cfg.Detectors.push({ Name: "NOUVEAU", Description: "", Regex: "\\bXXX-\\d+\\b" }); },
   "det-up"(d) { const a = S.cfg.Detectors, i = +d.i; if (i > 0) [a[i - 1], a[i]] = [a[i], a[i - 1]]; },
@@ -608,7 +614,8 @@ function viewUsers() {
         <textarea class="w100" style="min-height:70px" data-bind="Profiles|${esc(pn)}|SystemPrompt" placeholder="ex. Réponds en français, ton professionnel. Ne donne jamais de conseil médical ou juridique définitif.">${esc(p.SystemPrompt)}</textarea>
         <label>Alerter<br><span class="sub">emails, séparés par des virgules</span></label>
         <input class="w100" data-type="list" data-bind="Profiles|${esc(pn)}|AlertEmails" value="${esc((p.AlertEmails || []).join(", "))}" placeholder="securite@exemple.be">
-        <label>Images, fichiers</label><select data-bind="Profiles|${esc(pn)}|Images">${opts(L.img, p.Images)}</select>
+        <label>Images</label><select data-bind="Profiles|${esc(pn)}|Images">${opts(L.img, p.Images)}</select>
+        <label>Fichiers</label><div>${esc(L.file[p.FilesDefault] || "Transmis + journal")} par défaut · ${Object.keys(p.Files || {}).length} extension(s) spécifique(s) <button class="icon" onclick="S.privTab='files';go('privacy')">→ Fichiers</button></div>
         <label>Données sensibles</label><div>${esc(L.act[p.DefaultAction] || p.DefaultAction)} par défaut · ${nRules} règle(s) spécifique(s) <button class="icon" onclick="go('privacy')">→ Filtrage</button></div>
         <label>Quota / utilisateur</label><div>${quotaText(p.Quota)} <button class="icon" onclick="go('quotas')">→ Quotas</button></div>
         <label>Utilisé par</label><div class="wrap">${[...users.map(esc), ...sso.map(x => "SSO " + esc(x))].join(", ") || '<span class="sub">personne</span>'}</div>
@@ -626,35 +633,53 @@ function viewProfiles() {
       <span class="sub" style="margin:4px 0 0 8px"><b style="color:var(--good)">Vert</b> : profil utilisé · <b style="color:var(--muted)">gris</b> : aucun utilisateur ni règle SSO</span></div>
     <div class="plist">${S._profs}</div></section>`;
 }
-// ---------- files blocked per profile ----------
+// ---------- files and images per profile, per extension ----------
 const FILECATS = [["PDF", ["pdf"]], ["Word et texte riche", ["doc", "docx", "odt", "rtf"]], ["Tableurs", ["xls", "xlsx", "ods", "csv"]],
   ["Présentations", ["ppt", "pptx", "odp"]], ["Archives", ["zip", "rar", "7z", "tar", "gz"]], ["Images", ["png", "jpg", "gif", "webp", "heic"]],
   ["Texte et code", ["txt", "md", "json", "xml", "html", "log"]]];
-const KNOWN_EXT = new Set(FILECATS.flatMap(c => c[1]));
+const KNOWN_EXT = new Set(FILECATS.flatMap(c => c[1])), IMAGE_EXT = new Set(FILECATS[5][1]);
+const normExt = x => { x = x.trim().toLowerCase().replace(/^\./, ""); return x === "jpeg" ? "jpg" : x; };
 function viewFiles() {
   const c = S.cfg, P = sortedNames(c.Profiles);
-  const cell = (pn, i) => { const b = c.Profiles[pn].BlockedFiles || [], ex = FILECATS[i][1], n = ex.filter(e => b.includes(e)).length;
-    return `<td><label><input type="checkbox" data-filecat="${esc(pn)}|${i}" ${n === ex.length ? "checked" : ""} ${n && n < ex.length ? "data-partial=1" : ""}> ${n === ex.length ? '<b style="color:var(--critical)">bloqués</b>' : n ? `${n}/${ex.length} bloqué(s)` : '<span class="sub">autorisés</span>'}</label></td>`; };
-  return `<section class="card"><h2>Fichiers bloqués</h2><div class="sub">Une requête qui contient un fichier d'un type coché est refusée (violation de type FILE) : fichier joint via l'API, document joint dans le chat, ou image. Le chat refuse le fichier dès qu'on le joint.</div>
-    <div class="tw" style="margin-top:8px"><table class="matrix"><thead><tr><th>Type de fichier</th>${P.map(p => `<th>${esc(p)}</th>`).join("")}</tr></thead><tbody>
-      ${FILECATS.map(([label, ex], i) => `<tr><td>${esc(label)}<div class="sub" style="margin:0;font-weight:400">${ex.map(e => "." + e).join(" ")}</div></td>${P.map(pn => cell(pn, i)).join("")}</tr>`).join("")}
-      <tr><td>Autres extensions<div class="sub" style="margin:0;font-weight:400">séparées par des virgules</div></td>${P.map(pn => `<td><input data-fileother="${esc(pn)}" value="${esc((c.Profiles[pn].BlockedFiles || []).filter(e => !KNOWN_EXT.has(e)).join(", "))}" placeholder="ex. exe, iso" style="width:140px"></td>`).join("")}</tr>
-    </tbody></table></div></section>`;
+  const extra = [...new Set([...P.flatMap(pn => Object.keys(c.Profiles[pn].Files || {})), ...(S.extraExt || [])])].filter(e => !KNOWN_EXT.has(e)).sort();
+  const cats = extra.length ? [...FILECATS, ["Autres extensions", extra]] : FILECATS;
+  const cell = (pn, e) => { const p = c.Profiles[pn], v = (p.Files || {})[e] || "";
+    const dflt = IMAGE_EXT.has(e) ? L.img[p.Images] || p.Images : L.file[p.FilesDefault] || p.FilesDefault;
+    return `<td><select class="${v ? "ovr" + (v.startsWith("block") ? " blk" : "") : "dflt"}" data-fileact="${esc(pn)}|${esc(e)}" title="Par défaut : ${esc(dflt)}">${opts(L.file, v, `<option value="" ${v ? "" : "selected"}>(${esc(dflt)})</option>`)}</select></td>`; };
+  return `<section class="card"><h2>Fichiers et images</h2>
+    <div class="sub">Action par profil et par extension, pour un fichier joint via l'API, un document joint dans le chat ou une image.</div>
+    <div class="sub">Transmis + journal : envoyé tel quel, l'événement est consigné · Carré blanc : remplacé par un carré blanc avant l'envoi vers le LLM (zone non fiable) · Bloqué + journal : requête refusée (violation de type FILE) · Bloqué + alerte + journal : refusée, et alerte email aux destinataires « Alerter » du profil.</div>
+    <div class="sub">Le journal des fichiers (nom, extension, taille, empreinte SHA-256) est conservé 30 jours, même sans mode Debug ; le contenu n'est jamais stocké. Les images sans règle d'extension suivent le réglage « Images » du profil. Entre parenthèses et en gris : l'action par défaut du profil.</div>
+    <div class="tw" style="margin-top:8px"><table class="matrix fm"><thead><tr><th>Extension</th>${P.map(p => `<th>${esc(p)}</th>`).join("")}</tr></thead><tbody>
+      <tr style="background:var(--bg)"><td>Images (sans règle d'extension)</td>${P.map(pn => `<td><select data-bind="Profiles|${esc(pn)}|Images" data-rerender>${opts(L.img, c.Profiles[pn].Images)}</select></td>`).join("")}</tr>
+      <tr style="background:var(--bg)"><td>Autres fichiers (par défaut)</td>${P.map(pn => `<td><select data-bind="Profiles|${esc(pn)}|FilesDefault" data-rerender>${opts(L.file, c.Profiles[pn].FilesDefault || "pass_log")}</select></td>`).join("")}</tr>
+      ${cats.map(([label, ex]) => `<tr><td colspan="${P.length + 1}" class="sub" style="font-weight:600;padding-top:14px">${esc(label)}</td></tr>` +
+        ex.map(e => `<tr><td class="mono" translate="no">.${esc(e)}</td>${P.map(pn => cell(pn, e)).join("")}</tr>`).join("")).join("")}
+    </tbody></table></div>
+    <div class="row" style="margin-top:10px;gap:8px"><input id="newext" placeholder="ex. exe, iso" style="width:160px"><button class="btn" data-act="ext-add">+ Extension</button></div></section>`;
 }
 document.addEventListener("change", e => {
-  const el = e.target.closest("[data-filecat], [data-fileother]"); if (!el) return;
-  if (el.dataset.filecat) {
-    const [pn, i] = el.dataset.filecat.split("|"), p = S.cfg.Profiles[pn], ex = FILECATS[+i][1];
-    const set = new Set(p.BlockedFiles || []);
-    ex.forEach(x => el.checked ? set.add(x) : set.delete(x));
-    p.BlockedFiles = [...set];
-  } else {
-    const p = S.cfg.Profiles[el.dataset.fileother];
-    const other = el.value.split(",").map(x => x.trim().toLowerCase().replace(/^\./, "")).filter(Boolean).map(x => x === "jpeg" ? "jpg" : x);
-    p.BlockedFiles = [...(p.BlockedFiles || []).filter(x => KNOWN_EXT.has(x)), ...other];
-  }
+  const el = e.target.closest("[data-fileact]"); if (!el) return;
+  const [pn, ext] = el.dataset.fileact.split("|"), p = S.cfg.Profiles[pn];
+  p.Files = p.Files || {};
+  if (el.value) p.Files[ext] = el.value; else delete p.Files[ext];
   markDirty(); render();
 });
+// ---------- tab: file log ----------
+async function loadFileLog() { try { S.fileLog = await api("/admin/api/files-log?limit=2000"); } catch (e) { if (e.message !== "401") toast(e.message, true); } }
+const FILE_ACT_CLS = { pass_log: "", blank: "", block: "color:var(--critical)", block_alert: "color:var(--critical);font-weight:700" };
+function viewFileLog() {
+  const q = (S.fileFilter || "").toLowerCase(), A = (S.fileLog || []).filter(e => !q || [e.User, e.Profile, e.Target, e.Name, e.Ext, e.Action, L.file[e.Action] || ""].join(" ").toLowerCase().includes(q));
+  const size = n => n ? (n < 1024 ? n + " o" : n < 1048576 ? (n / 1024).toFixed(1) + " ko" : (n / 1048576).toFixed(1) + " Mo") : "—";
+  const actLabel = e => e.Kind === "IMAGE" && e.Action === "block" ? L.img.block : L.file[e.Action] || e.Action;
+  return `<section class="card"><div class="chead"><div><h2>Fichiers et images</h2><div class="sub">${(S.fileLog || []).length} événement(s), conservés 30 jours, même sans mode Debug. Le contenu des fichiers n'est jamais stocké.</div></div>
+      <input id="filefilter" placeholder="filtrer…" value="${esc(S.fileFilter || "")}" style="width:200px"><button class="btn" data-act="filelog-refresh">Rafraîchir</button></div>
+    <div class="tw"><table><thead><tr><th>Date</th><th>Utilisateur</th><th>Profil</th><th>LLM</th><th>Type</th><th>Fichier</th><th class="n">Taille</th><th>Action</th><th>SHA-256</th></tr></thead><tbody>${A.slice(0, 2000).map(e =>
+      `<tr><td>${new Date(e.TS * 1000).toLocaleString(I18N.loc, { dateStyle: "short", timeStyle: "medium" })}</td><td>${esc(e.User)}</td><td>${esc(e.Profile)}</td><td title="${esc(e.Model)}">${e.Target ? esc(e.Target) : "—"}</td>
+       <td>${e.Kind === "IMAGE" ? "Image" : "Fichier"}</td><td class="wrap" translate="no"><b>${esc(e.Name)}</b></td><td class="n">${size(e.Size)}</td>
+       <td><span class="badge" style="${FILE_ACT_CLS[e.Action] || ""}">${esc(actLabel(e))}</span></td><td class="mono" translate="no" title="${esc(e.SHA)}">${e.SHA ? esc(e.SHA.slice(0, 10)) + "…" : "—"}</td></tr>`).join("") || '<tr><td colspan="9" class="sub">Aucun événement</td></tr>'}</tbody></table></div></section>`;
+}
+document.addEventListener("input", e => { if (e.target.id === "filefilter") { S.fileFilter = e.target.value; const p = e.target.selectionStart; render(); const f = $("#filefilter"); f.focus(); f.setSelectionRange(p, p); } });
 // SSO providers that give this profile (default profile or mapping rule)
 function ssoProfileUses(pn) {
   return (S.meta.config.Auth?.Providers || []).filter(p => p.DefaultProfile === pn || (p.Mappings || []).some(m => m.Profile === pn)).map(p => p.Label || p.ID);
@@ -778,7 +803,7 @@ function viewPrivacy() {
   const matrix = `<table class="matrix"><thead><tr><th>Type de donnée</th>${P.map(p => `<th>${esc(p)}</th>`).join("")}</tr></thead><tbody>
     <tr style="background:var(--bg)"><td>Action par défaut</td>${P.map(pn => `<td><select data-bind="Profiles|${esc(pn)}|DefaultAction" data-rerender>${opts(L.act, c.Profiles[pn].DefaultAction)}</select></td>`).join("")}</tr>
     ${kinds.map(k => `<tr><td class="mono">${esc(k)}</td>${P.map(pn => cell(pn, k)).join("")}</tr>`).join("")}
-    <tr><td>IMAGE / FICHIER</td>${P.map(pn => `<td><select data-bind="Profiles|${esc(pn)}|Images">${opts(L.img, c.Profiles[pn].Images)}</select></td>`).join("")}</tr>
+    <tr><td>IMAGE</td>${P.map(pn => `<td><select data-bind="Profiles|${esc(pn)}|Images">${opts(L.img, c.Profiles[pn].Images)}</select></td>`).join("")}</tr>
     <tr><td>Consigne « jetons »</td>${P.map(pn => `<td><label><input type="checkbox" data-bind="Profiles|${esc(pn)}|Hint" ${c.Profiles[pn].Hint ? "checked" : ""}> ajouter</label></td>`).join("")}</tr>
     </tbody></table>`;
   const sub = S.privTab, tabs = [["detectors", "Détecteurs"], ["rules", "Règles par profil"], ["files", "Fichiers"], ["exceptions", "Exceptions et mémoire"], ["test", "Tester"]];
@@ -1107,7 +1132,7 @@ function viewAudit() {
 }
 document.addEventListener("input", e => { if (e.target.id === "auditfilter") { S.auditFilter = e.target.value; const p = e.target.selectionStart; render(); const f = $("#auditfilter"); f.focus(); f.setSelectionRange(p, p); } });
 
-const VIEWS = { overview: viewOverview, users: viewUsers, profiles: viewProfiles, targets: viewTargets, privacy: viewPrivacy, quotas: viewQuotas, report: viewReport, debug: viewDebug, settings: viewSettings, accounts: viewAccounts, audit: viewAudit };
+const VIEWS = { overview: viewOverview, users: viewUsers, profiles: viewProfiles, targets: viewTargets, privacy: viewPrivacy, quotas: viewQuotas, report: viewReport, debug: viewDebug, settings: viewSettings, accounts: viewAccounts, audit: viewAudit, filelog: viewFileLog };
 const PAGES = {
   overview: ["Vue d'ensemble", "État de la passerelle et points d'attention sur les dernières 48 heures."],
   report: ["Reporting", "Volumes, temps de réponse, conversions et violations, par utilisateur et par LLM."],
@@ -1117,6 +1142,7 @@ const PAGES = {
   quotas: ["Quotas", "Limites par profil, par utilisateur et par LLM, avec la consommation en direct."],
   privacy: ["Filtrage et privacy", "Ce qui est détecté, ce qui en est fait selon le profil, et un banc de test."],
   debug: ["Debug", "Archive temporaire des échanges complets, pour le dépannage."],
+  filelog: ["Journal des fichiers", "Fichiers et images transmis, remplacés ou bloqués, par utilisateur : nom, taille, empreinte et action."],
   settings: ["Alertes et SSO", "Alertes par email et connexion avec Microsoft Entra ID ou Google."],
   accounts: ["Comptes d'administration", "Qui peut ouvrir ce dashboard, et avec quels droits : Admin (tout) ou Support (utilisateurs, statistiques, Debug sur autorisation)."],
   audit: ["Journal d'audit", "Qui a fait quoi, et quand : connexions, modifications, consultations de l'archive Debug."],
@@ -1125,7 +1151,7 @@ const PAGES = {
 function allowed(tab) {
   const r = S.me?.role || "admin";
   if (r === "admin") return true;
-  return ["overview", "report", "users", "profiles", "quotas"].includes(tab) || (tab === "debug" && S.me?.debug);
+  return ["overview", "report", "users", "profiles", "quotas", "filelog"].includes(tab) || (tab === "debug" && S.me?.debug);
 }
 function applyRole() {
   document.querySelectorAll("#tabs button").forEach(b => b.hidden = !allowed(b.dataset.tab));
@@ -1160,6 +1186,7 @@ async function go(tab) {
   if (!allowed(tab)) tab = S.tab = "overview";
   if (tab === "report") await loadStats();
   if (tab === "audit" || tab === "accounts") { await loadAudit(); render(); }
+  if (tab === "filelog") { await loadFileLog(); render(); }
   if (tab === "targets") testTargets(false);
   if (tab === "overview") { await Promise.all([loadOverview(), loadUsage()]); render(); }
   if (tab === "debug") { await loadDebug(); render(); }

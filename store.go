@@ -59,6 +59,9 @@ func OpenStore(path string) (*Store, error) {
 	if err := s.initAudit(); err != nil {
 		return nil, err
 	}
+	if err := s.initFileLog(); err != nil {
+		return nil, err
+	}
 	go s.writer()
 	return s, nil
 }

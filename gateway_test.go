@@ -279,8 +279,8 @@ func TestAnthropicStream(t *testing.T) {
 	}
 	up := ant.last()
 	noSecrets(t, up)
-	if strings.Contains(up, `"image"`) {
-		t.Error("image non retirée")
+	if strings.Contains(up, `"AAAA"`) || !strings.Contains(up, whitePNG) {
+		t.Error("image non remplacée par le carré blanc")
 	}
 	var got string
 	for _, l := range strings.Split(string(body), "\n") {
@@ -290,7 +290,7 @@ func TestAnthropicStream(t *testing.T) {
 			got += m["delta"].(map[string]any)["text"].(string)
 		}
 	}
-	want := pii + "[image retiré(e) par le gateway]"
+	want := pii
 	if got != want {
 		t.Errorf("réponse restaurée incorrecte :\n%q\n%q", got, want)
 	}
@@ -985,7 +985,7 @@ func TestRolesAndAudit(t *testing.T) {
 
 func TestBlockedFiles(t *testing.T) {
 	gw, oai, _, g := setup(t)
-	g.C().Profiles["standard"].BlockedFiles = []string{"pdf", "zip", "jpg"}
+	g.C().Profiles["standard"].Files = map[string]string{"pdf": "block", "zip": "block_alert", "jpg": "block"}
 	send := func(content any) (int, string) {
 		r := post(t, gw.URL+"/v1/chat/completions", "gw-alice-remplace-moi", map[string]any{"model": "mistral-large",
 			"messages": []any{map[string]any{"role": "user", "content": content}}})
@@ -1007,5 +1007,76 @@ func TestBlockedFiles(t *testing.T) {
 	}
 	if st, _ := send("--- Document joint : note.docx ---\ntexte\n--- Fin du document ---"); st != 200 {
 		t.Errorf("docx autorisé : %d", st)
+	}
+}
+
+func TestFileActions(t *testing.T) {
+	gw, oai, _, g := setup(t)
+	p := g.C().Profiles["standard"]
+	p.Files = map[string]string{"pdf": "blank", "docx": "blank", "csv": "pass_log", "exe": "block_alert"}
+	p.FilesDefault, p.Images = "pass_log", "blank"
+	send := func(content any) (int, string) {
+		r := post(t, gw.URL+"/v1/chat/completions", "gw-alice-remplace-moi", map[string]any{"model": "mistral-large",
+			"messages": []any{map[string]any{"role": "user", "content": content}}})
+		b, _ := io.ReadAll(r.Body)
+		return r.StatusCode, string(b)
+	}
+	secret := base64.StdEncoding.EncodeToString([]byte("%PDF contrat confidentiel"))
+	// blank: the PDF and the image become a white square, the content never reaches the LLM
+	if st, b := send([]any{map[string]any{"type": "text", "text": "résume"},
+		map[string]any{"type": "file", "file": map[string]any{"filename": "contrat.pdf", "file_data": "data:application/pdf;base64," + secret}},
+		map[string]any{"type": "image_url", "image_url": map[string]any{"url": "data:image/png;base64,iVBORw0KGgo="}}}); st != 200 {
+		t.Fatalf("blank : %d %s", st, b)
+	}
+	if last := oai.last(); strings.Contains(last, secret) || strings.Contains(last, "iVBORw0KGgo=\"") || strings.Count(last, whitePNG) != 2 {
+		t.Errorf("le fichier ou l'image n'a pas été remplacé par le carré blanc : %.300s", last)
+	}
+	// chat document set to blank: text replaced, markers kept
+	if st, _ := send("--- Document joint : note.docx ---\nJean Dupont, salaire 4000\n--- Fin du document ---"); st != 200 || strings.Contains(oai.last(), "4000") || !strings.Contains(oai.last(), blankDoc) {
+		t.Errorf("document docx du chat non remplacé : %s", oai.last())
+	}
+	// pass_log: transmitted unchanged, recorded in the file log
+	if st, _ := send("--- Document joint : export.csv ---\na;b\n--- Fin du document ---"); st != 200 || !strings.Contains(oai.last(), "a;b") {
+		t.Errorf("csv non transmis")
+	}
+	// block_alert: refused
+	if st, b := send([]any{map[string]any{"type": "file", "file": map[string]any{"filename": "setup.exe", "file_data": "data:application/octet-stream;base64,TVo="}}}); st != 403 || !strings.Contains(b, "setup.exe") {
+		t.Errorf("exe : %d %s", st, b)
+	}
+	// the same csv sent again (conversation history) is not logged twice
+	send("--- Document joint : export.csv ---\na;b\n--- Fin du document ---")
+	time.Sleep(300 * time.Millisecond)
+	got := map[string]string{}
+	rows, _ := g.store.db.Query(`SELECT name, action FROM file_log`)
+	n := 0
+	for rows.Next() {
+		var name, act string
+		rows.Scan(&name, &act)
+		got[name] = act
+		n++
+	}
+	rows.Close()
+	if got["export.csv"] != "pass_log" || got["setup.exe"] != "block_alert" || got["contrat.pdf"] != "" || n != 2 {
+		t.Errorf("journal des fichiers : %v (%d lignes)", got, n)
+	}
+}
+
+func TestFilesConfigMigration(t *testing.T) {
+	c, err := ParseConfig([]byte(`[targets.local]
+api = "openai"
+base_url = "http://localhost:1/v1"
+models = ["*"]
+[profiles.p]
+targets = ["local"]
+images = "strip"
+blocked_files = [".PDF", "zip"]
+files = { zip = "block_alert" }
+`), t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := c.Profiles["p"]
+	if p.Images != "blank" || p.Files["pdf"] != "block" || p.Files["zip"] != "block_alert" || p.FilesDefault != "pass_log" || p.BlockedFiles != nil {
+		t.Errorf("migration : %+v", p)
 	}
 }

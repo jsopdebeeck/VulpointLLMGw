@@ -112,6 +112,7 @@ func main() {
 	})
 	mux.HandleFunc("GET /admin/api/me", g.staff(g.handleWhoami))
 	mux.HandleFunc("GET /admin/api/audit", g.admin(g.handleAudit))
+	mux.HandleFunc("GET /admin/api/files-log", g.staff(g.handleFileLog))
 	mux.HandleFunc("GET /admin/api/stats", g.staff(g.handleStats))
 	mux.HandleFunc("GET /admin/api/config", g.staff(g.handleGetConfig))
 	mux.HandleFunc("PUT /admin/api/config", g.staff(g.handlePutConfig)) // support: Users section only
@@ -230,6 +231,7 @@ func (g *Gateway) maintenance(ctx context.Context) {
 			log.Print("mémoire des noms : ", err)
 		}
 		g.store.PurgeAudit(400) // audit log kept 400 days
+		g.store.PurgeFileLog()  // file log kept 30 days
 		select {
 		case <-ctx.Done():
 			return

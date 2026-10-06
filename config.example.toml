@@ -229,7 +229,13 @@ regex = '\b(?:CLI|PAT)-\d{6,}\b'
 # targets          : LLM autorisés, dans l'ordre de préférence (repli si panne, 5xx ou 429)
 # default_action   : anonymize | block | log | off (appliquée aux types non listés)
 # actions          : action par type de donnée
-# images           : pass | strip (remplacées par un texte) | block (requête refusée)
+# images           : pass (non changée) | blank (remplacée par un carré blanc) | block (requête refusée + journal)
+# files            : action par extension de fichier :
+#                    pass_log (transmis + journal) | blank (remplacé par un carré blanc)
+#                    block (requête refusée + journal) | block_alert (refusée + alerte email + journal)
+# files_default    : action pour les extensions non listées (pass_log par défaut)
+#                    Le journal des fichiers (nom, extension, taille, empreinte SHA-256, action) est
+#                    conservé 30 jours, même sans mode Debug ; le contenu n'est jamais stocké.
 # placeholder_hint : ajoute une consigne demandant au LLM de conserver les «JETONS»
 # system_prompt    : prompt de comportement ajouté en tête de chaque requête du profil
 # alert_emails     : destinataires des alertes pour ce profil (voir [alerts])
@@ -243,7 +249,8 @@ default_action = "log"
 [profiles.standard]
 description = "Cloud autorisé, tout est pseudonymisé"
 targets = ["mistral", "anthropic", "openai", "local"]
-images = "strip"
+images = "blank"
+files = { zip = "block", "7z" = "block", rar = "block", exe = "block_alert" }
 default_action = "anonymize"
 placeholder_hint = true
 
@@ -253,6 +260,8 @@ system_prompt = "Tu assistes des professionnels de santé. Réponds en français
 alert_emails = ["rssi@exemple.be"]
 targets = ["mistral", "local"]
 images = "block"
+files = { pdf = "blank", docx = "blank", xlsx = "block_alert", csv = "block_alert" }
+files_default = "block"
 default_action = "anonymize"
 actions = { NISS = "block", IBAN = "block", CARD = "block" }
 placeholder_hint = true

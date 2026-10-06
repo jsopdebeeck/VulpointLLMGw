@@ -1,7 +1,13 @@
 package main
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"fmt"
+	"image"
+	"image/png"
 	"math/big"
 	"regexp"
 	"sort"
@@ -287,7 +293,10 @@ type Session struct {
 	Stats        map[string]map[string]int // kind -> action -> count
 	Debug        bool                      // record every detected value (debug archive)
 	BlockedFiles []string                  // names of the files refused by the profile
-	cur          string                    // part of the request being processed (debug)
+	AlertFiles   []string                  // names of the refused files that trigger an email alert
+	FileLog      []FileEvent               // files and images to record in the file log (30 days)
+	api          string
+	cur          string // part of the request being processed (debug)
 	Events       map[string]*DebugEvent
 	Anon         int
 	Blocked      int
@@ -562,6 +571,7 @@ const hintText = "Note : certaines données ont été pseudonymisées et remplac
 
 // Process anonymizes a request body in place (both API formats).
 func (s *Session) Process(body map[string]any, api string) {
+	s.api = api
 	s.media(body)
 	walk(body, 0, s.docMarkers)
 	walk(body, 0, s.learnFrom)
@@ -677,7 +687,7 @@ var mimeExt = map[string]string{"application/pdf": "pdf", "image/png": "png", "i
 func fileOf(m map[string]any, typ string) (string, string) {
 	var name, mime string
 	look := func(x map[string]any) {
-		for _, k := range []string{"filename", "file_name", "name", "title"} {
+		for _, k := range []string{"gw_name", "filename", "file_name", "name", "title"} {
 			if v, _ := x[k].(string); v != "" && name == "" {
 				name = v
 			}
@@ -716,35 +726,152 @@ func fileOf(m map[string]any, typ string) (string, string) {
 	return name, ext
 }
 
-func (s *Session) fileBlocked(ext string) bool {
-	for _, e := range s.prof.BlockedFiles {
-		if e == ext {
-			return true
+// FileEvent: one file or image seen in a request, as written to the file log (never its content).
+type FileEvent struct {
+	Kind, Name, Ext, SHA, Action string
+	Size                         int
+}
+
+// fileAction: what the profile does with a file of this extension. An extension listed in
+// files wins; otherwise images follow the image policy and the other files files_default.
+func (s *Session) fileAction(kind, ext string) string {
+	if a, ok := s.prof.Files[ext]; ok && ext != "" {
+		return a
+	}
+	if kind == "IMAGE" || imageExts[ext] {
+		return s.prof.Images // pass | blank | block
+	}
+	return s.prof.FilesDefault
+}
+
+var imageExts = map[string]bool{"png": true, "jpg": true, "gif": true, "webp": true, "heic": true}
+
+var statAction = map[string]string{"pass": "pass", "pass_log": "pass", "blank": "strip", "block": "block", "block_alert": "block"}
+
+// file applies the action to one file: counters, debug event, file log, block list.
+// It returns the action so the caller can replace the content when it is "blank".
+func (s *Session) file(kind, name, ext string, content []byte) string {
+	act := s.fileAction(kind, ext)
+	st := statAction[act]
+	s.count(kind, st)
+	s.event(kind, st, name, "")
+	if act != "pass" && act != "blank" {
+		e := FileEvent{Kind: kind, Name: name, Ext: ext, Action: act, Size: len(content)}
+		if len(content) > 0 {
+			h := sha256.Sum256(content)
+			e.SHA = hex.EncodeToString(h[:])
+		}
+		s.FileLog = append(s.FileLog, e)
+	}
+	if st == "block" {
+		s.BlockedFiles = append(s.BlockedFiles, name)
+		if act == "block_alert" {
+			s.AlertFiles = append(s.AlertFiles, name)
 		}
 	}
-	return false
+	return act
 }
 
-func (s *Session) blockFile(name string) {
-	s.count("FILE", "block")
-	s.event("FILE", "block", name, "")
-	s.BlockedFiles = append(s.BlockedFiles, name)
-}
+// documents attached in the chat portal travel as extracted text between these markers
+var (
+	reDocMarker = regexp.MustCompile(`--- Document joint : (.+?) ---`)
+	reDocBlock  = regexp.MustCompile(`(?s)(--- Document joint : (.+?) ---\n)(.*?)(\n--- Fin du document ---)`)
+)
 
-// documents attached in the chat portal travel as extracted text with this marker
-var reDocMarker = regexp.MustCompile(`--- Document joint : (.+?) ---`)
+const blankDoc = "[contenu remplacé par le gateway]"
+
+func extOf(name string) string {
+	if i := strings.LastIndex(name, "."); i >= 0 && i < len(name)-1 {
+		return normExt(name[i+1:])
+	}
+	return ""
+}
 
 func (s *Session) docMarkers(t string) string {
-	if len(s.prof.BlockedFiles) == 0 || !strings.Contains(t, "--- Document joint") {
+	if !strings.Contains(t, "--- Document joint") {
 		return t
 	}
-	for _, m := range reDocMarker.FindAllStringSubmatch(t, -1) {
-		name := strings.TrimSpace(m[1])
-		if i := strings.LastIndex(name, "."); i >= 0 && s.fileBlocked(normExt(name[i+1:])) {
-			s.blockFile(name)
+	t = reDocBlock.ReplaceAllStringFunc(t, func(m string) string {
+		g := reDocBlock.FindStringSubmatch(m)
+		name := strings.TrimSpace(g[2])
+		if s.file("FILE", name, extOf(name), []byte(g[3])) == "blank" {
+			return g[1] + blankDoc + g[4]
 		}
+		return m
+	})
+	// markers without an end marker (other clients): the extension is all we can check
+	for _, ix := range reDocMarker.FindAllStringSubmatchIndex(t, -1) {
+		if strings.Contains(t[ix[1]:], "--- Fin du document ---") {
+			continue
+		}
+		name := strings.TrimSpace(t[ix[2]:ix[3]])
+		s.file("FILE", name, extOf(name), nil)
 	}
 	return t
+}
+
+// fileBytes decodes the inline content of a file or image part (data: URL or base64), if any.
+func fileBytes(m map[string]any, typ string) []byte {
+	var b []byte
+	look := func(x map[string]any) {
+		for _, k := range []string{"url", "file_data", "data", "image_url"} {
+			v, _ := x[k].(string)
+			if v == "" || b != nil {
+				continue
+			}
+			if strings.HasPrefix(v, "data:") {
+				if i := strings.Index(v, ","); i > 0 {
+					v = v[i+1:]
+				}
+			} else if k == "url" || k == "image_url" {
+				continue
+			}
+			if d, err := base64.StdEncoding.DecodeString(v); err == nil {
+				b = d
+			}
+		}
+	}
+	look(m)
+	for _, k := range []string{typ, "source", "file", "image_url"} {
+		if sub, ok := m[k].(map[string]any); ok {
+			look(sub)
+		}
+	}
+	return b
+}
+
+// whitePNG: a 256×256 white square, sent to the LLM in place of a file or image set to "blank"
+var whitePNG = func() string {
+	img := image.NewGray(image.Rect(0, 0, 256, 256))
+	for i := range img.Pix {
+		img.Pix[i] = 255
+	}
+	var buf bytes.Buffer
+	png.Encode(&buf, img)
+	return base64.StdEncoding.EncodeToString(buf.Bytes())
+}()
+
+// blankPart: the white square in the content-part format of the client's API.
+func (s *Session) blankPart(typ string) map[string]any {
+	uri := "data:image/png;base64," + whitePNG
+	switch {
+	case s.api == "anthropic":
+		return map[string]any{"type": "image", "source": map[string]any{"type": "base64", "media_type": "image/png", "data": whitePNG}}
+	case strings.HasPrefix(typ, "input_"):
+		return map[string]any{"type": "input_image", "image_url": uri}
+	}
+	return map[string]any{"type": "image_url", "image_url": map[string]any{"url": uri}}
+}
+
+// stripGwName removes the file name the chat portal adds for the file log ("gw_name"):
+// it is not part of the LLM APIs.
+func stripGwName(m map[string]any) {
+	delete(m, "gw_name")
+	for _, v := range m {
+		if sub, ok := v.(map[string]any); ok {
+			delete(sub, "gw_name")
+		}
+	}
 }
 
 func (s *Session) media(v any) any {
@@ -757,15 +884,13 @@ func (s *Session) media(v any) any {
 		for i, c := range x {
 			if m, ok := c.(map[string]any); ok {
 				if t, _ := m["type"].(string); mediaKinds[t] != "" {
-					kind := mediaKinds[t]
-					if name, ext := fileOf(m, t); ext != "" && s.fileBlocked(ext) {
-						s.blockFile(name)
-						continue
+					name, ext := fileOf(m, t)
+					stripGwName(m)
+					if name == "" {
+						name = "[" + t + "]"
 					}
-					s.count(kind, s.prof.Images)
-					s.event(kind, s.prof.Images, "["+t+"]", "")
-					if s.prof.Images == "strip" {
-						x[i] = map[string]any{"type": "text", "text": "[" + strings.ToLower(kind) + " retiré(e) par le gateway]"}
+					if s.file(mediaKinds[t], name, ext, fileBytes(m, t)) == "blank" {
+						x[i] = s.blankPart(t)
 					}
 					continue
 				}

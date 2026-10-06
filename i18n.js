@@ -212,11 +212,29 @@
     ["Les 10 dernières, conservées dans ce navigateur.", "The last 10, kept in this browser.", "De laatste 10, bewaard in deze browser."],
     ["Aucune conversation enregistrée", "No saved conversation", "Geen opgeslagen gesprek"], ["Afficher", "Show", "Tonen"], ["Actions", "Actions", "Acties"],
     ["Afficher l'historique", "Show history", "Geschiedenis tonen"], ["Supprimer cette conversation ?", "Delete this conversation?", "Dit gesprek verwijderen?"],
+    // files and images, file log
+    ["Non changée", "Unchanged", "Ongewijzigd"], ["Carré blanc", "White square", "Wit vierkant"], ["Bloquée + journal", "Blocked + log", "Geblokkeerd + log"],
+    ["Transmis + journal", "Sent + log", "Doorgelaten + log"], ["Bloqué + journal", "Blocked + log", "Geblokkeerd + log"], ["Bloqué + alerte + journal", "Blocked + alert + log", "Geblokkeerd + alarm + log"],
+    ["→ Fichiers", "→ Files", "→ Bestanden"], ["IMAGE", "IMAGE", "AFBEELDING"], ["Journal des fichiers", "File log", "Bestandslogboek"], ["Fichiers et images", "Files and images", "Bestanden en afbeeldingen"],
+    ["Fichiers et images transmis, remplacés ou bloqués, par utilisateur : nom, taille, empreinte et action.", "Files and images sent, replaced or blocked, per user: name, size, fingerprint and action.", "Doorgestuurde, vervangen of geblokkeerde bestanden en afbeeldingen, per gebruiker: naam, grootte, vingerafdruk en actie."],
+    ["Action par profil et par extension, pour un fichier joint via l'API, un document joint dans le chat ou une image.", "Action per profile and per extension, for a file attached through the API, a document attached in the chat or an image.", "Actie per profiel en per extensie, voor een bestand via de API, een document in de chat of een afbeelding."],
+    ["Transmis + journal : envoyé tel quel, l'événement est consigné · Carré blanc : remplacé par un carré blanc avant l'envoi vers le LLM (zone non fiable) · Bloqué + journal : requête refusée (violation de type FILE) · Bloqué + alerte + journal : refusée, et alerte email aux destinataires « Alerter » du profil.", "Sent + log: sent as is, the event is recorded · White square: replaced by a white square before being sent to the LLM (untrusted zone) · Blocked + log: request refused (FILE violation) · Blocked + alert + log: refused, and email alert to the profile's « Alert » recipients.", "Doorgelaten + log: ongewijzigd verstuurd, de gebeurtenis wordt vastgelegd · Wit vierkant: vervangen door een wit vierkant vóór verzending naar de LLM (onvertrouwde zone) · Geblokkeerd + log: verzoek geweigerd (overtreding FILE) · Geblokkeerd + alarm + log: geweigerd, en e-mailwaarschuwing naar de ontvangers « Waarschuwen » van het profiel."],
+    ["Le journal des fichiers (nom, extension, taille, empreinte SHA-256) est conservé 30 jours, même sans mode Debug ; le contenu n'est jamais stocké. Les images sans règle d'extension suivent le réglage « Images » du profil. Entre parenthèses et en gris : l'action par défaut du profil.", "The file log (name, extension, size, SHA-256 fingerprint) is kept 30 days, even without Debug mode; the content is never stored. Images without an extension rule follow the profile's « Images » setting. In brackets and grey: the profile's default action.", "Het bestandslogboek (naam, extensie, grootte, SHA-256-vingerafdruk) wordt 30 dagen bewaard, ook zonder Debug-modus; de inhoud wordt nooit opgeslagen. Afbeeldingen zonder extensieregel volgen de instelling « Afbeeldingen » van het profiel. Tussen haakjes en in het grijs: de standaardactie van het profiel."],
+    ["Extension", "Extension", "Extensie"], ["Images (sans règle d'extension)", "Images (no extension rule)", "Afbeeldingen (zonder extensieregel)"], ["Autres fichiers (par défaut)", "Other files (default)", "Andere bestanden (standaard)"],
+    ["+ Extension", "+ Extension", "+ Extensie"], ["Extension invalide", "Invalid extension", "Ongeldige extensie"], ["Fichier", "File", "Bestand"], ["Image", "Image", "Afbeelding"], ["SHA-256", "SHA-256", "SHA-256"],
+    ["images remplacées par un carré blanc", "images replaced by a white square", "afbeeldingen vervangen door een wit vierkant"],
+    ["Données sensibles pseudonymisées avant envoi · images remplacées par un carré blanc", "Sensitive data pseudonymised before sending · images replaced by a white square", "Gevoelige gegevens gepseudonimiseerd vóór verzending · afbeeldingen vervangen door een wit vierkant"],
   ];
 
   // dynamic texts: [regex on the French text, English, Dutch] (string with $1… or function)
   const tr = s => T(s);
   const R = [
+    [/^(.+) par défaut · (\d+) extension\(s\) spécifique\(s\)$/, (m, a, n) => `${tr(a)} by default · ${n} specific extension(s)`, (m, a, n) => `${tr(a)} standaard · ${n} specifieke extensie(s)`],
+    [/^\((.+)\)$/, (m, a) => `(${tr(a)})`, (m, a) => `(${tr(a)})`],
+    [/^Par défaut : (.+)$/, (m, a) => `Default: ${tr(a)}`, (m, a) => `Standaard: ${tr(a)}`],
+    [/^images : (.+)$/, (m, a) => `images: ${tr(a)}`, (m, a) => `afbeeldingen: ${tr(a)}`],
+    [/^(\d+) événement\(s\), conservés 30 jours, même sans mode Debug\. Le contenu des fichiers n'est jamais stocké\.$/, "$1 event(s), kept 30 days, even without Debug mode. File content is never stored.", "$1 gebeurtenis(sen), 30 dagen bewaard, ook zonder Debug-modus. De inhoud van bestanden wordt nooit opgeslagen."],
+    [/^([\d.]+) (o|ko|Mo)$/, (m, n, u) => `${n} ${{ o: "B", ko: "KB", Mo: "MB" }[u]}`, (m, n, u) => `${n} ${{ o: "B", ko: "kB", Mo: "MB" }[u]}`],
     [/^(.+) · LLMGW$/, (m, a) => `${tr(a)} · LLMGW`, (m, a) => `${tr(a)} · LLMGW`],
     [/^(:\s*)?rôle (.+)$/, "$1role $2", "$1rol $2"], [/^(:\s*)?groupe (.+)$/, "$1group $2", "$1groep $2"],
     [/^sinon (.+)$/, (m, a) => `otherwise ${tr(a)}`, (m, a) => `anders ${tr(a)}`],

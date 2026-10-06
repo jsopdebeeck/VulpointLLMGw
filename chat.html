@@ -179,7 +179,7 @@ async function login() {
   me = await r.json();
   $("#login").hidden = true; for (const id of ["#top", "#log", "#foot", "#side"]) $(id).hidden = false;
   $("#who").textContent = `${me.user} · profil ${me.profile}`;
-  const imgs = { pass: "images transmises", strip: "images retirées avant envoi", block: "images interdites" }[me.images];
+  const imgs = { pass: "images transmises", blank: "images remplacées par un carré blanc", block: "images interdites" }[me.images];
   $("#policy").textContent = `Données sensibles pseudonymisées avant envoi · ${imgs}`;
   // one group per allowed LLM; targets without a key are listed as unavailable
   const ids = [];
@@ -230,7 +230,6 @@ async function docxText(buf) {
 }
 async function addFile(f) {
   let ext = (f.name.includes(".") ? f.name.split(".").pop() : "").toLowerCase(); if (ext === "jpeg") ext = "jpg";
-  if (ext && (me?.blocked_files || []).includes(ext)) { pending.push({ name: f.name, error: `fichiers .${ext} interdits par votre profil` }); renderAtts(); return; }
   const a = { name: f.name, size: f.size, loading: true }; pending.push(a); renderAtts();
   try {
     if (f.type.startsWith("image/")) {
@@ -363,7 +362,7 @@ function apiMessages() {
     let text = m.text;
     for (const a of m.atts || []) if (a.kind === "doc") text += `\n\n--- Document joint : ${a.name} ---\n${a.text}\n--- Fin du document ---`;
     const imgs = (m.atts || []).filter(a => a.kind === "image" && a.data);
-    return imgs.length ? { role: "user", content: [{ type: "text", text }, ...imgs.map(a => ({ type: "image_url", image_url: { url: a.data } }))] } : { role: "user", content: text };
+    return imgs.length ? { role: "user", content: [{ type: "text", text }, ...imgs.map(a => ({ type: "image_url", image_url: { url: a.data, gw_name: a.name } }))] } : { role: "user", content: text };
   });
 }
 async function send() {

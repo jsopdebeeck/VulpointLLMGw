@@ -39,7 +39,7 @@ type Alert struct {
 	User, Profile, Target, Model, Detail string
 }
 
-var alertLabels = map[string]string{"violation": "Violation (requête bloquée)", "quota": "Quota atteint", "error": "Erreur LLM"}
+var alertLabels = map[string]string{"file": "Fichier bloqué", "violation": "Violation (requête bloquée)", "quota": "Quota atteint", "error": "Erreur LLM"}
 
 type Alerter struct {
 	g       *Gateway
@@ -53,7 +53,8 @@ func NewAlerter(g *Gateway) *Alerter {
 }
 
 // FromRec turns a finished request into an alert, if it deserves one.
-func (a *Alerter) FromRec(rec *Rec, kinds string) {
+// files: refused files whose rule is block_alert; they are reported even if on_violation is off.
+func (a *Alerter) FromRec(rec *Rec, kinds string, files []string) {
 	cfg := a.g.C()
 	ac := cfg.Alerts
 	if !ac.Enabled {
@@ -61,6 +62,8 @@ func (a *Alerter) FromRec(rec *Rec, kinds string) {
 	}
 	al := Alert{TS: rec.TS, User: rec.User, Profile: rec.Profile, Target: rec.Target, Model: rec.Model}
 	switch {
+	case len(files) > 0:
+		al.Kind, al.Detail = "file", "fichier(s) bloqué(s) : "+strings.Join(files, ", ")
 	case rec.Err == "policy" && ac.OnViolation:
 		al.Kind, al.Detail = "violation", "données bloquées : "+kinds
 	case rec.Err == "quota" && ac.OnQuota:

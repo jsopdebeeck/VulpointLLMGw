@@ -227,17 +227,21 @@ func (g *Gateway) handleLLM(api string) http.HandlerFunc {
 				go g.store.AddDebug(dbg, cfg.Debug.RetentionHours)
 			}
 			g.store.Add(rec)
+			if sess != nil && len(sess.FileLog) > 0 {
+				go g.store.AddFileLog(t0, rec.User, rec.Profile, rec.Target, rec.Model, sess.FileLog)
+			}
 			if g.alerts != nil {
 				kinds := ""
+				var alertFiles []string
 				if sess != nil {
-					kinds = sess.BlockedKinds()
+					kinds, alertFiles = sess.BlockedKinds(), sess.AlertFiles
 				}
 				for k := range rec.Dets {
 					if strings.HasPrefix(k, "QUOTA_") && rec.Err == "quota" {
 						kinds = strings.TrimPrefix(k, "QUOTA_")
 					}
 				}
-				g.alerts.FromRec(rec, kinds)
+				g.alerts.FromRec(rec, kinds, alertFiles)
 			}
 			log.Printf("%s %s → %s/%s %d in=%dms gw=%dms llm=%dms tok=%d/%d conv=%d viol=%d %s",
 				api, rec.User, rec.Target, rec.Model, rec.Status, rec.InMs, rec.GwMs, rec.UpMs, rec.TokIn, rec.TokOut, rec.Anon, rec.Blocked, rec.Err)
@@ -726,7 +730,7 @@ func (g *Gateway) handleMe(w http.ResponseWriter, r *http.Request) {
 	}
 	us := g.meter.Snapshot()["u:"+name]
 	writeJSON(w, map[string]any{"user": name, "description": u.Description, "profile": u.Profile,
-		"profileDescription": p.Description, "images": p.Images, "blocked_files": p.BlockedFiles, "targets": ts,
+		"profileDescription": p.Description, "images": p.Images, "files": p.Files, "files_default": p.FilesDefault, "targets": ts,
 		"quota": cfg.EffectiveQuota(u), "usage": us})
 }
 

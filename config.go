@@ -91,8 +91,10 @@ func (t *Target) Allows(model string) bool {
 type Profile struct {
 	Description   string            `toml:"description,omitempty"`
 	Targets       []string          `toml:"targets"`                 // allowed LLMs, in priority / fallback order
-	Images        string            `toml:"images"`                  // pass | strip | block
-	BlockedFiles  []string          `toml:"blocked_files,omitempty"` // file extensions refused (pdf, docx, zip…)
+	Images        string            `toml:"images"`                  // pass | blank (white square) | block (+ log)
+	Files         map[string]string `toml:"files,omitempty"`         // file extension -> pass_log | blank | block | block_alert
+	FilesDefault  string            `toml:"files_default,omitempty"` // extensions not listed in Files (default pass_log)
+	BlockedFiles  []string          `toml:"blocked_files,omitempty"` // former setting, read as files[ext] = "block"
 	DefaultAction string            `toml:"default_action"`
 	Actions       map[string]string `toml:"actions,omitempty"` // detector kind -> anonymize | block | log | off
 	Hint          bool              `toml:"placeholder_hint,omitempty"`
@@ -143,7 +145,8 @@ type DetectorCfg struct {
 
 var (
 	validActions = map[string]bool{"anonymize": true, "block": true, "log": true, "off": true}
-	validMedia   = map[string]bool{"pass": true, "strip": true, "block": true}
+	validMedia   = map[string]bool{"pass": true, "blank": true, "block": true}
+	validFileAct = map[string]bool{"pass_log": true, "blank": true, "block": true, "block_alert": true}
 	kindRe       = regexp.MustCompile(`^[A-Z][A-Z0-9_]*$`)
 )
 
@@ -262,18 +265,32 @@ func ParseConfig(data []byte, base string) (*Config, error) {
 		if err := checkQuota(p.Quota); err != nil {
 			return nil, fmt.Errorf("profil %q : %w", n, err)
 		}
-		var exts []string
-		for _, e := range p.BlockedFiles {
+		files := map[string]string{}
+		for e, a := range p.Files {
 			if e = normExt(e); e != "" {
-				exts = append(exts, e)
+				if !validFileAct[a] {
+					return nil, fmt.Errorf("profil %q : fichiers .%s : action invalide %q (pass_log, blank, block, block_alert)", n, e, a)
+				}
+				files[e] = a
 			}
 		}
-		p.BlockedFiles = exts
-		if p.Images == "" {
-			p.Images = "strip"
+		for _, e := range p.BlockedFiles {
+			if e = normExt(e); e != "" && files[e] == "" {
+				files[e] = "block"
+			}
+		}
+		p.Files, p.BlockedFiles = files, nil
+		if p.FilesDefault == "" {
+			p.FilesDefault = "pass_log"
+		}
+		if !validFileAct[p.FilesDefault] {
+			return nil, fmt.Errorf("profil %q : files_default invalide (pass_log, blank, block, block_alert)", n)
+		}
+		if p.Images == "" || p.Images == "strip" {
+			p.Images = "blank"
 		}
 		if !validMedia[p.Images] {
-			return nil, fmt.Errorf("profil %q : images doit valoir pass, strip ou block", n)
+			return nil, fmt.Errorf("profil %q : images doit valoir pass, blank ou block", n)
 		}
 		if p.DefaultAction == "" {
 			p.DefaultAction = "anonymize"
