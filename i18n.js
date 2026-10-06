@@ -207,6 +207,11 @@
     ["ex. Réponds en français, ton professionnel. Ne donne jamais de conseil médical ou juridique définitif.", "e.g. Answer in English, professional tone. Never give definitive medical or legal advice.", "bv. Antwoord in het Nederlands, professionele toon. Geef nooit definitief medisch of juridisch advies."],
     ["un terme par ligne ; un terme en MAJUSCULES (sigle) n'est reconnu qu'en majuscules", "one term per line; a term in CAPITALS (acronym) is only matched in capitals", "één term per regel; een term in HOOFDLETTERS (acroniem) wordt alleen in hoofdletters herkend"],
     ["écrit dans config.toml", "written to config.toml", "geschreven in config.toml"],
+    // chat history panel
+    ["Conversations", "Conversations", "Gesprekken"], ["+ Nouvelle conversation", "+ New conversation", "+ Nieuw gesprek"],
+    ["Les 10 dernières, conservées dans ce navigateur.", "The last 10, kept in this browser.", "De laatste 10, bewaard in deze browser."],
+    ["Aucune conversation enregistrée", "No saved conversation", "Geen opgeslagen gesprek"], ["Afficher", "Show", "Tonen"], ["Actions", "Actions", "Acties"],
+    ["Afficher l'historique", "Show history", "Geschiedenis tonen"], ["Supprimer cette conversation ?", "Delete this conversation?", "Dit gesprek verwijderen?"],
   ];
 
   // dynamic texts: [regex on the French text, English, Dutch] (string with $1… or function)

@@ -66,6 +66,32 @@ footer { border-top: 1px solid var(--border); padding: 10px 16px 14px; backgroun
 .empty b { color: var(--text); display: block; font-size: 18px; margin-bottom: 6px; }
 .cursor::after { content: "▍"; animation: blink 1s steps(2) infinite; color: var(--accent); }
 @keyframes blink { 50% { opacity: 0; } }
+/* conversation history (left panel) */
+#shell { flex: 1; display: flex; min-height: 0; }
+#side { width: 250px; flex: none; border-right: 1px solid var(--border); background: var(--bg); display: flex; flex-direction: column; min-height: 0; }
+#side h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 14px 14px 6px; font-weight: 600; }
+#convs { flex: 1; overflow-y: auto; padding: 0 8px 10px; }
+.conv { position: relative; display: flex; align-items: center; gap: 4px; border-radius: 8px; padding: 2px 2px 2px 0; }
+.conv:hover, .conv.cur { background: var(--surface); }
+.conv.cur { box-shadow: inset 2px 0 0 var(--accent); }
+.conv .open { flex: 1; min-width: 0; text-align: left; border: 0; background: none; cursor: pointer; padding: 6px 8px; }
+.conv .t { display: block; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.conv .d { display: block; font-size: 11px; color: var(--muted); }
+.conv .more { border: 0; background: none; cursor: pointer; color: var(--muted); padding: 4px 8px; border-radius: 6px; font-size: 16px; line-height: 1; }
+.conv .more:hover, .conv .more:focus-visible { color: var(--text); background: var(--bg); }
+.menu { position: absolute; right: 4px; top: 34px; z-index: 5; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 6px 20px rgba(0,0,0,.15); padding: 4px; min-width: 150px; }
+.menu button { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 7px 10px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+.menu button:hover, .menu button:focus-visible { background: var(--bg); }
+.menu .danger { color: var(--critical); }
+#side .none { font-size: 12px; color: var(--muted); padding: 6px 10px; }
+#side .note { font-size: 11px; color: var(--muted); padding: 8px 14px 12px; border-top: 1px solid var(--border); }
+#mainc { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
+#toggleSide { display: none; }
+@media (max-width: 760px) {
+  #side { position: fixed; top: 0; bottom: 0; left: 0; z-index: 10; box-shadow: 0 0 30px rgba(0,0,0,.3); }
+  #side:not(.show) { display: none; }
+  #toggleSide { display: inline-block; }
+}
 </style>
 </head>
 <body>
@@ -81,6 +107,7 @@ footer { border-top: 1px solid var(--border); padding: 10px 16px 14px; backgroun
 </div>
 
 <header id="top" hidden>
+  <button class="btn" id="toggleSide" title="Afficher l'historique" aria-label="Afficher l'historique">☰</button>
   <h1>Gateway Chat</h1>
   <span class="who" id="who"></span>
   <span class="spacer"></span>
@@ -91,6 +118,13 @@ footer { border-top: 1px solid var(--border); padding: 10px 16px 14px; backgroun
   <button class="btn" id="theme" title="Thème">◐</button>
   <button class="btn" id="logout">Déconnexion</button>
 </header>
+<div id="shell">
+<aside id="side" hidden aria-label="Conversations">
+  <h3>Conversations</h3>
+  <div id="convs"></div>
+  <div class="note">Les 10 dernières, conservées dans ce navigateur.</div>
+</aside>
+<div id="mainc">
 <main id="log" hidden><div class="wrap" id="msgs"></div></main>
 <footer id="foot" hidden>
   <div class="composer" id="composer">
@@ -106,6 +140,8 @@ footer { border-top: 1px solid var(--border); padding: 10px 16px 14px; backgroun
     </div>
   </div>
 </footer>
+</div>
+</div>
 
 <script src="/i18n.js"></script>
 <script>
@@ -114,7 +150,8 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const ss = { get(k) { try { return sessionStorage.getItem(k) } catch { return null } }, set(k, v) { try { v == null ? sessionStorage.removeItem(k) : sessionStorage.setItem(k, v) } catch {} } };
 const ls = { get(k) { try { return localStorage.getItem(k) } catch { return null } }, set(k, v) { try { localStorage.setItem(k, v) } catch {} } };
-let key = ss.get("gwkey") || "", me = null, history = [], pending = [], ctrl = null;
+let key = ss.get("gwkey") || "", me = null, history = [], pending = [], ctrl = null, convId = ss.get("gwconv") || "";
+const MAX_CONVS = 10;
 // a gateway key (header), or an SSO session (cookie + anti-CSRF header)
 const authHeaders = () => key ? { Authorization: "Bearer " + key } : { "X-LLMGW-Session": "1" };
 async function showLoginPage(msg) {
@@ -140,7 +177,7 @@ async function login() {
     return showLoginPage(msg);
   }
   me = await r.json();
-  $("#login").hidden = true; for (const id of ["#top", "#log", "#foot"]) $(id).hidden = false;
+  $("#login").hidden = true; for (const id of ["#top", "#log", "#foot", "#side"]) $(id).hidden = false;
   $("#who").textContent = `${me.user} · profil ${me.profile}`;
   const imgs = { pass: "images transmises", strip: "images retirées avant envoi", block: "images interdites" }[me.images];
   $("#policy").textContent = `Données sensibles pseudonymisées avant envoi · ${imgs}`;
@@ -159,11 +196,11 @@ async function login() {
   else $("#modelSel").value = ids[0] || "";
   syncModel();
   try { history = JSON.parse(ss.get("gwhist") || "[]"); } catch { history = []; }
-  renderAll(); $("#input").focus();
+  renderAll(); renderConvs(); $("#input").focus();
 }
 $("#loginf").onsubmit = e => { e.preventDefault(); key = $("#key").value.trim(); ss.set("gwkey", key); login(); };
 $("#logout").onclick = async () => {
-  ss.set("gwkey", null); ss.set("gwhist", null);
+  ss.set("gwkey", null); ss.set("gwhist", null); ss.set("gwconv", null);
   if (!key) { try { await fetch("/auth/logout", { method: "POST", headers: { "X-LLMGW-Session": "1" } }); } catch {} }
   location.reload();
 };
@@ -252,8 +289,72 @@ function renderAll() {
     : `<div class="empty"><b>Bonjour ${esc(me?.user || "")}</b>Vos messages passent par le gateway : noms, emails, numéros de dossier… sont remplacés par des jetons avant d'atteindre le LLM, puis restaurés dans la réponse.</div>`;
   $("#log").scrollTop = $("#log").scrollHeight;
 }
-function save() { ss.set("gwhist", JSON.stringify(history.map(m => ({ ...m, atts: m.atts?.map(a => ({ name: a.name, kind: a.kind, text: a.text, data: a.kind === "image" ? a.data : undefined })) })))); }
-$("#new").onclick = () => { if (ctrl) ctrl.abort(); history = []; save(); renderAll(); };
+function save() {
+  ss.set("gwhist", JSON.stringify(history.map(m => ({ ...m, atts: m.atts?.map(a => ({ name: a.name, kind: a.kind, text: a.text, data: a.kind === "image" ? a.data : undefined })) }))));
+  archive();
+}
+
+// ---------- conversation history: the last 10, per user, in this browser ----------
+// Images are not kept (too large); a reopened conversation shows their names only.
+const convKey = () => "gwconvs:" + (me?.user || "");
+function loadConvs() { try { return JSON.parse(ls.get(convKey()) || "[]"); } catch { return []; } }
+function storeConvs(list) {
+  for (list = list.slice(0, MAX_CONVS); ; list.pop()) {
+    try { localStorage.setItem(convKey(), JSON.stringify(list)); return; }
+    catch { if (list.length <= 1) return; } // storage full: drop the oldest
+  }
+}
+function archive() {
+  if (!history.some(m => m.role === "user" && !m.streaming)) return;
+  if (!convId) { convId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6); ss.set("gwconv", convId); }
+  const first = history.find(m => m.role === "user");
+  const conv = { id: convId, title: (first?.text || "").replace(/\s+/g, " ").slice(0, 80), ts: Date.now(),
+    history: history.filter(m => !m.streaming).map(m => ({ ...m, atts: m.atts?.map(a => ({ name: a.name, kind: a.kind, text: a.text })) })) };
+  storeConvs([conv, ...loadConvs().filter(c => c.id !== convId)]);
+  renderConvs();
+}
+function renderConvs() {
+  const list = loadConvs();
+  $("#convs").innerHTML = `<button class="btn" id="new2" style="width:100%;margin:2px 0 8px">+ Nouvelle conversation</button>` + (list.length ? list.map(c => `
+    <div class="conv ${c.id === convId ? "cur" : ""}" data-id="${esc(c.id)}">
+      <button class="open" data-act="open"><span class="t" translate="no">${esc(c.title || "…")}</span><span class="d">${new Date(c.ts).toLocaleString(I18N.loc, { dateStyle: "short", timeStyle: "short" })}</span></button>
+      <button class="more" data-act="menu" title="Actions" aria-label="Actions" aria-haspopup="menu">⋯</button>
+    </div>`).join("") : `<div class="none">Aucune conversation enregistrée</div>`);
+}
+function closeMenus() { document.querySelectorAll(".menu").forEach(m => m.remove()); }
+function openConv(id) {
+  const c = loadConvs().find(c => c.id === id); if (!c) return;
+  if (ctrl) ctrl.abort();
+  convId = c.id; ss.set("gwconv", convId); history = c.history || [];
+  ss.set("gwhist", JSON.stringify(history));
+  pending = []; renderAtts(); renderAll(); renderConvs(); $("#side").classList.remove("show"); $("#input").focus();
+}
+function deleteConv(id) {
+  if (!confirm("Supprimer cette conversation ?")) return;
+  storeConvs(loadConvs().filter(c => c.id !== id));
+  if (id === convId) newConv(); else renderConvs();
+}
+function newConv() {
+  if (ctrl) ctrl.abort();
+  history = []; convId = ""; ss.set("gwconv", null); ss.set("gwhist", null);
+  pending = []; renderAtts(); renderAll(); renderConvs(); $("#side").classList.remove("show"); $("#input").focus();
+}
+$("#convs").onclick = e => {
+  if (e.target.closest("#new2")) return newConv();
+  const b = e.target.closest("[data-act]"), row = e.target.closest(".conv"); if (!b || !row) return;
+  const id = row.dataset.id, act = b.dataset.act;
+  if (act === "open") return openConv(id);
+  if (act === "del") { closeMenus(); return deleteConv(id); }
+  if (act === "menu") {
+    const had = row.querySelector(".menu"); closeMenus(); if (had) return;
+    row.insertAdjacentHTML("beforeend", `<div class="menu" role="menu"><button role="menuitem" data-act="open">Afficher</button><button role="menuitem" class="danger" data-act="del">Supprimer</button></div>`);
+    row.querySelector(".menu button").focus();
+  }
+};
+document.addEventListener("click", e => { if (!e.target.closest(".conv")) closeMenus(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeMenus(); });
+$("#toggleSide").onclick = () => $("#side").classList.toggle("show");
+$("#new").onclick = newConv;
 
 // ---------- request ----------
 function apiMessages() {
@@ -261,7 +362,7 @@ function apiMessages() {
     if (m.role === "assistant") return { role: "assistant", content: m.text };
     let text = m.text;
     for (const a of m.atts || []) if (a.kind === "doc") text += `\n\n--- Document joint : ${a.name} ---\n${a.text}\n--- Fin du document ---`;
-    const imgs = (m.atts || []).filter(a => a.kind === "image");
+    const imgs = (m.atts || []).filter(a => a.kind === "image" && a.data);
     return imgs.length ? { role: "user", content: [{ type: "text", text }, ...imgs.map(a => ({ type: "image_url", image_url: { url: a.data } }))] } : { role: "user", content: text };
   });
 }
