@@ -579,13 +579,18 @@ func (g *Gateway) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 	s, err := cfg.resolveSSO(p, claims)
 	if err != nil {
 		log.Printf("sso %s : refusé : %v", p.ID, err)
+		who, _ := claims["email"].(string)
+		if who == "" {
+			who, _ = claims["preferred_username"].(string)
+		}
+		g.audit(&Actor{Name: who}, "connexion refusée", p.display()+" · "+portal(st.Next), err.Error())
 		authFail(w, 403, "Accès refusé : "+err.Error()+". Contactez l'administrateur de la passerelle.")
 		return
 	}
 	s.Exp = time.Now().Add(time.Duration(cfg.Auth.SessionHours) * time.Hour).Unix()
 	g.setCookie(w, sessionCookie, g.seal(s), "/", cfg.Auth.SessionHours*3600)
 	log.Printf("sso %s : %s connecté (profil %q, rôle %q)", p.ID, s.User, s.Profile, s.Role)
-	g.audit(&Actor{Name: s.Email, Role: s.Role}, "connexion", p.display(), fmt.Sprintf("profil %q, rôle %q", s.Profile, s.Role))
+	g.audit(&Actor{Name: s.Email, Role: s.Role}, "connexion", p.display()+" · "+portal(st.Next), fmt.Sprintf("profil %q, rôle %q · ip %s", s.Profile, s.Role, clientIP(r)))
 	http.Redirect(w, r, st.Next, http.StatusFound)
 }
 
@@ -616,4 +621,12 @@ func authFail(w http.ResponseWriter, status int, msg string) {
 	b.WriteString(html.EscapeString(msg))
 	b.WriteString(`</p><p><a href="/chat">Retour au portail</a> · <a href="/dashboard">Dashboard</a></p></body>`)
 	w.Write(b.Bytes())
+}
+
+// portal names the page the SSO sign-in came from, for the audit log.
+func portal(next string) string {
+	if strings.HasPrefix(next, "/chat") {
+		return "Chat"
+	}
+	return "Admin"
 }

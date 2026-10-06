@@ -168,6 +168,8 @@
     ["Ce compte existe déjà", "This account already exists", "Dit account bestaat al"], ["Adresse email invalide", "Invalid email address", "Ongeldig e-mailadres"], ["Adresse email du compte (celle de sa connexion SSO)", "Account email address (the one used for SSO sign-in)", "E-mailadres van het account (dat van de SSO-aanmelding)"],
     // audit
     ["Événements", "Events", "Gebeurtenissen"], ["Date", "Date", "Datum"], ["Acteur", "Actor", "Actor"], ["Détail", "Detail", "Detail"], ["Aucun événement", "No event", "Geen gebeurtenissen"],
+    ["connexion refusée", "sign-in refused", "aanmelding geweigerd"], ["inconnu", "unknown", "onbekend"],
+    ["Chat (clé)", "Chat (key)", "Chat (sleutel)"], ["Admin (jeton)", "Admin (token)", "Admin (token)"], ["Application (clé)", "Application (key)", "Toepassing (sleutel)"],
     ["connexion", "sign-in", "aanmelding"], ["configuration enregistrée", "configuration saved", "configuratie opgeslagen"], ["utilisateurs enregistrés", "users saved", "gebruikers opgeslagen"], ["consultation Debug", "Debug view", "Debug-raadpleging"],
     ["archive Debug vidée", "Debug archive emptied", "Debug-archief leeggemaakt"], ["mémoire des noms vidée", "name memory emptied", "namengeheugen gewist"], ["test des alertes", "alert test", "waarschuwingstest"], ["configuration rechargée", "configuration reloaded", "configuratie herladen"],
     // toasts, prompts and confirmations
@@ -266,6 +268,11 @@
     [/^p95 (.+) · IN moy\. (.+)$/, "p95 $1 · avg. IN $2", "p95 $1 · gem. IN $2"],
     [/^(\d+) req$/, "$1 req", "$1 verz."],
     [/^profil : (.+)$/, "profile: $1", "profiel: $1"],
+    // sign-in records of the audit log
+    [/^profil "([^"]*)"(, rôle "([^"]*)")? · ip (.+)$/, (m, p, x, r, rest) => `profile "${p}"${x ? `, role "${r}"` : ""} · ip ${rest}`, (m, p, x, r, rest) => `profiel "${p}"${x ? `, rol "${r}"` : ""} · ip ${rest}`],
+    [/^clé invalide · ip (.+)$/, "invalid key · ip $1", "ongeldige sleutel · ip $1"],
+    [/^jeton invalide · ip (.+)$/, "invalid token · ip $1", "ongeldig token · ip $1"],
+    [/^utilisateur désactivé · ip (.+)$/, "user disabled · ip $1", "gebruiker uitgeschakeld · ip $1"],
     [/^(.+) · profil (.+)$/, "$1 · profile $2", "$1 · profiel $2"],
     [/^Bonjour (.+)$/, "Hello $1", "Hallo $1"],
     [/^(.+) \(pas de clé\)$/, "$1 (no key)", "$1 (geen sleutel)"],

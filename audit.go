@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -95,6 +97,9 @@ func (g *Gateway) guard(allow func(*Actor) bool, h http.HandlerFunc) http.Handle
 	return func(w http.ResponseWriter, r *http.Request) {
 		a := g.actor(r)
 		if a == nil {
+			if r.Header.Get("X-Admin-Token") != "" {
+				g.auditOnce("fail:adm:"+clientIP(r), 5*time.Minute, &Actor{Name: "inconnu"}, "connexion refusée", "Admin (jeton)", "jeton invalide · ip "+clientIP(r))
+			}
 			http.Error(w, "connexion administrateur requise", 401)
 			return
 		}
@@ -114,7 +119,67 @@ var (
 
 func (g *Gateway) handleWhoami(w http.ResponseWriter, r *http.Request) {
 	a := g.actor(r)
+	if a.Name == "jeton d'administration" { // SSO sign-ins are recorded by the callback
+		g.auditOnce("adm:"+clientIP(r), 30*time.Minute, a, "connexion", "Admin (jeton)", "ip "+clientIP(r))
+	}
 	writeJSON(w, map[string]any{"name": a.Name, "role": a.Role, "debug": a.Debug})
+}
+
+// ---------- sign-ins ----------
+// Keys and the admin token have no sign-in step on the server: a sign-in is recorded when
+// the caller shows up (chat window, dashboard) or comes back after a pause (applications),
+// and refused attempts at most once per address and per 5 minutes.
+
+var loginSeen sync.Map // throttle key → unix time of the last record
+
+func (g *Gateway) auditOnce(key string, gap time.Duration, a *Actor, action, target, detail string) {
+	now := time.Now().Unix()
+	if v, ok := loginSeen.Load(key); ok && now-v.(int64) < int64(gap/time.Second) {
+		return
+	}
+	loginSeen.Store(key, now)
+	g.audit(a, action, target, detail)
+}
+
+func clientIP(r *http.Request) string {
+	if h, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		return h
+	}
+	return r.RemoteAddr
+}
+
+// noteSignIn records the use of a gateway key: the chat window (/v1/me, every 30 min at most)
+// or an application (Hermes, Claude Code…: first request after 8 hours of silence).
+// Calls made by the chat page itself are covered by /v1/me.
+func (g *Gateway) noteSignIn(r *http.Request, name string, u *User) {
+	chat := r.URL.Path == "/v1/me"
+	if !chat && (r.Header.Get("Sec-Fetch-Site") != "" || r.Header.Get("Origin") != "") {
+		return
+	}
+	ch, gap := "Application (clé)", 8*time.Hour
+	if chat {
+		ch, gap = "Chat (clé)", 30*time.Minute
+	}
+	ip := clientIP(r)
+	switch {
+	case u != nil:
+		detail := fmt.Sprintf("profil %q · ip %s", u.Profile, ip)
+		if ua := r.Header.Get("User-Agent"); !chat && ua != "" {
+			detail += " · " + truncate(ua, 60)
+		}
+		g.auditOnce("ok:"+ch+":"+name, gap, &Actor{Name: name}, "connexion", ch, detail)
+	case name != "":
+		g.auditOnce("off:"+ch+":"+name, 5*time.Minute, &Actor{Name: name}, "connexion refusée", ch, "utilisateur désactivé · ip "+ip)
+	default:
+		g.auditOnce("fail:"+ch+":"+ip, 5*time.Minute, &Actor{Name: "inconnu"}, "connexion refusée", ch, "clé invalide · ip "+ip)
+	}
+}
+
+func truncate(s string, n int) string {
+	if r := []rune(s); len(r) > n {
+		return string(r[:n]) + "…"
+	}
+	return s
 }
 
 // ---------- audit log ----------

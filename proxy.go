@@ -112,11 +112,14 @@ func (g *Gateway) auth(cfg *Config, r *http.Request) (string, *User) {
 	}
 	name, ok := cfg.keys[key]
 	if !ok {
+		g.noteSignIn(r, "", nil)
 		return "", nil
 	}
 	if u := cfg.Users[name]; !u.Disabled {
+		g.noteSignIn(r, name, u)
 		return name, u
 	}
+	g.noteSignIn(r, name, nil)
 	return name, nil
 }
 

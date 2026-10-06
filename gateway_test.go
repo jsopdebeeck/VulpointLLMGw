@@ -1080,3 +1080,51 @@ files = { zip = "block_alert" }
 		t.Errorf("migration : %+v", p)
 	}
 }
+
+func TestSignInAudit(t *testing.T) {
+	gw, _, _, g := setup(t)
+	loginSeen.Range(func(k, _ any) bool { loginSeen.Delete(k); return true })
+	g.C().Server.AdminToken = "tok"
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /v1/me", g.handleMe)
+	mux.HandleFunc("GET /admin/api/me", g.staff(g.handleWhoami))
+	web := httptest.NewServer(mux)
+	defer web.Close()
+	get := func(path string, h map[string]string) int {
+		req, _ := http.NewRequest("GET", web.URL+path, nil)
+		for k, v := range h {
+			req.Header.Set(k, v)
+		}
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		r.Body.Close()
+		return r.StatusCode
+	}
+	alice := map[string]string{"Authorization": "Bearer gw-alice-remplace-moi"}
+	get("/v1/me", alice)
+	get("/v1/me", alice) // same sign-in: recorded once
+	get("/v1/me", map[string]string{"Authorization": "Bearer gw-faux"})
+	get("/admin/api/me", map[string]string{"X-Admin-Token": "tok"})
+	get("/admin/api/me", map[string]string{"X-Admin-Token": "mauvais"})
+	// an application (no browser headers) and a call from the chat page (browser: not recorded)
+	post(t, gw.URL+"/v1/chat/completions", "gw-alice-remplace-moi", map[string]any{"model": "mistral-large", "messages": []any{map[string]any{"role": "user", "content": "bonjour"}}}).Body.Close()
+
+	rows, err := g.store.db.Query(`SELECT actor, action, target FROM audit ORDER BY id`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var got []string
+	for rows.Next() {
+		var a, b, c string
+		rows.Scan(&a, &b, &c)
+		got = append(got, a+"|"+b+"|"+c)
+	}
+	want := []string{"alice|connexion|Chat (clé)", "inconnu|connexion refusée|Chat (clé)", "jeton d'administration|connexion|Admin (jeton)",
+		"inconnu|connexion refusée|Admin (jeton)", "alice|connexion|Application (clé)"}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("journal des connexions :\n%s\nattendu :\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
