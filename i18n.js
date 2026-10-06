@@ -103,7 +103,7 @@
     ["écrite dans config.toml", "written to config.toml", "geschreven in config.toml"], ["État", "Status", "Status"], ["clé active", "key active", "sleutel actief"], ["aucune clé active", "no active key", "geen actieve sleutel"],
     ["En-têtes HTTP", "HTTP headers", "HTTP-headers"], ["une ligne « nom: valeur »", "one « name: value » line", "één regel « naam: waarde »"], ["Options", "Options", "Opties"], ["tokens en streaming", "tokens when streaming", "tokens bij streaming"],
     ["Pour les LLM qui ne gèrent que le mode JSON simple (DeepSeek…)", "For LLMs that only support plain JSON mode (DeepSeek…)", "Voor LLM's die alleen de eenvoudige JSON-modus ondersteunen (DeepSeek…)"], ["Utilisée par", "Used by", "Gebruikt door"],
-    ["aucun profil", "no profile", "geen profiel"], ["Connexion", "Connection", "Verbinding"], ["« Tester » interroge /models avec la clé enregistrée", "« Test » queries /models with the saved key", "« Testen » vraagt /models op met de opgeslagen sleutel"], ["Aucune cible", "No target", "Geen doel"],
+    ["aucun profil", "no profile", "geen profiel"], ["profils :", "profiles:", "profielen:"], ["Enregistrer d'abord", "Save first", "Eerst opslaan"], ["Connexion", "Connection", "Verbinding"], ["« Tester » interroge /models avec la clé enregistrée", "« Test » queries /models with the saved key", "« Testen » vraagt /models op met de opgeslagen sleutel"], ["Aucune cible", "No target", "Geen doel"],
     // quotas
     ["Vide = illimité. Quand un quota est atteint :", "Empty = unlimited. When a quota is reached:", "Leeg = onbeperkt. Wanneer een quotum bereikt is:"], ["Par profil", "Per profile", "Per profiel"], ["Limite appliquée à", "Limit applied to", "Limiet toegepast op"],
     ["chaque", "each", "elke"], ["utilisateur du profil.", "user of the profile.", "gebruiker van het profiel."], ["Par utilisateur", "Per user", "Per gebruiker"], ["Surcharge le profil champ par champ ; −1 = illimité pour cet utilisateur.", "Overrides the profile field by field; −1 = unlimited for this user.", "Overschrijft het profiel veld per veld; −1 = onbeperkt voor deze gebruiker."],
@@ -224,7 +224,8 @@
     [/^échange #(\d+)$/, "exchange #$1", "uitwisseling #$1"],
     [/^jeton d'administration et SSO (.+)$/, "administration token and SSO $1", "beheertoken en SSO $1"],
     [/^Mis à jour (.+)$/, "Updated $1", "Bijgewerkt $1"],
-    [/^(\d+) utilisateurs?$/, "$1 user(s)", "$1 gebruiker(s)"],
+    [/^(\d+) utilisateurs?(\(s\))?$/, "$1 user(s)", "$1 gebruiker(s)"],
+    [/^défaut \((.+)\)$/, (m, a) => `default (${tr(a)})`, (m, a) => `standaard (${tr(a)})`],
     [/^(\d+) utilisateurs? · SSO (.+)$/, "$1 user(s) · SSO $2", "$1 gebruiker(s) · SSO $2"],
     [/^(.+) par défaut · (\d+) règle\(s\) spécifique\(s\)$/, (m, a, n) => `${tr(a)} by default · ${n} specific rule(s)`, (m, a, n) => `${tr(a)} standaard · ${n} specifieke regel(s)`],
     [/^connectée · (\d+) ms$/, "connected · $1 ms", "verbonden · $1 ms"],

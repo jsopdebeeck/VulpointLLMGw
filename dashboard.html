@@ -714,14 +714,14 @@ function viewTargets() {
     const open = S.tgtOpen.has(n), used = profs.length > 0;
     const st = !saved ? ["", "à enregistrer"] : t.Disabled ? ["", "désactivée"] : tr?.running ? ["run", "test en cours…"] : !tr ? ["", "non testée"]
       : tr.error ? ["ko", "injoignable" + (tr.status ? " (HTTP " + tr.status + ")" : "")] : ["ok", `connectée · ${tr.ms} ms`];
-    const sum = [t.API === "anthropic" ? "Anthropic" : "OpenAI", t.BaseURL, profs.length ? "profils : " + profs.join(", ") : "aucun profil"].filter(Boolean).join(" · ");
+    const sum = [t.API === "anthropic" ? "Anthropic" : "OpenAI", t.BaseURL].filter(Boolean).join(" · "), sumP = profs.length ? `<span>profils :</span> <span translate="no">${esc(profs.join(", "))}</span>` : "<span>aucun profil</span>";
     return `<div class="card pcard ${open ? "open" : ""}">
       <div class="phead" data-act="tgt-toggle" data-n="${esc(n)}" role="button" tabindex="0" aria-expanded="${open}" title="${open ? "Replier" : "Afficher les paramètres"}">
         <span class="chev" aria-hidden="true">▸</span>
         <span class="ldot ${st[0]}" title="${esc(st[1])}" role="img" aria-label="${esc(st[1])}"></span>
         <h3 class="pname ${used ? "on" : "off"}">${esc(n)}</h3>
         <span class="badge" style="${st[0] === "ko" ? "color:var(--critical)" : st[0] === "ok" ? "" : "color:var(--muted)"}">${esc(st[1])}</span>
-        <span class="psum" translate="no">${esc(sum)}</span>
+        <span class="psum"><span translate="no">${esc(sum)}</span> · ${sumP}</span>
         <button class="btn" data-act="tgt-test" data-n="${esc(n)}" ${saved && !t.Disabled ? "" : 'disabled title="Enregistrer d\'abord"'}>Tester</button>
         <button class="icon" data-act="tgt-del" data-n="${esc(n)}" title="Supprimer la cible">✕</button>
       </div>

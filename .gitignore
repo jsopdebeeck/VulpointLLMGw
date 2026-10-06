@@ -7,3 +7,4 @@ config.toml.bak-*
 *.tmp
 .DS_Store
 secrets.env
+client_secret_*.json
