@@ -4,6 +4,8 @@
 
 Version **1.0.1** · release notes in [RELEASE_NOTES.md](RELEASE_NOTES.md) (French) · built-in documentation at `/docs/` (administration) and `/docs/chat.html` (chat user guide), sources in [docs/](docs/) (French).
 
+<p align="center"><img src="docs/img/architecture-en.svg" alt="LLMGW architecture: users, agents and applications in the trusted zone reach the LLMs only through the gateway, on the zone boundary; direct access to the Internet is blocked" width="100%"></p>
+
 A single Go binary with no external dependency (SQLite, dashboard, chat and documentation are embedded), for macOS and Linux.
 
 ```

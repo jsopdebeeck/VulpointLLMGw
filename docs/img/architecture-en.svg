@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="600" viewBox="0 0 1100 600" role="img" aria-labelledby="archTitle archDesc">
+          <title id="archTitle">LLMGW gateway architecture</title>
+          <desc id="archDesc">On the left, the trusted zone: users, agents, applications and local LLMs. On the right, the Internet: cloud LLMs. LLMGW sits on the boundary between the two zones. Direct access from the trusted zone to the Internet is blocked by the firewall and Umbrella.</desc>
+          <style>
+svg { --bg:#ffffff; --paper:#ffffff; --ink:#16201f; --ink-2:#4a5654; --ink-3:#7d8886; --line:#d9dedb; --accent:#0e7c6b; --accent-soft:#dcefe9; --src:#2f5d9e; --src-soft:#e2ebf7; --dst:#7a4b12; --dst-soft:#f5ead9; --block:#b3261e; --block-soft:#f8e1df;
+  --f-body:"IBM Plex Sans",-apple-system,"Segoe UI",Helvetica,Arial,sans-serif; --f-label:"IBM Plex Sans Condensed",-apple-system,"Segoe UI",Helvetica,Arial,sans-serif; --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace; }
+.d-t { fill: var(--ink); font-family: var(--f-body); }
+.d-t2 { fill: var(--ink-2); font-family: var(--f-body); }
+.d-lab { fill: var(--ink-3); font-family: var(--f-label); letter-spacing: .08em; }
+</style>
+<rect x="0" y="0" width="1100" height="600" rx="18" fill="#ffffff"/>
+          <defs>
+            <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill: var(--ink-3)"/></marker>
+          </defs>
+
+          <!-- zones -->
+          <rect x="12" y="12" width="528" height="576" rx="18" style="fill: var(--src-soft)" fill-opacity=".35"/>
+          <rect x="540" y="12" width="548" height="576" rx="18" style="fill: var(--block-soft)" fill-opacity=".45"/>
+          <line x1="540" y1="12" x2="540" y2="588" style="stroke: var(--ink-3)" stroke-width="1.5" stroke-dasharray="3 5"/>
+          <text x="32" y="42" class="d-lab" font-size="13">TRUSTED ZONE</text>
+          <text x="1068" y="42" text-anchor="end" class="d-lab" font-size="13">INTERNET (UNTRUSTED)</text>
+
+          <!-- sources -->
+          <g>
+            <rect x="40" y="110" width="260" height="88" rx="14" style="fill: var(--src-soft); stroke: var(--src)" stroke-width="1.5"/>
+            <text x="60" y="142" class="d-t" font-size="17" font-weight="600">Users</text>
+            <text x="60" y="165" class="d-t2" font-size="13.5">Web portal /chat</text>
+            <text x="60" y="184" class="d-t2" font-size="13.5">SSO Entra ID, Google or key</text>
+
+            <rect x="40" y="212" width="260" height="88" rx="14" style="fill: var(--src-soft); stroke: var(--src)" stroke-width="1.5"/>
+            <text x="60" y="244" class="d-t" font-size="17" font-weight="600">Agents</text>
+            <text x="60" y="267" class="d-t2" font-size="13.5">Cowork, Claude Code, Hermes</text>
+            <text x="60" y="286" class="d-t2" font-size="13.5">Anthropic or OpenAI API</text>
+
+            <rect x="40" y="314" width="260" height="88" rx="14" style="fill: var(--src-soft); stroke: var(--src)" stroke-width="1.5"/>
+            <text x="60" y="346" class="d-t" font-size="17" font-weight="600">Applications</text>
+            <text x="60" y="369" class="d-t2" font-size="13.5">scripts, SDKs, business tools</text>
+            <text x="60" y="388" class="d-t2" font-size="13.5">application key</text>
+          </g>
+
+          <!-- local LLMs: inside the trust zone -->
+          <g>
+            <rect x="40" y="446" width="260" height="118" rx="14" style="fill: var(--dst-soft); stroke: var(--dst)" stroke-width="1.5"/>
+            <text x="60" y="478" class="d-t" font-size="17" font-weight="600">Local LLMs</text>
+            <g font-size="13" class="d-t2">
+              <text x="60" y="502">Ollama · vLLM · LM Studio</text>
+              <text x="60" y="523">sensitive data</text>
+              <text x="60" y="544">stays on the network</text>
+            </g>
+          </g>
+
+          <!-- sources -> gateway -->
+          <g fill="none" style="stroke: var(--src)" stroke-width="2">
+            <path d="M300,154 C344,154 344,256 372,256"/>
+            <path d="M300,256 L372,256" marker-end="url(#arr)"/>
+            <path d="M300,358 C344,358 344,256 372,256"/>
+          </g>
+          <!-- gateway -> local LLMs and cloud LLMs -->
+          <g fill="none" style="stroke: var(--dst)" stroke-width="2">
+            <path d="M380,505 L308,505" marker-end="url(#arr)"/>
+            <path d="M700,330 L792,330" marker-end="url(#arr)"/>
+          </g>
+
+          <!-- gateway, on the boundary -->
+          <g>
+            <rect x="380" y="110" width="320" height="454" rx="20" style="fill: var(--paper); stroke: var(--accent)" stroke-width="2"/>
+            <rect x="445" y="126" width="190" height="42" rx="21" style="fill: var(--accent)"/>
+            <text x="540" y="153" text-anchor="middle" font-size="19" font-weight="600" style="fill: var(--paper); font-family: var(--f-mono)">llmgw</text>
+            <g font-size="14.5">
+              <rect x="400" y="184" width="280" height="44" rx="10" style="fill: var(--accent-soft)"/>
+              <text x="416" y="211" class="d-t" font-weight="600">Identification and profiles</text>
+              <rect x="400" y="238" width="280" height="44" rx="10" style="fill: var(--accent-soft)"/>
+              <text x="416" y="265" class="d-t" font-weight="600">Filtering and anonymisation ⇄</text>
+              <rect x="400" y="292" width="280" height="44" rx="10" style="fill: var(--accent-soft)"/>
+              <text x="416" y="319" class="d-t" font-weight="600">Routing, fallback and quotas</text>
+              <rect x="400" y="346" width="280" height="44" rx="10" style="fill: var(--accent-soft)"/>
+              <text x="416" y="373" class="d-t" font-weight="600">Monitoring, alerts, DEBUG</text>
+              <rect x="400" y="400" width="280" height="44" rx="10" style="fill: none; stroke: var(--accent)" stroke-dasharray="4 4"/>
+              <text x="416" y="427" class="d-t2">Administration dashboard</text>
+            </g>
+            <text x="540" y="478" text-anchor="middle" class="d-lab" font-size="12">ON THE ZONE BOUNDARY</text>
+            <text x="540" y="498" text-anchor="middle" class="d-t2" font-size="13">single point of passage</text>
+            <text x="540" y="516" text-anchor="middle" class="d-t2" font-size="13">to the LLMs</text>
+          </g>
+
+          <!-- cloud LLMs: untrust -->
+          <g>
+            <rect x="800" y="250" width="260" height="160" rx="14" style="fill: var(--dst-soft); stroke: var(--dst)" stroke-width="1.5"/>
+            <text x="822" y="283" class="d-t" font-size="17" font-weight="600">Cloud LLMs</text>
+            <g font-size="13" class="d-t2">
+              <text x="822" y="310">Mistral · Anthropic</text>
+              <text x="822" y="332">OpenAI · Azure OpenAI</text>
+              <text x="822" y="354">DeepSeek · GLM · Grok</text>
+              <text x="822" y="386">keys held by the gateway</text>
+            </g>
+          </g>
+
+          <!-- direct access to untrust: blocked -->
+          <g>
+            <path d="M300,128 C334,128 334,84 368,84 L930,84 L930,242" fill="none" style="stroke: var(--block)" stroke-width="2" stroke-dasharray="6 6" marker-end="url(#arr)"/>
+            <g transform="translate(540,84)">
+              <circle r="15" style="fill: var(--block)"/>
+              <path d="M-5.5,-5.5 L5.5,5.5 M5.5,-5.5 L-5.5,5.5" style="stroke: var(--paper)" stroke-width="3" stroke-linecap="round"/>
+            </g>
+            <text x="740" y="72" text-anchor="middle" class="d-t" font-size="13.5" font-weight="600">Direct access blocked: firewall and Cisco Umbrella</text>
+            <text x="740" y="108" text-anchor="middle" class="d-t2" font-size="12.5">only the gateway reaches the Internet</text>
+          </g>
+          <text x="1080" y="586" text-anchor="end" class="d-lab" font-size="11">LLMGW BY VULPOINT.COM</text>
+</svg>
