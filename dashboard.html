@@ -11,6 +11,7 @@
   --text: #0b0b0b; --text2: #52514e; --muted: #858480;
   --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300; --s7: #4a3aa7; --s8: #e34948;
   --good: #0ca30c; --warning: #fab219; --critical: #d03b3b; --accent: #2a78d6;
+  --accent-soft: #e4eefb; --side: #fbfaf8;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -18,7 +19,7 @@
     --bg: #111110; --surface: #1a1a19; --border: #2e2e2c; --grid: #262624;
     --text: #ffffff; --text2: #c3c2b7; --muted: #8d8c85;
     --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
-    --accent: #3987e5;
+    --accent: #3987e5; --accent-soft: #1b2a3f; --side: #161615;
   }
 }
 :root[data-theme="dark"] {
@@ -26,17 +27,44 @@
   --bg: #111110; --surface: #1a1a19; --border: #2e2e2c; --grid: #262624;
   --text: #ffffff; --text2: #c3c2b7; --muted: #8d8c85;
   --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
-  --accent: #3987e5;
+  --accent: #3987e5; --accent-soft: #1b2a3f; --side: #161615;
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif; }
-header { position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--border); }
-.hbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 12px 24px 0; max-width: 1400px; margin: 0 auto; }
-header h1 { font-size: 16px; margin: 0 12px 0 0; font-weight: 650; letter-spacing: -.01em; }
-nav.tabs { display: flex; gap: 2px; overflow-x: auto; padding: 8px 24px 0; max-width: 1400px; margin: 0 auto; }
-nav.tabs button { border: 0; background: none; color: var(--text2); padding: 8px 14px 10px; font: inherit; cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; }
-nav.tabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+/* app shell: grouped side navigation + page header + content */
+.app { display: grid; grid-template-columns: 236px minmax(0, 1fr); min-height: 100vh; }
+.side { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; background: var(--side); border-right: 1px solid var(--border); padding: 18px 12px 14px; overflow-y: auto; }
+.brand { display: flex; align-items: center; gap: 10px; padding: 0 8px 18px; }
+.brand .logo { width: 30px; height: 30px; border-radius: 8px; background: var(--accent); color: #fff; display: grid; place-items: center; font-weight: 700; font-size: 15px; }
+.brand b { display: block; font-size: 15px; letter-spacing: -.01em; }
+.brand small { display: block; color: var(--muted); font-size: 12px; }
+#tabs { display: grid; gap: 1px; }
+#tabs .grp { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 14px 10px 6px; }
+#tabs .grp:first-child { padding-top: 0; }
+#tabs button { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; border: 0; background: none; color: var(--text2); padding: 7px 10px; font: inherit; border-radius: 8px; cursor: pointer; }
+#tabs button:hover { background: var(--grid); color: var(--text); }
+#tabs button[aria-current="page"] { background: var(--accent-soft); color: var(--text); font-weight: 600; }
+#tabs button .ic { width: 18px; text-align: center; color: var(--muted); font-size: 13px; }
+#tabs button[aria-current="page"] .ic { color: var(--accent); }
+#tabs button .cnt { margin-left: auto; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.side-foot { margin-top: auto; padding: 14px 8px 0; border-top: 1px solid var(--border); display: grid; gap: 8px; font-size: 12px; color: var(--text2); }
+.side-foot .row { display: flex; align-items: center; gap: 8px; }
+.content { min-width: 0; display: flex; flex-direction: column; }
+.topbar { position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 14px; padding: 16px 32px 14px; }
+.topbar h1 { font-size: 20px; margin: 0; font-weight: 650; letter-spacing: -.015em; }
+.topbar .pdesc { color: var(--text2); font-size: 13px; margin-top: 2px; max-width: 80ch; }
+.subtabs { display: inline-flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 4px; overflow-x: auto; max-width: 100%; }
+.subtabs button { border: 0; background: none; color: var(--text2); padding: 8px 14px 10px; font: inherit; cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; }
+.subtabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+.status { display: grid; gap: 2px; }
+.status .it { display: flex; align-items: flex-start; gap: 12px; padding: 10px 2px; border-bottom: 1px solid var(--grid); }
+.status .it:last-child { border-bottom: 0; }
+.status .dot { width: 9px; height: 9px; border-radius: 50%; margin-top: 5px; flex: none; background: var(--good); }
+.status .dot.w { background: var(--warning); } .status .dot.c { background: var(--critical); } .status .dot.i { background: var(--muted); }
+.status .t { font-weight: 600; } .status .d { color: var(--text2); font-size: 13px; }
+.status .go { margin-left: auto; white-space: nowrap; }
+.empty { color: var(--muted); font-size: 13px; padding: 8px 0; }
 .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface); }
 .seg button { border: 0; background: none; color: var(--text2); padding: 6px 12px; font: inherit; cursor: pointer; }
 .seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
@@ -53,7 +81,7 @@ button.btn.danger { color: var(--critical); }
 button.icon { border: 0; background: none; color: var(--text2); cursor: pointer; padding: 2px 6px; font: inherit; border-radius: 6px; }
 button.icon:hover { background: var(--grid); color: var(--text); }
 button:disabled { opacity: .4; cursor: default; }
-main { padding: 20px 24px 96px; max-width: 1400px; margin: 0 auto; display: grid; gap: 20px; }
+main { padding: 24px 32px 96px; width: 100%; max-width: 1360px; display: grid; gap: 20px; align-content: start; }
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
 .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
 .kpi .l { color: var(--text2); font-size: 12px; }
@@ -61,12 +89,14 @@ main { padding: 20px 24px 96px; max-width: 1400px; margin: 0 auto; display: grid
 .kpi .s { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 560px), 1fr)); gap: 20px; }
 .grid3 { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr)); gap: 16px; }
-.card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; min-width: 0; }
-.card h2 { font-size: 15px; margin: 0 0 2px; font-weight: 600; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; min-width: 0; }
+.card h2 { font-size: 15px; margin: 0 0 2px; font-weight: 650; letter-spacing: -.005em; }
 .card h3 { font-size: 14px; margin: 0; font-weight: 600; }
 .card .sub, .sub { color: var(--muted); font-size: 12px; margin-bottom: 10px; }
-.chead { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
-.fields { display: grid; grid-template-columns: 130px 1fr; gap: 8px 10px; align-items: center; font-size: 13px; }
+.chead { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+.chead > div:first-child { min-width: 0; flex: 1 1 320px; }
+.chead .sub { margin-bottom: 0; max-width: 90ch; }
+.fields { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 10px 14px; align-items: center; font-size: 13px; }
 .fields > label { color: var(--text2); }
 .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--text2); margin-bottom: 6px; }
 .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
@@ -79,8 +109,9 @@ main { padding: 20px 24px 96px; max-width: 1400px; margin: 0 auto; display: grid
 .tip .r { display: flex; gap: 12px; justify-content: space-between; color: var(--text2); }
 .tip .r span:last-child { color: var(--text); font-variant-numeric: tabular-nums; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
-th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; vertical-align: middle; }
-th { color: var(--text2); font-weight: 500; font-size: 12px; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--grid); white-space: nowrap; vertical-align: middle; }
+th { color: var(--muted); font-weight: 600; font-size: 11px; letter-spacing: .05em; text-transform: uppercase; background: var(--surface); }
+tbody tr:hover td { background: color-mix(in srgb, var(--grid) 55%, transparent); }
 td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
 td.wrap { white-space: normal; }
 .tw { overflow-x: auto; }
@@ -92,7 +123,7 @@ td.wrap { white-space: normal; }
 .err { color: var(--critical); }
 code, .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; }
 code.newkey { background: var(--bg); border: 1px dashed var(--accent); padding: 2px 6px; border-radius: 6px; }
-#login { max-width: 420px; margin: 80px auto; }
+#login { max-width: 420px; margin: 12vh auto; }
 textarea { min-height: 80px; resize: vertical; }
 pre.out { white-space: pre-wrap; word-break: break-word; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px; margin: 8px 0 0; font-size: 13px; }
 .order { display: grid; gap: 4px; }
@@ -109,6 +140,9 @@ pre.out { white-space: pre-wrap; word-break: break-word; background: var(--bg); 
   border-left: 4px solid var(--good); border-radius: 10px; padding: 10px 14px; box-shadow: 0 8px 28px rgba(0,0,0,.18); display: none; white-space: pre-wrap; }
 #toast.bad { border-left-color: var(--critical); }
 .matrix select { min-width: 150px; }
+.matrix select.dflt { color: var(--muted); }
+.matrix select.ovr { font-weight: 600; border-color: var(--accent); color: var(--text); }
+.matrix select.ovr.blk { border-color: var(--critical); color: var(--critical); }
 .matrix td:first-child { font-weight: 600; }
 .help { font-size: 12px; color: var(--text2); background: var(--bg); border-radius: 8px; padding: 8px 12px; }
 b.hl { font-weight: 700; border-radius: 3px; padding: 0 2px; }
@@ -121,28 +155,21 @@ b.hl.strip, b.hl.pass { color: var(--text2); background: var(--grid); }
 .dbgmsg .txt { white-space: pre-wrap; word-break: break-word; padding: 4px 12px 10px; font-size: 13px; max-height: 480px; overflow: auto; }
 tr.click { cursor: pointer; } tr.click:hover td { background: var(--grid); } tr.sel td { background: color-mix(in srgb, var(--accent) 10%, transparent); }
 .dbgbanner { background: var(--critical); color: #fff; font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; cursor: pointer; }
-@media (max-width: 640px) { .hbar, nav.tabs, main { padding-left: 16px; padding-right: 16px; } .fields { grid-template-columns: 1fr; } }
+@media (max-width: 900px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .side { position: static; height: auto; flex-direction: column; padding: 12px 16px; border-right: 0; border-bottom: 1px solid var(--border); }
+  .brand { padding-bottom: 10px; }
+  #tabs { display: flex; overflow-x: auto; gap: 4px; }
+  #tabs .grp { display: none; }
+  #tabs button { width: auto; white-space: nowrap; }
+  .side-foot { display: none; }
+  .topbar { padding: 12px 16px; position: static; }
+  main { padding: 16px 16px 96px; }
+  .fields { grid-template-columns: 1fr; }
+}
 </style>
 </head>
 <body>
-<header>
-  <div class="hbar">
-    <h1>LLM Gateway</h1>
-    <span class="spacer"></span>
-    <span id="dbgflag" class="dbgbanner" hidden onclick="go('debug')" title="Des échanges complets sont archivés en clair">DEBUG actif</span>
-    <span id="who" style="color:var(--text2);font-size:12px"></span>
-    <span id="upd" style="color:var(--muted);font-size:12px"></span>
-    <button class="btn" id="theme" title="Thème clair / sombre">◐</button>
-  </div>
-  <nav class="tabs" id="tabs" role="tablist">
-    <button data-tab="users" role="tab">Utilisateurs &amp; règles</button>
-    <button data-tab="targets" role="tab">LLM cibles</button>
-    <button data-tab="privacy" role="tab">Filtrage &amp; privacy</button>
-    <button data-tab="quotas" role="tab">Quotas</button>
-    <button data-tab="report" role="tab">Reporting</button>
-    <button data-tab="debug" role="tab">Debug</button>
-  </nav>
-</header>
 
 <div id="login" class="card" hidden>
   <h2>Administration</h2>
@@ -152,7 +179,39 @@ tr.click { cursor: pointer; } tr.click:hover td { background: var(--grid); } tr.
   <p id="loginerr" class="err"></p>
 </div>
 
-<main id="view" hidden></main>
+<div class="app" id="app" hidden>
+  <aside class="side">
+    <div class="brand"><span class="logo">⇄</span><div><b>LLMGW</b><small>Passerelle IA</small></div></div>
+    <nav id="tabs" aria-label="Navigation">
+      <div class="grp">Pilotage</div>
+      <button data-tab="overview"><span class="ic">◉</span>Vue d'ensemble</button>
+      <button data-tab="report"><span class="ic">▤</span>Reporting</button>
+      <div class="grp">Accès</div>
+      <button data-tab="users"><span class="ic">◍</span>Utilisateurs<span class="cnt" id="cnt-users"></span></button>
+      <button data-tab="profiles"><span class="ic">▣</span>Profils<span class="cnt" id="cnt-profiles"></span></button>
+      <div class="grp">Modèles</div>
+      <button data-tab="targets"><span class="ic">⇢</span>LLM cibles<span class="cnt" id="cnt-targets"></span></button>
+      <button data-tab="quotas"><span class="ic">◔</span>Quotas</button>
+      <div class="grp">Données</div>
+      <button data-tab="privacy"><span class="ic">⇄</span>Filtrage et privacy</button>
+      <button data-tab="debug"><span class="ic">⌕</span>Debug</button>
+      <div class="grp">Paramètres</div>
+      <button data-tab="settings"><span class="ic">⚙</span>Alertes et SSO</button>
+    </nav>
+    <div class="side-foot">
+      <div id="who"></div>
+      <div class="row"><span id="upd" style="color:var(--muted)"></span><span class="spacer"></span><button class="btn" id="theme" title="Thème clair / sombre">◐</button></div>
+    </div>
+  </aside>
+  <div class="content">
+    <header class="topbar">
+      <div><h1 id="ptitle"></h1><div class="pdesc" id="pdesc"></div></div>
+      <span class="spacer"></span>
+      <span id="dbgflag" class="dbgbanner" hidden onclick="go('debug')" title="Des échanges complets sont archivés en clair">DEBUG actif</span>
+    </header>
+    <main id="view"></main>
+  </div>
+</div>
 <div id="savebar" hidden><span>Modifications non enregistrées</span><button class="btn" id="cancel">Annuler</button><button class="btn primary" id="save">Enregistrer</button></div>
 <div id="toast"></div>
 <div class="tip" id="tip"></div>
@@ -162,7 +221,7 @@ const $ = (s, el = document) => el.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const store = { get(k) { try { return localStorage.getItem(k) } catch { return null } }, set(k, v) { try { localStorage.setItem(k, v) } catch {} } };
 let token = store.get("gwtok") || "", range = store.get("gwrange") || "48h", data = null;
-const S = { cfg: null, orig: "", meta: null, usage: null, tab: store.get("gwtab") || "users", newKeys: {}, tests: {}, testOut: "" };
+const S = { cfg: null, orig: "", meta: null, usage: null, tab: store.get("gwtab") || "overview", privTab: store.get("gwpriv") || "detectors", newKeys: {}, tests: {}, testOut: "" };
 
 const nf = new Intl.NumberFormat("fr-BE");
 const fmt = n => { n = +n || 0; const a = Math.abs(n); return a >= 1e9 ? (n / 1e9).toFixed(1) + " G" : a >= 1e6 ? (n / 1e6).toFixed(1) + " M" : a >= 1e4 ? (n / 1e3).toFixed(1) + " k" : nf.format(Math.round(n)); };
@@ -179,7 +238,7 @@ async function api(path, opt = {}) {
   return r.json();
 }
 function showLogin(msg) {
-  $("#view").hidden = true; $("#login").hidden = false; $("#loginerr").textContent = msg || "";
+  $("#app").hidden = true; $("#login").hidden = false; $("#loginerr").textContent = msg || "";
   fetch("/auth/providers").then(r => r.json()).then(a => {
     $("#sso").innerHTML = a.providers.map(p => `<a class="sso" href="/auth/login/${encodeURIComponent(p.ID)}?next=/dashboard">Se connecter avec ${esc(p.Label)}</a>`).join("");
     $("#sso").hidden = !a.providers.length;
@@ -429,6 +488,7 @@ const ACTIONS = {
   "tgt-model"(d) { const t = S.cfg.Targets[d.n]; t.Models = (t.Models || []).filter(m => m !== "*"); if (!t.Models.includes(d.m)) t.Models.push(d.m); },
   async "learn-forget"() { if (!confirm("Effacer toute la mémoire des noms ?")) return; S.learned = (await api("/admin/api/learned", { method: "DELETE" })).count; toast("Mémoire des noms effacée"); },
   async "alert-test"() { if (isDirty()) return toast("Enregistrez d'abord la configuration", true); try { const r = await api("/admin/api/alert-test", { method: "POST" }); toast("Email de test envoyé à : " + r.sent.join(", ")); } catch (e) { if (e.message !== "401") toast("Échec : " + e.message, true); } },
+  "priv-tab"(d) { S.privTab = d.k; store.set("gwpriv", d.k); },
   "det-add"() { S.cfg.Detectors.push({ Name: "NOUVEAU", Description: "", Regex: "\\bXXX-\\d+\\b" }); },
   "det-up"(d) { const a = S.cfg.Detectors, i = +d.i; if (i > 0) [a[i - 1], a[i]] = [a[i], a[i - 1]]; },
   "det-down"(d) { const a = S.cfg.Detectors, i = +d.i; if (i < a.length - 1) [a[i + 1], a[i]] = [a[i], a[i + 1]]; },
@@ -475,7 +535,7 @@ function viewUsers() {
       <td>${nk ? `<code class="newkey">${esc(nk)}</code> <button class="icon" data-act="copy" data-v="${esc(nk)}" title="Copier">⧉</button>` : `<span class="mono" style="color:var(--muted)">${esc(S.meta.keyHints?.[n] || "••••")}</span>`}
         <button class="icon" data-act="user-key" data-n="${esc(n)}" title="Générer une nouvelle clé">↻</button></td>
       <td><label><input type="checkbox" data-bind="Users|${esc(n)}|Disabled" ${u.Disabled ? "checked" : ""}> bloqué</label></td>
-      <td class="n">${fmt(us.DayReq || 0)} req · ${fmt(us.DayTok || 0)} tok</td>
+      <td class="n">${fmt(us.DayReq || 0)} req<div class="use">${fmt(us.DayTok || 0)} tokens</div></td>
       <td><button class="icon" data-act="user-del" data-n="${esc(n)}" title="Supprimer">✕</button></td></tr>`;
   }).join("");
   const nkNote = Object.keys(S.newKeys).length ? `<p class="help">🔑 Nouvelle(s) clé(s) affichée(s) en entier : copiez-les maintenant et transmettez-les à l'utilisateur. Après rechargement de la page, seul un aperçu reste visible.</p>` : "";
@@ -498,13 +558,17 @@ function viewUsers() {
         <label>Utilisé par</label><div class="wrap">${users.map(esc).join(", ") || '<span class="sub">personne</span>'}</div>
       </div></div>`;
   }).join("");
-  return `<section class="card"><div class="chead"><div><h2>Utilisateurs et applications clientes</h2><div class="sub">La clé gateway identifie le client ; le profil détermine les LLM autorisés, les règles de filtrage et le quota.</div></div><span class="spacer"></span><button class="btn primary" data-act="user-add">+ Utilisateur</button></div>
-    ${nkNote}<div class="tw"><table><thead><tr><th>Nom</th><th>Type</th><th>Description</th><th>Profil</th><th>LLM accessibles</th><th>Clé gateway</th><th>Accès</th><th class="n">Aujourd'hui</th><th></th></tr></thead><tbody>${users || '<tr><td colspan="9" class="sub">Aucun utilisateur</td></tr>'}</tbody></table></div></section>
-    <section><div class="chead"><div><h2 style="font-size:15px;margin:0">Profils : règles appliquées</h2><div class="sub">Un profil regroupe routage, politique de données et quota.</div></div><span class="spacer"></span><button class="btn" data-act="prof-add">+ Profil</button></div>
-    <div class="grid3">${profs}</div></section>
-    ${viewAlerts()}
-    ${viewAuth()}`;
+  S._profs = profs;
+  const sso = (S.meta.config.Auth?.Providers || []).length;
+  return `<section class="card"><div class="chead"><div><h2>Utilisateurs et applications</h2><div class="sub">Chaque ligne a sa clé gateway ; son profil fixe les LLM autorisés, les règles de données et le quota.${sso ? " Les personnes connectées en SSO n'ont pas besoin d'y figurer : leur profil vient de l'annuaire (voir Alertes et SSO)." : ""}</div></div><button class="btn primary" data-act="user-add">+ Utilisateur</button></div>
+    ${nkNote}<div class="tw"><table><thead><tr><th>Nom</th><th>Type</th><th>Description</th><th>Profil</th><th>LLM accessibles</th><th>Clé gateway</th><th>Accès</th><th class="n">Aujourd'hui</th><th></th></tr></thead><tbody>${users || '<tr><td colspan="9" class="sub">Aucun utilisateur</td></tr>'}</tbody></table></div></section>`;
 }
+function viewProfiles() {
+  viewUsers(); // builds the profile cards (shared helpers)
+  return `<section><div class="chead"><div><h2 style="font-size:15px;margin:0">Profils</h2><div class="sub">Un profil regroupe les LLM autorisés (dans l'ordre de repli), le prompt de comportement, la politique d'images, les alertes et le quota. Les règles par type de donnée se règlent dans Filtrage et privacy.</div></div><button class="btn primary" data-act="prof-add">+ Profil</button></div>
+    <div class="grid3">${S._profs}</div></section>`;
+}
+function viewSettings() { return viewAlerts() + viewAuth(); }
 function viewAuth() {
   const a = S.meta.config.Auth || {}, P = a.Providers || [], base = a.BaseURL || location.origin;
   const typ = { entra: "Microsoft Entra ID", google: "Google", oidc: "OIDC" };
@@ -592,25 +656,30 @@ function viewPrivacy() {
       <td><button class="icon" data-act="det-up" data-i="${i}" ${i ? "" : "disabled"}>↑</button><button class="icon" data-act="det-down" data-i="${i}" ${i < c.Detectors.length - 1 ? "" : "disabled"}>↓</button><button class="icon" data-act="det-del" data-i="${i}">✕</button></td></tr>`;
   }).join("");
   const kinds = [...new Set(c.Detectors.map(d => d.Name))];
-  const cell = (pn, k) => { const p = c.Profiles[pn], v = p.Actions?.[k] || ""; return `<td><select data-bind="Profiles|${esc(pn)}|Actions|${esc(k)}">${opts(L.act, v, `<option value="" ${v ? "" : "selected"}>défaut (${esc(L.act[p.DefaultAction])})</option>`)}</select></td>`; };
+  const cell = (pn, k) => { const p = c.Profiles[pn], v = p.Actions?.[k] || ""; return `<td><select class="${v ? "ovr" + (v === "block" ? " blk" : "") : "dflt"}" data-rerender data-bind="Profiles|${esc(pn)}|Actions|${esc(k)}">${opts(L.act, v, `<option value="" ${v ? "" : "selected"}>défaut (${esc(L.act[p.DefaultAction])})</option>`)}</select></td>`; };
   const matrix = `<table class="matrix"><thead><tr><th>Type de donnée</th>${P.map(p => `<th>${esc(p)}</th>`).join("")}</tr></thead><tbody>
     <tr style="background:var(--bg)"><td>Action par défaut</td>${P.map(pn => `<td><select data-bind="Profiles|${esc(pn)}|DefaultAction" data-rerender>${opts(L.act, c.Profiles[pn].DefaultAction)}</select></td>`).join("")}</tr>
     ${kinds.map(k => `<tr><td class="mono">${esc(k)}</td>${P.map(pn => cell(pn, k)).join("")}</tr>`).join("")}
     <tr><td>IMAGE / FICHIER</td>${P.map(pn => `<td><select data-bind="Profiles|${esc(pn)}|Images">${opts(L.img, c.Profiles[pn].Images)}</select></td>`).join("")}</tr>
     <tr><td>Consigne « jetons »</td>${P.map(pn => `<td><label><input type="checkbox" data-bind="Profiles|${esc(pn)}|Hint" ${c.Profiles[pn].Hint ? "checked" : ""}> ajouter</label></td>`).join("")}</tr>
     </tbody></table>`;
-  return `<section class="card"><div class="chead"><div><h2>Détecteurs de données sensibles</h2><div class="sub">Le type (ex. PERSON) donne le nom des jetons «PERSON_1». Plusieurs détecteurs peuvent partager un type. En cas de chevauchement, la correspondance la plus longue l'emporte, puis l'ordre.</div></div><span class="spacer"></span><button class="btn primary" data-act="det-add">+ Détecteur</button></div>
-      <div class="tw"><table><thead><tr><th>#</th><th>Type</th><th>Méthode</th><th>Paramètre</th><th>Note</th><th></th></tr></thead><tbody>${dets}</tbody></table></div></section>
-    <section class="card"><h2>Jamais anonymiser</h2><div class="sub">Produits, marques, personnalités publiques… Un terme par ligne, sans accents ni casse. Pour un nom, il suffit que le premier mot soit listé : « Claude » couvre « Claude Code ».</div>
+  const sub = S.privTab, tabs = [["detectors", "Détecteurs"], ["rules", "Règles par profil"], ["exceptions", "Exceptions et mémoire"], ["test", "Tester"]];
+  const head = `<nav class="subtabs" role="tablist">${tabs.map(([k, l]) => `<button role="tab" data-act="priv-tab" data-k="${k}" aria-selected="${k === sub}">${l}</button>`).join("")}</nav>`;
+  const parts = { detectors: "", rules: "", exceptions: "", test: "" };
+  parts.detectors = `<section class="card"><div class="chead"><div><h2>Détecteurs de données sensibles</h2><div class="sub">Le type (ex. PERSON) donne le nom des jetons «PERSON_1». Plusieurs détecteurs peuvent partager un type. En cas de chevauchement, la correspondance la plus longue l'emporte, puis l'ordre.</div></div><span class="spacer"></span><button class="btn primary" data-act="det-add">+ Détecteur</button></div>
+      <div class="tw"><table><thead><tr><th>#</th><th>Type</th><th>Méthode</th><th>Paramètre</th><th>Note</th><th></th></tr></thead><tbody>${dets}</tbody></table></div></section>`;
+  parts.exceptions = `<section class="card"><h2>Jamais anonymiser</h2><div class="sub">Produits, marques, personnalités publiques… Un terme par ligne, sans accents ni casse. Pour un nom, il suffit que le premier mot soit listé : « Claude » couvre « Claude Code ».</div>
       <textarea class="w100" data-type="lines" data-bind="Privacy|Allow" style="min-height:90px">${esc((c.Privacy.Allow || []).join("\n"))}</textarea></section>
     <section class="card"><div class="chead"><div><h2>Mémoire des noms</h2><div class="sub">Actif si un détecteur « person_learned » est configuré. Chaque nom repéré avec certitude (titre, prénom connu, liste) est mémorisé sous forme d'empreintes HMAC, fautes de frappe comprises : il est ensuite reconnu seul (« Keizer », « Kiezer »). Aucun nom n'est stocké en clair ; oubli automatique après 1 an sans usage.</div></div><span class="spacer"></span>
-      <span class="badge">${S.learned ?? "…"} nom(s) mémorisé(s)</span><button class="btn danger" data-act="learn-forget">Tout oublier</button></div></section>
-    <section class="card"><h2>Règles par profil</h2><div class="sub">Anonymiser : remplacé par un jeton puis restauré dans la réponse · Bloquer : requête refusée (violation) · Journaliser : laissé passer mais compté · Ignorer : non détecté</div>
-      <div class="tw">${matrix}</div></section>
-    <section class="card"><h2>Tester l'anonymisation</h2><div class="sub">Utilise la configuration <b>enregistrée</b>${isDirty() ? ' <span class="badge warn">modifications non enregistrées ignorées</span>' : ""}. Rien n'est envoyé à un LLM.</div>
+      <span class="badge">${S.learned ?? "…"} nom(s) mémorisé(s)</span><button class="btn danger" data-act="learn-forget">Tout oublier</button></div></section>`;
+  parts.rules = `<section class="card"><h2>Règles par profil</h2><div class="sub">Anonymiser : remplacé par un jeton puis restauré dans la réponse · Bloquer : requête refusée (violation) · Journaliser : laissé passer mais compté · Ignorer : non détecté</div>
+      <p class="sub" style="margin:0 0 8px">Les cases en gras s'écartent de l'action par défaut du profil ; en rouge, les blocages.</p>
+      <div class="tw">${matrix}</div></section>`;
+  parts.test = `<section class="card"><h2>Tester l'anonymisation</h2><div class="sub">Utilise la configuration <b>enregistrée</b>${isDirty() ? ' <span class="badge warn">modifications non enregistrées ignorées</span>' : ""}. Rien n'est envoyé à un LLM.</div>
       <div style="display:flex;gap:8px;margin-bottom:8px"><select id="tprof">${P.map(p => `<option ${p === (S.testProf || "") ? "selected" : ""}>${esc(p)}</option>`).join("")}</select><button class="btn" data-act="test-run">Tester</button></div>
       <textarea id="ttext" class="w100">${esc(S.testText ?? "Bonjour, je suis Mme Claire Dubois (claire.dubois@acme.be, +32 470 12 34 56). Mon NISS est 90.01.01-123.95 et le dossier DOS-2025-00042 concerne ACME SA. IBAN BE68 5390 0754 7034.")}</textarea>
       <div>${S.testOut}</div></section>`;
+  return head + parts[sub];
 }
 
 // ---------- tab: quotas ----------
@@ -810,35 +879,120 @@ Object.assign(ACTIONS, {
   async "dbg-clear"() { if (!confirm("Vider toute l'archive DEBUG ?")) return; await api("/admin/api/debug", { method: "DELETE" }); S.dbgSel = null; await loadDebug(); toast("Archive vidée"); },
 });
 
-const VIEWS = { users: viewUsers, targets: viewTargets, privacy: viewPrivacy, quotas: viewQuotas, report: viewReport, debug: viewDebug };
+// ---------- tab: overview ----------
+async function loadOverview() { try { S.ov = await api("/admin/api/stats?range=48h"); } catch (e) { if (e.message !== "401") toast(e.message, true); } }
+function quotaAlerts() {
+  const U = S.usage?.usage || {}, UQ = S.usage?.userQuota || {}, TQ = S.usage?.targetQuota || {}, out = [];
+  const check = (who, q, u) => {
+    if (!q) return;
+    for (const [lim, used, label] of [[q.RPM, u.RPM, "req./min"], [q.RPD, u.DayReq, "req./jour"], [q.TokensDay, u.DayTok, "tokens/jour"], [q.TokensMonth, u.MonthTok, "tokens/mois"]]) {
+      if (lim > 0 && (used || 0) / lim >= .8) out.push({ who, pct: Math.round((used || 0) / lim * 100), label });
+    }
+  };
+  for (const [n, q] of Object.entries(UQ)) check(n, q, U["u:" + n] || {});
+  for (const [n, q] of Object.entries(TQ)) check("LLM " + n, q, U["t:" + n] || {});
+  return out.sort((a, b) => b.pct - a.pct);
+}
+function viewOverview() {
+  const d = S.ov, saved = S.meta.config, c = S.cfg;
+  const tot = (d && sumRows(d.all || [])[0]) || { N: 0, Err: 0, TI: 0, TO: 0, SU: 0, An: 0, Bl: 0 };
+  const ok = tot.N - tot.Bl || 1;
+  const kpi = (l, v, s = "") => `<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${s}</div></div>`;
+  const items = [];
+  const add = (lvl, t, desc, tab, label) => items.push({ lvl, t, desc, tab, label });
+  // LLM targets
+  const T = sortedNames(saved.Targets || {}), local = u => /localhost|127\.0\.0\.1/.test(u || "");
+  const unusable = T.filter(n => !saved.Targets[n].Disabled && !S.meta.targetKeySet?.[n] && !local(saved.Targets[n].BaseURL));
+  add(unusable.length ? "w" : "", unusable.length ? `${T.length - unusable.length} LLM cible(s) sur ${T.length} utilisable(s)` : `${T.length} LLM cible(s) configurée(s)`,
+    unusable.length ? "Sans clé : " + unusable.map(esc).join(", ") : "Toutes les cibles cloud ont une clé.", "targets", "LLM cibles");
+  // admin protection
+  const tokenSet = saved.Server?.AdminToken === KEEP, sso = saved.Auth?.Providers || [];
+  add(tokenSet || sso.length ? "" : "c", tokenSet || sso.length ? "Administration protégée" : "Administration ouverte",
+    [tokenSet && "jeton d'administration", sso.length && "SSO " + sso.map(p => esc(p.Label || p.ID)).join(", ")].filter(Boolean).join(" et ") || "Ni jeton ni SSO : quiconque atteint la passerelle peut la configurer.", "settings", "Paramètres");
+  // debug
+  add(saved.Debug?.Enabled ? "w" : "", saved.Debug?.Enabled ? "Mode DEBUG actif" : "Mode DEBUG inactif",
+    saved.Debug?.Enabled ? `Échanges archivés en clair pendant ${saved.Debug.RetentionHours || 24} h. À désactiver après le diagnostic.` : "Aucune archive en clair.", "debug", "Debug");
+  // violations and errors
+  add(tot.Bl ? "w" : "", tot.Bl ? `${fmt(tot.Bl)} requête(s) bloquée(s) en 48 h` : "Aucune requête bloquée en 48 h",
+    tot.Bl ? "Données interdites par un profil, ou quota atteint." : "Aucune violation de la politique de données.", "report", "Reporting");
+  add(tot.Err ? "w" : "", tot.Err ? `${fmt(tot.Err)} erreur(s) en 48 h` : "Aucune erreur en 48 h",
+    tot.Err ? "LLM injoignable, clé refusée, modèle inconnu… Motif dans les requêtes récentes." : "Tous les appels ont abouti.", "report", "Reporting");
+  // quotas
+  const qa = quotaAlerts();
+  add(qa.some(x => x.pct >= 100) ? "c" : qa.length ? "w" : "", qa.length ? `${qa.length} quota(s) à plus de 80 %` : "Quotas sous les seuils",
+    qa.length ? qa.slice(0, 4).map(x => `${esc(x.who)} : ${x.pct} % (${x.label})`).join(" · ") : "Aucune limite proche d'être atteinte.", "quotas", "Quotas");
+  // alerts
+  add(saved.Alerts?.Enabled ? "" : "i", saved.Alerts?.Enabled ? "Alertes email actives" : "Alertes email inactives",
+    saved.Alerts?.Enabled ? "Récapitulatif toutes les " + (saved.Alerts.IntervalMinutes || 15) + " min." : "Les violations et les pannes ne sont pas signalées par email.", "settings", "Paramètres");
+  const status = items.sort((a, b) => ({ c: 0, w: 1, i: 2, "": 3 }[a.lvl] - { c: 0, w: 1, i: 2, "": 3 }[b.lvl])).map(x => `<div class="it"><span class="dot ${x.lvl}"></span><div><div class="t">${x.t}</div><div class="d">${x.desc}</div></div><button class="btn go" onclick="go('${x.tab}')">${x.label}</button></div>`).join("");
+  const rec = (d?.recent || []).slice(0, 8).map(r => `<tr><td>${new Date(r.TS * 1000).toLocaleTimeString("fr-BE", { hour: "2-digit", minute: "2-digit" })}</td><td>${esc(r.User)}</td><td>${esc(r.Target)}<span class="sub"> / ${esc(r.Model)}</span></td>
+      <td class="n">${r.Blocked ? `<span class="badge bad">${r.Status}</span>` : r.Status >= 400 || !r.Status ? `<span class="badge warn">${r.Status}</span>` : r.Status}</td><td class="n">${r.Anon || ""}</td></tr>`).join("");
+  const top = sumRows(d?.user || []).slice(0, 5).map(r => `<tr><td>${esc(r.G)}</td><td class="n">${fmt(r.N)}</td><td class="n">${fmt(r.TI + r.TO)}</td><td class="n">${fmt(r.An)}</td><td class="n">${r.Bl ? `<span class="badge bad">${r.Bl}</span>` : "0"}</td></tr>`).join("");
+  return `<section class="kpis">
+      ${kpi("Requêtes (48 h)", fmt(tot.N), `${fmt(tot.Err)} erreur(s)`)}
+      ${kpi("Tokens", fmt(tot.TI + tot.TO), `${fmt(tot.TI)} in · ${fmt(tot.TO)} out`)}
+      ${kpi("LLM cible moy.", tot.N ? fmtMs(tot.SU / ok) : "—", "temps de réponse")}
+      ${kpi("Conversions", fmt(tot.An), "valeurs pseudonymisées")}
+      ${kpi("Violations", tot.Bl ? `<span style="color:var(--critical)">${fmt(tot.Bl)}</span>` : "0", "requêtes bloquées")}
+      ${kpi("Utilisateurs actifs", fmt((d?.user ? new Set(d.user.map(r => r.G)).size : 0)), `${Object.keys(c.Users).length} déclaré(s)`)}
+    </section>
+    <section class="grid2">
+      <div class="card"><div class="chead"><div><h2>Points d'attention</h2><div class="sub">Classés par gravité.</div></div></div><div class="status">${status}</div></div>
+      <div style="display:grid;gap:20px;align-content:start">
+        <div class="card"><div class="chead"><div><h2>Activité récente</h2></div><button class="btn" onclick="go('report')">Tout le reporting</button></div>
+          ${rec ? `<div class="tw"><table><thead><tr><th>Heure</th><th>Utilisateur</th><th>LLM</th><th class="n">Statut</th><th class="n">Conv.</th></tr></thead><tbody>${rec}</tbody></table></div>` : '<p class="empty">Aucune requête pour l\'instant.</p>'}</div>
+        <div class="card"><div class="chead"><div><h2>Utilisateurs les plus actifs (48 h)</h2></div></div>
+          ${top ? `<div class="tw"><table><thead><tr><th>Utilisateur</th><th class="n">Requêtes</th><th class="n">Tokens</th><th class="n">Conv.</th><th class="n">Viol.</th></tr></thead><tbody>${top}</tbody></table></div>` : '<p class="empty">Pas encore d\'activité.</p>'}</div>
+      </div>
+    </section>`;
+}
+
+const VIEWS = { overview: viewOverview, users: viewUsers, profiles: viewProfiles, targets: viewTargets, privacy: viewPrivacy, quotas: viewQuotas, report: viewReport, debug: viewDebug, settings: viewSettings };
+const PAGES = {
+  overview: ["Vue d'ensemble", "État de la passerelle et points d'attention sur les dernières 48 heures."],
+  report: ["Reporting", "Volumes, temps de réponse, conversions et violations, par utilisateur et par LLM."],
+  users: ["Utilisateurs", "Personnes et applications autorisées, leur clé gateway et leur profil."],
+  profiles: ["Profils", "Règles appliquées : LLM autorisés, prompt de comportement, images, alertes et quota."],
+  targets: ["LLM cibles", "Fournisseurs vers lesquels la passerelle route les requêtes, avec leurs clés et leurs modèles."],
+  quotas: ["Quotas", "Limites par profil, par utilisateur et par LLM, avec la consommation en direct."],
+  privacy: ["Filtrage et privacy", "Ce qui est détecté, ce qui en est fait selon le profil, et un banc de test."],
+  debug: ["Debug", "Archive temporaire des échanges complets, pour le dépannage."],
+  settings: ["Alertes et SSO", "Alertes par email et connexion avec Microsoft Entra ID ou Google."],
+};
 function render() {
   if (!S.cfg) return;
   const y = scrollY, a = document.activeElement?.id;
-  document.querySelectorAll("#tabs button").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === S.tab));
-  $("#view").innerHTML = (VIEWS[S.tab] || viewUsers)();
+  if (!VIEWS[S.tab]) S.tab = "overview";
+  document.querySelectorAll("#tabs button").forEach(b => b.dataset.tab === S.tab ? b.setAttribute("aria-current", "page") : b.removeAttribute("aria-current"));
+  const [t, d] = PAGES[S.tab]; $("#ptitle").textContent = t; $("#pdesc").textContent = d; document.title = t + " · LLMGW";
+  $("#cnt-users").textContent = Object.keys(S.cfg.Users).length || "";
+  $("#cnt-profiles").textContent = Object.keys(S.cfg.Profiles).length || "";
+  $("#cnt-targets").textContent = Object.keys(S.cfg.Targets).length || "";
+  $("#view").innerHTML = VIEWS[S.tab]();
   if (S.tab === "report") drawReport();
   scrollTo(0, y); if (a && $("#" + a)) $("#" + a).focus();
 }
 async function go(tab) {
   S.tab = tab; store.set("gwtab", tab); render(); scrollTo(0, 0);
   if (tab === "report") await loadStats();
+  if (tab === "overview") { await Promise.all([loadOverview(), loadUsage()]); render(); }
   if (tab === "debug") { await loadDebug(); render(); }
   if (tab === "privacy") { try { S.learned = (await api("/admin/api/learned")).count; render(); } catch {} }
-  if (tab === "quotas" || tab === "users") { await loadUsage(); if (!document.activeElement?.closest("#view")) render(); }
+  if (tab === "quotas" || tab === "users" || tab === "profiles") { await loadUsage(); if (!document.activeElement?.closest("#view")) render(); }
 }
 $("#tabs").onclick = e => { const b = e.target.closest("button[data-tab]"); if (b) go(b.dataset.tab); };
 $("#theme").onclick = () => { const cur = document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"); const t = cur === "dark" ? "light" : "dark"; document.documentElement.dataset.theme = t; store.set("gwtheme", t); drawReport(); };
 if (store.get("gwtheme")) document.documentElement.dataset.theme = store.get("gwtheme");
 let rz; addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(drawReport, 150); });
 setInterval(async () => {
-  if (document.hidden || $("#view").hidden) return;
+  if (document.hidden || $("#app").hidden) return;
   if (S.tab === "report") loadStats();
   else if (S.tab === "quotas" && !document.activeElement?.closest("#view input, #view select")) { await loadUsage(); render(); stamp(); }
 }, 15000);
 async function boot() {
   try {
     await loadConfig();
-    $("#login").hidden = true; $("#view").hidden = false;
+    $("#login").hidden = true; $("#app").hidden = false;
     await loadUsage(); await go(S.tab); stamp(); showWho();
   } catch (e) { if (e.message !== "401") toast("Erreur : " + e.message, true); }
 }
