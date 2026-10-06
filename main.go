@@ -22,6 +22,8 @@ var dashboardHTML []byte
 //go:embed chat.html
 var chatHTML []byte
 
+var sessKey []byte
+
 func main() {
 	cfgPath := flag.String("config", "config.toml", "fichier de configuration")
 	check := flag.Bool("check", false, "valide la configuration et quitte")
@@ -36,8 +38,11 @@ func main() {
 			len(cfg.Targets), len(cfg.Profiles), len(cfg.Users), len(cfg.dets))
 		return
 	}
-	if cfg.Server.AdminToken == "" {
-		log.Print("ATTENTION : admin_token vide, le dashboard et l'API d'admin sont ouverts")
+	if cfg.Server.AdminToken == "" && len(cfg.Auth.Providers) == 0 {
+		log.Print("ATTENTION : admin_token vide et aucun SSO, le dashboard et l'API d'admin sont ouverts")
+	}
+	for _, p := range cfg.Auth.Providers {
+		log.Printf("SSO %s (%s) : adresse de retour à déclarer : %s/auth/callback/%s", p.ID, p.Type, cfg.Auth.BaseURL, p.ID)
 	}
 	store, err := OpenStore(cfg.dbPath)
 	if err != nil {
@@ -46,11 +51,16 @@ func main() {
 	if learner, err = NewLearner(store.db); err != nil {
 		log.Fatalf("mémoire des noms : %v", err)
 	}
+	if g0, err := metaKey(store.db, "session_key"); err != nil {
+		log.Fatalf("clé de session : %v", err)
+	} else {
+		sessKey = g0
+	}
 	meter := NewMeter()
 	if err := meter.Preload(store); err != nil {
 		log.Printf("quotas : préchargement impossible : %v", err)
 	}
-	g := &Gateway{store: store, meter: meter, client: &http.Client{Transport: &http.Transport{
+	g := &Gateway{store: store, meter: meter, sessKey: sessKey, client: &http.Client{Transport: &http.Transport{
 		Proxy:                 http.ProxyFromEnvironment,
 		ResponseHeaderTimeout: time.Duration(cfg.Server.UpstreamTimeout) * time.Second,
 		MaxIdleConnsPerHost:   32,
@@ -72,6 +82,11 @@ func main() {
 	mux.HandleFunc("POST /v1/messages/count_tokens", g.handleCountTokens)
 	mux.HandleFunc("GET /v1/models", g.handleModels)
 	mux.HandleFunc("GET /v1/me", g.handleMe)
+	mux.HandleFunc("GET /auth/providers", g.handleAuthProviders)
+	mux.HandleFunc("GET /auth/login/{id}", g.handleAuthLogin)
+	mux.HandleFunc("GET /auth/callback/{id}", g.handleAuthCallback)
+	mux.HandleFunc("GET /auth/session", g.handleAuthSession)
+	mux.HandleFunc("POST /auth/logout", g.handleAuthLogout)
 	mux.HandleFunc("GET /chat", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-store")
@@ -208,14 +223,25 @@ func (g *Gateway) maintenance(ctx context.Context) {
 
 // ---------- admin API ----------
 
+// admin accepts the admin token, or an SSO session with the admin right.
+// Without token and without SSO provider, administration is open (warned at startup).
 func (g *Gateway) admin(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if tok := g.C().Server.AdminToken; tok != "" &&
-			subtle.ConstantTimeCompare([]byte(r.Header.Get("X-Admin-Token")), []byte(tok)) != 1 {
-			http.Error(w, "jeton d'administration requis", 401)
+		cfg := g.C()
+		tok := cfg.Server.AdminToken
+		if tok == "" && len(cfg.Auth.Providers) == 0 {
+			h(w, r)
 			return
 		}
-		h(w, r)
+		if tok != "" && subtle.ConstantTimeCompare([]byte(r.Header.Get("X-Admin-Token")), []byte(tok)) == 1 {
+			h(w, r)
+			return
+		}
+		if s := g.session(r); s != nil && s.Admin && r.Header.Get(sessionHeader) != "" {
+			h(w, r)
+			return
+		}
+		http.Error(w, "jeton d'administration ou connexion administrateur requis", 401)
 	}
 }
 

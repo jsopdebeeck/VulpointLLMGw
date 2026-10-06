@@ -56,6 +56,12 @@ footer { border-top: 1px solid var(--border); padding: 10px 16px 14px; backgroun
 .hint { font-size: 12px; color: var(--muted); }
 #login { max-width: 420px; margin: 12vh auto; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px; }
 #login h2 { margin: 0 0 4px; font-size: 17px; }
+.sso { display: grid; gap: 8px; margin: 14px 0 6px; }
+.sso a { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 9px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); text-decoration: none; font-weight: 600; }
+.sso a:hover, .sso a:focus-visible { border-color: var(--accent); outline: none; }
+.sso .ic { width: 18px; height: 18px; border-radius: 4px; display: inline-grid; place-items: center; font-size: 11px; font-weight: 700; color: #fff; background: var(--accent); }
+.sep { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12px; margin: 14px 0 4px; }
+.sep::before, .sep::after { content: ""; flex: 1; height: 1px; background: var(--border); }
 .empty { text-align: center; color: var(--muted); margin-top: 12vh; }
 .empty b { color: var(--text); display: block; font-size: 18px; margin-bottom: 6px; }
 .cursor::after { content: "▍"; animation: blink 1s steps(2) infinite; color: var(--accent); }
@@ -65,8 +71,11 @@ footer { border-top: 1px solid var(--border); padding: 10px 16px 14px; backgroun
 <body>
 <div id="login" hidden>
   <h2>Connexion au gateway</h2>
-  <p class="hint">Saisissez votre clé gateway personnelle (fournie par l'administrateur). Elle reste dans cet onglet.</p>
-  <form id="loginf" class="row"><input id="key" type="password" style="flex:1" autocomplete="off" placeholder="gw-…"><button class="btn primary">Entrer</button></form>
+  <div id="sso" class="sso" hidden></div>
+  <div id="keylogin">
+    <p class="hint" id="keyhint">Saisissez votre clé gateway personnelle (fournie par l'administrateur). Elle reste dans cet onglet.</p>
+    <form id="loginf" class="row"><input id="key" type="password" style="flex:1" autocomplete="off" placeholder="gw-…"><button class="btn primary">Entrer</button></form>
+  </div>
   <p id="loginerr" class="err"></p>
 </div>
 
@@ -102,12 +111,30 @@ const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "
 const ss = { get(k) { try { return sessionStorage.getItem(k) } catch { return null } }, set(k, v) { try { v == null ? sessionStorage.removeItem(k) : sessionStorage.setItem(k, v) } catch {} } };
 const ls = { get(k) { try { return localStorage.getItem(k) } catch { return null } }, set(k, v) { try { localStorage.setItem(k, v) } catch {} } };
 let key = ss.get("gwkey") || "", me = null, history = [], pending = [], ctrl = null;
+// a gateway key (header), or an SSO session (cookie + anti-CSRF header)
+const authHeaders = () => key ? { Authorization: "Bearer " + key } : { "X-LLMGW-Session": "1" };
+async function showLoginPage(msg) {
+  $("#login").hidden = false; $("#loginerr").textContent = msg || "";
+  try {
+    const a = await (await fetch("/auth/providers")).json();
+    const ic = { entra: "M", google: "G", oidc: "↪" };
+    $("#sso").innerHTML = a.providers.map(p => `<a href="/auth/login/${encodeURIComponent(p.ID)}?next=/chat"><span class="ic">${ic[p.Type] || "↪"}</span>Se connecter avec ${esc(p.Label)}</a>`).join("");
+    $("#sso").hidden = !a.providers.length;
+    $("#keylogin").hidden = !a.keys;
+    if (a.providers.length && a.keys) $("#sso").insertAdjacentHTML("beforeend", `<div class="sep">ou avec une clé</div>`);
+  } catch {}
+}
 const MAX_DOC = 300000;
 
 // ---------- auth ----------
 async function login() {
-  const r = await fetch("/v1/me", { headers: { Authorization: "Bearer " + key } });
-  if (!r.ok) { ss.set("gwkey", null); $("#login").hidden = false; $("#loginerr").textContent = key ? "Clé refusée" : ""; return; }
+  const r = await fetch("/v1/me", { headers: authHeaders() });
+  if (!r.ok) {
+    const viaKey = !!key; ss.set("gwkey", null); key = "";
+    let msg = viaKey ? "Clé refusée" : "";
+    if (!viaKey) { try { const s = await fetch("/auth/session"); if (s.ok) { const j = await s.json(); msg = j.profile ? "Accès refusé pour " + j.email : `Connecté en tant que ${j.email}, mais aucun profil de chat ne vous est attribué.`; } } catch {} }
+    return showLoginPage(msg);
+  }
   me = await r.json();
   $("#login").hidden = true; for (const id of ["#top", "#log", "#foot"]) $(id).hidden = false;
   $("#who").textContent = `${me.user} · profil ${me.profile}`;
@@ -131,7 +158,11 @@ async function login() {
   renderAll(); $("#input").focus();
 }
 $("#loginf").onsubmit = e => { e.preventDefault(); key = $("#key").value.trim(); ss.set("gwkey", key); login(); };
-$("#logout").onclick = () => { ss.set("gwkey", null); ss.set("gwhist", null); location.reload(); };
+$("#logout").onclick = async () => {
+  ss.set("gwkey", null); ss.set("gwhist", null);
+  if (!key) { try { await fetch("/auth/logout", { method: "POST", headers: { "X-LLMGW-Session": "1" } }); } catch {} }
+  location.reload();
+};
 function currentModel() {
   const v = $("#modelSel").value;
   if (v.startsWith("__other:")) { const m = $("#model").value.trim(); return m ? v.slice(8) + "/" + m : ""; }
@@ -241,7 +272,7 @@ async function send() {
   const t0 = performance.now(); let buf = "";
   try {
     const r = await fetch("/v1/chat/completions", { method: "POST", signal: ctrl.signal,
-      headers: { Authorization: "Bearer " + key, "Content-Type": "application/json" },
+      headers: { ...authHeaders(), "Content-Type": "application/json" },
       body: JSON.stringify({ model, stream: true, messages: apiMessages() }) });
     const meta = { target: r.headers.get("X-Gateway-Target"), conv: +(r.headers.get("X-Gateway-Conversions") || 0), kinds: r.headers.get("X-Gateway-Kinds") || "" };
     um.meta = meta.target ? { conv: meta.conv, kinds: meta.kinds } : null;
@@ -278,7 +309,7 @@ $("#input").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shift
 function autosize() { const t = $("#input"); t.style.height = "auto"; t.style.height = Math.min(240, t.scrollHeight) + "px"; }
 $("#input").addEventListener("input", autosize);
 
-if (key) login(); else $("#login").hidden = false;
+login(); // with the stored key, or the SSO session cookie if there is one
 </script>
 </body>
 </html>

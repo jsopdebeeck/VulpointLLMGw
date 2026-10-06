@@ -21,6 +21,7 @@ type Config struct {
 	Privacy   PrivacyCfg          `toml:"privacy"`
 	Debug     DebugCfg            `toml:"debug"`
 	Alerts    AlertsCfg           `toml:"alerts"`
+	Auth      AuthCfg             `toml:"auth"`
 	Detectors []*DetectorCfg      `toml:"detectors"`
 
 	allow  map[string]bool   // folded terms never anonymized
@@ -102,6 +103,7 @@ type User struct {
 	Description string `toml:"description,omitempty"`
 	Kind        string `toml:"kind,omitempty"` // user | app
 	Key         string `toml:"key"`
+	Email       string `toml:"email,omitempty"` // links the SSO identity to this user (profile, quotas)
 	Profile     string `toml:"profile"`
 	Disabled    bool   `toml:"disabled,omitempty"`
 	Quota       *Quota `toml:"quota,omitempty"` // overrides the profile quota field by field (-1 = unlimited)
@@ -299,6 +301,9 @@ func ParseConfig(data []byte, base string) (*Config, error) {
 			return nil, fmt.Errorf("utilisateurs %q et %q : même clé", o, n)
 		}
 		c.keys[k] = n
+	}
+	if err := c.checkAuth(); err != nil {
+		return nil, err
 	}
 	return &c, nil
 }

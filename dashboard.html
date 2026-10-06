@@ -46,6 +46,8 @@ input[type=checkbox] { width: 16px; height: 16px; padding: 0; accent-color: var(
 input.num { width: 110px; text-align: right; font-variant-numeric: tabular-nums; }
 input.w100, textarea.w100, select.w100 { width: 100%; }
 button.btn { cursor: pointer; white-space: nowrap; }
+a.sso { display: block; text-align: center; text-decoration: none; font-weight: 600; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }
+a.sso:hover, a.sso:focus-visible { border-color: var(--accent); outline: none; }
 button.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 button.btn.danger { color: var(--critical); }
 button.icon { border: 0; background: none; color: var(--text2); cursor: pointer; padding: 2px 6px; font: inherit; border-radius: 6px; }
@@ -128,6 +130,7 @@ tr.click { cursor: pointer; } tr.click:hover td { background: var(--grid); } tr.
     <h1>LLM Gateway</h1>
     <span class="spacer"></span>
     <span id="dbgflag" class="dbgbanner" hidden onclick="go('debug')" title="Des échanges complets sont archivés en clair">DEBUG actif</span>
+    <span id="who" style="color:var(--text2);font-size:12px"></span>
     <span id="upd" style="color:var(--muted);font-size:12px"></span>
     <button class="btn" id="theme" title="Thème clair / sombre">◐</button>
   </div>
@@ -142,8 +145,9 @@ tr.click { cursor: pointer; } tr.click:hover td { background: var(--grid); } tr.
 </header>
 
 <div id="login" class="card" hidden>
-  <h2>Jeton d'administration</h2>
-  <p class="sub">La valeur <code>admin_token</code> de la section [server] de config.toml. Elle reste dans ce navigateur.</p>
+  <h2>Administration</h2>
+  <div id="sso" style="display:grid;gap:8px;margin:12px 0" hidden></div>
+  <p class="sub">Ou le jeton <code>admin_token</code> de la section [server] de config.toml. Il reste dans ce navigateur.</p>
   <form id="loginf" style="display:flex;gap:8px"><input id="tok" type="password" style="flex:1" autocomplete="off"><button class="btn">Entrer</button></form>
   <p id="loginerr" class="err"></p>
 </div>
@@ -169,12 +173,27 @@ const color = i => `var(${SLOTS[i % 8]})`;
 const KEEP = "__keep__";
 
 async function api(path, opt = {}) {
-  const r = await fetch(path, { ...opt, headers: { "X-Admin-Token": token, "Content-Type": "application/json" } });
-  if (r.status === 401) { showLogin("Jeton refusé"); throw new Error("401"); }
+  const r = await fetch(path, { ...opt, headers: { "X-Admin-Token": token, "X-LLMGW-Session": "1", "Content-Type": "application/json" } });
+  if (r.status === 401) { showLogin(token ? "Jeton refusé" : ""); throw new Error("401"); }
   if (!r.ok) throw new Error((await r.text()).trim());
   return r.json();
 }
-function showLogin(msg) { $("#view").hidden = true; $("#login").hidden = false; $("#loginerr").textContent = msg || ""; }
+function showLogin(msg) {
+  $("#view").hidden = true; $("#login").hidden = false; $("#loginerr").textContent = msg || "";
+  fetch("/auth/providers").then(r => r.json()).then(a => {
+    $("#sso").innerHTML = a.providers.map(p => `<a class="sso" href="/auth/login/${encodeURIComponent(p.ID)}?next=/dashboard">Se connecter avec ${esc(p.Label)}</a>`).join("");
+    $("#sso").hidden = !a.providers.length;
+  }).catch(() => {});
+  fetch("/auth/session").then(r => r.ok ? r.json() : null).then(s => { if (s && !s.admin) $("#loginerr").textContent = `Connecté en tant que ${s.email}, sans droit d'administration.`; }).catch(() => {});
+}
+async function showWho() {
+  try {
+    const r = await fetch("/auth/session"); if (!r.ok) return;
+    const s = await r.json();
+    $("#who").innerHTML = `${esc(s.email)} · <a href="#" id="ssoout" style="color:inherit">déconnexion</a>`;
+    $("#ssoout").onclick = async e => { e.preventDefault(); await fetch("/auth/logout", { method: "POST", headers: { "X-LLMGW-Session": "1" } }); location.reload(); };
+  } catch {}
+}
 $("#loginf").onsubmit = e => { e.preventDefault(); token = $("#tok").value; store.set("gwtok", token); boot(); };
 function toast(msg, bad) { const t = $("#toast"); t.textContent = msg; t.className = bad ? "bad" : ""; t.style.display = "block"; clearTimeout(t._h); t._h = setTimeout(() => t.style.display = "none", bad ? 9000 : 3500); }
 
@@ -483,7 +502,21 @@ function viewUsers() {
     ${nkNote}<div class="tw"><table><thead><tr><th>Nom</th><th>Type</th><th>Description</th><th>Profil</th><th>LLM accessibles</th><th>Clé gateway</th><th>Accès</th><th class="n">Aujourd'hui</th><th></th></tr></thead><tbody>${users || '<tr><td colspan="9" class="sub">Aucun utilisateur</td></tr>'}</tbody></table></div></section>
     <section><div class="chead"><div><h2 style="font-size:15px;margin:0">Profils : règles appliquées</h2><div class="sub">Un profil regroupe routage, politique de données et quota.</div></div><span class="spacer"></span><button class="btn" data-act="prof-add">+ Profil</button></div>
     <div class="grid3">${profs}</div></section>
-    ${viewAlerts()}`;
+    ${viewAlerts()}
+    ${viewAuth()}`;
+}
+function viewAuth() {
+  const a = S.meta.config.Auth || {}, P = a.Providers || [], base = a.BaseURL || location.origin;
+  const typ = { entra: "Microsoft Entra ID", google: "Google", oidc: "OIDC" };
+  const rows = P.map(p => `<tr><td><b>${esc(p.Label || p.ID)}</b><div class="sub" style="margin:0">${esc(typ[p.Type] || p.Type)} · id ${esc(p.ID)}</div></td>
+      <td class="mono" style="white-space:normal">${esc(base)}/auth/callback/${esc(p.ID)}</td>
+      <td class="wrap">${(p.AllowedDomains || []).map(esc).join(", ") || '<span class="sub">tous</span>'}</td>
+      <td class="wrap">${(p.Mappings || []).map(m => `${m.Group ? "groupe " + esc(m.Group) : m.Role ? "rôle " + esc(m.Role) : esc(m.Email)} → <b>${esc(m.Profile)}</b>`).join("<br>") || "—"}${p.DefaultProfile ? `<br><span class="sub">sinon ${esc(p.DefaultProfile)}</span>` : '<br><span class="sub">sinon refus</span>'}</td>
+      <td class="wrap">${[...(p.AdminRoles || []).map(r => "rôle " + esc(r)), ...(p.AdminGroups || []).map(g => "groupe " + esc(g)), ...(p.AdminEmails || []).map(esc)].join("<br>") || "—"}</td></tr>`).join("");
+  return `<section class="card"><div class="chead"><div><h2>Authentification (SSO)</h2><div class="sub">Connexion au portail et au dashboard avec Microsoft Entra ID, Google ou un fournisseur OpenID Connect, en plus des clés gateway et du jeton d'administration. Se paramètre dans la section [auth] de config.toml.</div></div></div>
+    ${P.length ? `<div class="tw"><table><thead><tr><th>Fournisseur</th><th>Adresse de retour à déclarer</th><th>Domaines</th><th>Profil attribué</th><th>Administrateurs</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <p class="sub" style="margin-top:8px">Un utilisateur déclaré ci-dessus avec la même adresse email garde son profil et ses quotas. Session : ${a.SessionHours || 12} h. Connexion par clé sur le portail : ${a.DisableKeys ? "désactivée" : "active"}.</p>`
+      : `<p class="sub">Aucun fournisseur configuré. Exemple dans config.example.toml, section [auth].</p>`}</section>`;
 }
 function viewAlerts() {
   const a = S.cfg.Alerts, b = "Alerts|", saved = S.meta.config.Alerts || {};
@@ -806,7 +839,7 @@ async function boot() {
   try {
     await loadConfig();
     $("#login").hidden = true; $("#view").hidden = false;
-    await loadUsage(); await go(S.tab); stamp();
+    await loadUsage(); await go(S.tab); stamp(); showWho();
   } catch (e) { if (e.message !== "401") toast("Erreur : " + e.message, true); }
 }
 boot();

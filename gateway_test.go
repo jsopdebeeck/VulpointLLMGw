@@ -3,12 +3,20 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"crypto"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/big"
 	"net"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -746,5 +754,155 @@ func TestOpenProfileLogsOnly(t *testing.T) {
 	}
 	if len(s.Events) == 0 || s.Stats["EMAIL"]["log"] == 0 || s.Anon != 0 || s.Blocked != 0 {
 		t.Errorf("OPEN doit journaliser les détections : stats %v, conv %d", s.Stats, s.Anon)
+	}
+}
+
+// fakeIdP: a minimal OpenID Connect provider signing RS256 ID tokens.
+type fakeIdP struct {
+	srv       *httptest.Server
+	key       *rsa.PrivateKey
+	mu        sync.Mutex
+	nonce     string
+	challenge string
+	claims    map[string]any
+}
+
+func newFakeIdP(t *testing.T) *fakeIdP {
+	k, _ := rsa.GenerateKey(rand.Reader, 2048)
+	f := &fakeIdP{key: k}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/.well-known/openid-configuration", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]string{"issuer": f.srv.URL, "authorization_endpoint": f.srv.URL + "/authorize",
+			"token_endpoint": f.srv.URL + "/token", "jwks_uri": f.srv.URL + "/jwks"})
+	})
+	mux.HandleFunc("/jwks", func(w http.ResponseWriter, r *http.Request) {
+		e := big.NewInt(int64(k.E)).Bytes()
+		json.NewEncoder(w).Encode(map[string]any{"keys": []any{map[string]string{"kid": "k1", "kty": "RSA",
+			"n": base64.RawURLEncoding.EncodeToString(k.N.Bytes()), "e": base64.RawURLEncoding.EncodeToString(e)}}})
+	})
+	mux.HandleFunc("/token", func(w http.ResponseWriter, r *http.Request) {
+		r.ParseForm()
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		h := sha256.Sum256([]byte(r.Form.Get("code_verifier")))
+		if r.Form.Get("code") != "code-ok" || base64.RawURLEncoding.EncodeToString(h[:]) != f.challenge {
+			w.WriteHeader(400)
+			fmt.Fprint(w, `{"error":"invalid_grant"}`)
+			return
+		}
+		c := map[string]any{"iss": f.srv.URL, "aud": "client-1", "exp": time.Now().Add(time.Hour).Unix(), "nonce": f.nonce}
+		for k, v := range f.claims {
+			c[k] = v
+		}
+		hdr, _ := json.Marshal(map[string]string{"alg": "RS256", "kid": "k1"})
+		pl, _ := json.Marshal(c)
+		in := base64.RawURLEncoding.EncodeToString(hdr) + "." + base64.RawURLEncoding.EncodeToString(pl)
+		d := sha256.Sum256([]byte(in))
+		sig, _ := rsa.SignPKCS1v15(rand.Reader, k, crypto.SHA256, d[:])
+		json.NewEncoder(w).Encode(map[string]string{"id_token": in + "." + base64.RawURLEncoding.EncodeToString(sig)})
+	})
+	f.srv = httptest.NewServer(mux)
+	t.Cleanup(f.srv.Close)
+	return f
+}
+
+func TestSSO(t *testing.T) {
+	_, oai, _, g := setup(t)
+	idp := newFakeIdP(t)
+	cfg := g.C()
+	cfg.Auth = AuthCfg{BaseURL: "http://gw.test", Providers: []*ProviderCfg{{ID: "test", Type: "oidc", Issuer: idp.srv.URL,
+		ClientID: "client-1", ClientSecret: "s", AdminRoles: []string{"LLMGW.Admin"},
+		Mappings: []*AuthMapping{{Group: "g-sante", Profile: "strict"}, {Email: "*@ok.be", Profile: "standard"}}}}}
+	cfg.Server.AdminToken = "tok"
+	if err := cfg.checkAuth(); err != nil {
+		t.Fatal(err)
+	}
+	g.sessKey = []byte("0123456789abcdef0123456789abcdef")
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /v1/chat/completions", g.handleLLM("openai"))
+	mux.HandleFunc("GET /auth/login/{id}", g.handleAuthLogin)
+	mux.HandleFunc("GET /auth/callback/{id}", g.handleAuthCallback)
+	mux.HandleFunc("GET /auth/session", g.handleAuthSession)
+	mux.HandleFunc("GET /admin/api/config", g.admin(g.handleGetConfig))
+	gw := httptest.NewServer(mux)
+	defer gw.Close()
+
+	login := func(claims map[string]any) (*http.Client, int) {
+		jar, _ := cookiejar.New(nil)
+		cl := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+		r, err := cl.Get(gw.URL + "/auth/login/test?next=/chat")
+		if err != nil || r.StatusCode != 302 {
+			t.Fatalf("login : %v %v", err, r)
+		}
+		u, _ := url.Parse(r.Header.Get("Location"))
+		q := u.Query()
+		if q.Get("redirect_uri") != "http://gw.test/auth/callback/test" || q.Get("code_challenge_method") != "S256" {
+			t.Errorf("paramètres d'autorisation : %v", q)
+		}
+		idp.mu.Lock()
+		idp.nonce, idp.challenge, idp.claims = q.Get("nonce"), q.Get("code_challenge"), claims
+		idp.mu.Unlock()
+		r, _ = cl.Get(gw.URL + "/auth/callback/test?code=code-ok&state=" + url.QueryEscape(q.Get("state")))
+		return cl, r.StatusCode
+	}
+	call := func(cl *http.Client, path string, withHeader bool) int {
+		var req *http.Request
+		if strings.HasPrefix(path, "/v1/") {
+			req, _ = http.NewRequest("POST", gw.URL+path, strings.NewReader(`{"model":"mistral-large","messages":[{"role":"user","content":"Bonjour"}]}`))
+		} else {
+			req, _ = http.NewRequest("GET", gw.URL+path, nil)
+		}
+		if withHeader {
+			req.Header.Set(sessionHeader, "1")
+		}
+		r, err := cl.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		io.ReadAll(r.Body)
+		return r.StatusCode
+	}
+
+	// group -> profile "strict" (Mistral allowed), not admin
+	cl, st := login(map[string]any{"email": "marie@hopital.be", "name": "Marie", "groups": []string{"g-sante"}})
+	if st != 302 {
+		t.Fatalf("callback : %d", st)
+	}
+	if c := call(cl, "/v1/chat/completions", true); c != 200 {
+		t.Errorf("requête LLM avec session : %d", c)
+	}
+	if !strings.Contains(oai.last(), "Bonjour") {
+		t.Error("la requête n'a pas atteint le LLM")
+	}
+	if c := call(cl, "/v1/chat/completions", false); c != 401 {
+		t.Errorf("sans en-tête anti-CSRF : %d, 401 attendu", c)
+	}
+	if c := call(cl, "/admin/api/config", true); c != 401 {
+		t.Errorf("dashboard pour un non-admin : %d, 401 attendu", c)
+	}
+	// admin role
+	cl, _ = login(map[string]any{"email": "it@ok.be", "roles": []string{"LLMGW.Admin"}})
+	if c := call(cl, "/admin/api/config", true); c != 200 {
+		t.Errorf("dashboard pour un admin : %d", c)
+	}
+	// no mapping and no default profile: refused
+	if _, st := login(map[string]any{"email": "x@ailleurs.com"}); st != 403 {
+		t.Errorf("identité sans profil : %d, 403 attendu", st)
+	}
+	// declared user linked by email keeps its own profile
+	cfg.Users["alice"].Email = "alice@hopital.be"
+	cl, _ = login(map[string]any{"email": "ALICE@hopital.be"})
+	req, _ := http.NewRequest("GET", gw.URL+"/auth/session", nil)
+	r, _ := cl.Do(req)
+	b, _ := io.ReadAll(r.Body)
+	if !strings.Contains(string(b), `"user":"alice"`) || !strings.Contains(string(b), `"profile":"standard"`) {
+		t.Errorf("utilisateur lié par email : %s", b)
+	}
+	// forged state
+	jar, _ := cookiejar.New(nil)
+	cl2 := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	cl2.Get(gw.URL + "/auth/login/test")
+	if r, _ := cl2.Get(gw.URL + "/auth/callback/test?code=code-ok&state=forged"); r.StatusCode != 400 {
+		t.Errorf("state falsifié : %d, 400 attendu", r.StatusCode)
 	}
 }

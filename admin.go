@@ -72,6 +72,11 @@ func (g *Gateway) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 	if c.Alerts.SMTPPassword != "" {
 		c.Alerts.SMTPPassword = keepSecret
 	}
+	for _, p := range c.Auth.Providers {
+		if p.ClientSecret != "" {
+			p.ClientSecret = keepSecret
+		}
+	}
 	writeJSON(w, map[string]any{"config": c, "keyHints": hints, "targetKeySet": keySet, "builtins": builtinInfo, "version": fileVersion(cur.path)})
 }
 
@@ -99,6 +104,14 @@ func (g *Gateway) handlePutConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	if nc.Alerts.SMTPPassword == keepSecret {
 		nc.Alerts.SMTPPassword = cur.Alerts.SMTPPassword
+	}
+	for _, p := range nc.Auth.Providers {
+		if p.ClientSecret == keepSecret {
+			p.ClientSecret = ""
+			if old := cur.provider(p.ID); old != nil {
+				p.ClientSecret = old.ClientSecret
+			}
+		}
 	}
 	for n, t := range nc.Targets {
 		if !nameRe.MatchString(n) {

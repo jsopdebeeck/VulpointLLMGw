@@ -15,12 +15,13 @@ import (
 )
 
 type Gateway struct {
-	cfg    atomic.Pointer[Config]
-	store  *Store
-	meter  *Meter
-	alerts *Alerter
-	client *http.Client
-	saveMu sync.Mutex
+	cfg     atomic.Pointer[Config]
+	store   *Store
+	meter   *Meter
+	alerts  *Alerter
+	client  *http.Client
+	saveMu  sync.Mutex
+	sessKey []byte // signs web session cookies
 }
 
 func (g *Gateway) C() *Config { return g.cfg.Load() }
@@ -102,7 +103,14 @@ func clientKey(r *http.Request) string {
 }
 
 func (g *Gateway) auth(cfg *Config, r *http.Request) (string, *User) {
-	name, ok := cfg.keys[clientKey(r)]
+	key := clientKey(r)
+	if key == "" { // web portal signed in with SSO
+		if s := g.session(r); s != nil && r.Header.Get(sessionHeader) != "" {
+			return g.sessionUser(cfg, s)
+		}
+		return "", nil
+	}
+	name, ok := cfg.keys[key]
 	if !ok {
 		return "", nil
 	}
