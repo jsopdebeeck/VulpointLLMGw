@@ -1128,3 +1128,21 @@ func TestSignInAudit(t *testing.T) {
 		t.Errorf("journal des connexions :\n%s\nattendu :\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 }
+
+func TestGarbledPDFName(t *testing.T) {
+	cfg, err := LoadConfig("config.example.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := NewSession(cfg, cfg.Profiles["standard"])
+	in := "Comparaît :\n—   Monsiaur   OPDEBEECK   J@an—S©basti@:,   ici   présent, et **Marie Dupont** (marie.dupont@exemple.be) – Gérald Keizer—"
+	out := s.AnonymizeText(in)
+	for _, leak := range []string{"OPDEBEECK", "J@an", "S©basti", "Dupont", "marie.dupont@exemple.be", "Keizer"} {
+		if strings.Contains(out, leak) {
+			t.Errorf("%q non masqué : %s", leak, out)
+		}
+	}
+	if back := s.Restore(out); back != in {
+		t.Errorf("restauration :\n%s\nattendu :\n%s", back, in)
+	}
+}

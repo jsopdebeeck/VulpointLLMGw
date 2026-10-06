@@ -137,11 +137,25 @@ type tok struct {
 
 func isNameRune(r rune) bool { return unicode.IsLetter(r) || r == '\'' || r == '’' || r == '-' }
 
+// isGlue: symbols that a broken PDF font puts in place of letters ("J@an—S©basti@" for
+// "Jean-Sébastien"). Right after a letter they belong to the word; dashes only between
+// two letters. Markdown marks (*, #, `, |) are never glued.
+func isGlue(s string, i int, r rune) bool {
+	switch r {
+	case '@', '©', '®', '¤', '§', '°', '¬', '¦', '±', 'µ', '¨', '´', '\uFFFD':
+		return r != '@' || !emailAt(s, i)
+	case '—', '–':
+		n, _ := utf8.DecodeRuneInString(s[i+utf8.RuneLen(r):])
+		return unicode.IsLetter(n)
+	}
+	return false
+}
+
 func tokenize(s string) []tok {
 	var out []tok
 	start := -1
 	for i, r := range s {
-		if isNameRune(r) {
+		if isNameRune(r) || start >= 0 && isGlue(s, i, r) {
 			if start < 0 {
 				start = i
 			}
@@ -156,6 +170,15 @@ func tokenize(s string) []tok {
 		out = append(out, trimTok(s, start, len(s)))
 	}
 	return out
+}
+
+// emailAt: an "@" between two letters followed by a domain is an email, not a damaged letter.
+func emailAt(s string, i int) bool {
+	rest := s[i+1:]
+	if j := strings.IndexFunc(rest, func(c rune) bool { return !(unicode.IsLetter(c) || unicode.IsDigit(c) || c == '-' || c == '.') }); j >= 0 {
+		rest = rest[:j]
+	}
+	return strings.Contains(strings.Trim(rest, "."), ".")
 }
 
 func trimTok(s string, a, b int) tok {

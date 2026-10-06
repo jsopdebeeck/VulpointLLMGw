@@ -246,13 +246,15 @@ async function addFile(f) {
       a.text = a.text.replace(/\n{3,}/g, "\n\n").trim();
       if (!a.text) throw new Error("aucun texte extrait (document scanné ?)");
       if (a.text.length > MAX_DOC) { a.text = a.text.slice(0, MAX_DOC); a.truncated = true; }
+      // broken PDF font: letters extracted as symbols ("J@an S©basti@"); the gateway still masks these words
+      a.garbled = (a.text.replace(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g, "").match(/\p{L}[@©®¤§°¬¦±µ¨´\uFFFD](?=\p{L}|\s|[.,:;])/gu) || []).length >= 3;
     }
   } catch (e) { a.error = e.message; }
   a.loading = false; renderAtts();
 }
 function renderAtts() {
   $("#atts").innerHTML = pending.map((a, i) => `<span class="att" translate="no">${a.kind === "image" && a.data ? `<img src="${a.data}" alt="">` : "📄"} ${esc(a.name)}
-    ${a.loading ? "<em>lecture…</em>" : a.error ? `<span class="err">${esc(a.error)}</span>` : a.kind === "doc" ? `<span class="hint">${Math.round(a.text.length / 1000)} k car.${a.truncated ? " (tronqué)" : ""}</span>` : ""}
+    ${a.loading ? "<em>lecture…</em>" : a.error ? `<span class="err">${esc(a.error)}</span>` : a.kind === "doc" ? `<span class="hint">${Math.round(a.text.length / 1000)} k car.${a.truncated ? " (tronqué)" : ""}${a.garbled ? ` <span class="err" title="La police du PDF est mal encodée : des lettres sont remplacées par des symboles. Le texte reçu par le LLM sera de mauvaise qualité.">⚠ texte extrait abîmé</span>` : ""}</span>` : ""}
     <button data-rm="${i}" title="Retirer">✕</button></span>`).join("");
 }
 $("#atts").onclick = e => { const b = e.target.closest("[data-rm]"); if (b) { pending.splice(+b.dataset.rm, 1); renderAtts(); } };
