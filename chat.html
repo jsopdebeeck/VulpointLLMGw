@@ -77,6 +77,7 @@ footer { border-top: 1px solid var(--border); padding: 10px 16px 14px; backgroun
     <form id="loginf" class="row"><input id="key" type="password" style="flex:1" autocomplete="off" placeholder="gw-…"><button class="btn primary">Entrer</button></form>
   </div>
   <p id="loginerr" class="err"></p>
+  <p style="text-align:right;margin:10px 0 0"><select class="langsel" aria-label="Langue"></select></p>
 </div>
 
 <header id="top" hidden>
@@ -86,6 +87,7 @@ footer { border-top: 1px solid var(--border); padding: 10px 16px 14px; backgroun
   <select id="modelSel" aria-label="Modèle" style="max-width:260px"></select>
   <input id="model" placeholder="nom du modèle" style="width:200px" hidden aria-label="Autre modèle">
   <button class="btn" id="new">Nouvelle conversation</button>
+  <select class="langsel" aria-label="Langue"></select>
   <button class="btn" id="theme" title="Thème">◐</button>
   <button class="btn" id="logout">Déconnexion</button>
 </header>
@@ -105,7 +107,9 @@ footer { border-top: 1px solid var(--border); padding: 10px 16px 14px; backgroun
   </div>
 </footer>
 
+<script src="/i18n.js"></script>
 <script>
+document.querySelectorAll(".langsel").forEach(I18N.select);
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const ss = { get(k) { try { return sessionStorage.getItem(k) } catch { return null } }, set(k, v) { try { v == null ? sessionStorage.removeItem(k) : sessionStorage.setItem(k, v) } catch {} } };
@@ -205,7 +209,7 @@ async function addFile(f) {
   a.loading = false; renderAtts();
 }
 function renderAtts() {
-  $("#atts").innerHTML = pending.map((a, i) => `<span class="att">${a.kind === "image" && a.data ? `<img src="${a.data}" alt="">` : "📄"} ${esc(a.name)}
+  $("#atts").innerHTML = pending.map((a, i) => `<span class="att" translate="no">${a.kind === "image" && a.data ? `<img src="${a.data}" alt="">` : "📄"} ${esc(a.name)}
     ${a.loading ? "<em>lecture…</em>" : a.error ? `<span class="err">${esc(a.error)}</span>` : a.kind === "doc" ? `<span class="hint">${Math.round(a.text.length / 1000)} k car.${a.truncated ? " (tronqué)" : ""}</span>` : ""}
     <button data-rm="${i}" title="Retirer">✕</button></span>`).join("");
 }
@@ -238,10 +242,10 @@ function metaHTML(m) {
 }
 function msgHTML(m, i) {
   if (m.role === "user") {
-    const atts = (m.atts || []).map(a => `<span class="att">${a.kind === "image" ? "🖼" : "📄"} ${esc(a.name)}</span>`).join("");
-    return `<div class="msg user"><div class="bubble">${esc(m.text)}</div>${atts ? `<div>${atts}</div>` : ""}${metaHTML(m.meta)}</div>`;
+    const atts = (m.atts || []).map(a => `<span class="att" translate="no">${a.kind === "image" ? "🖼" : "📄"} ${esc(a.name)}</span>`).join("");
+    return `<div class="msg user"><div class="bubble" translate="no">${esc(m.text)}</div>${atts ? `<div>${atts}</div>` : ""}${metaHTML(m.meta)}</div>`;
   }
-  return `<div class="msg assistant"><div class="bubble ${m.streaming ? "cursor" : ""}" id="b${i}">${m.error ? `<span class="err">${esc(m.error)}</span>` : md(m.text || "")}</div>${metaHTML(m.meta)}</div>`;
+  return `<div class="msg assistant"><div translate="no" class="bubble ${m.streaming ? "cursor" : ""}" id="b${i}">${m.error ? `<span class="err">${esc(m.error)}</span>` : md(m.text || "")}</div>${metaHTML(m.meta)}</div>`;
 }
 function renderAll() {
   $("#msgs").innerHTML = history.length ? history.map(msgHTML).join("")

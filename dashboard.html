@@ -195,6 +195,7 @@ tr.click { cursor: pointer; } tr.click:hover td { background: var(--grid); } tr.
   <p class="sub">Ou le jeton <code>admin_token</code> de la section [server] de config.toml. Il reste dans ce navigateur.</p>
   <form id="loginf" style="display:flex;gap:8px"><input id="tok" type="password" style="flex:1" autocomplete="off"><button class="btn">Entrer</button></form>
   <p id="loginerr" class="err"></p>
+  <p style="text-align:right;margin:10px 0 0"><select class="langsel" aria-label="Langue"></select></p>
 </div>
 
 <div class="app" id="app" hidden>
@@ -221,6 +222,7 @@ tr.click { cursor: pointer; } tr.click:hover td { background: var(--grid); } tr.
     <div class="side-foot">
       <div id="who"></div>
       <div class="row"><span id="upd" style="color:var(--muted)"></span><span class="spacer"></span><button class="btn" id="theme" title="Thème clair / sombre">◐</button></div>
+      <select class="langsel" aria-label="Langue"></select>
     </div>
   </aside>
   <div class="content">
@@ -236,7 +238,9 @@ tr.click { cursor: pointer; } tr.click:hover td { background: var(--grid); } tr.
 <div id="toast"></div>
 <div class="tip" id="tip"></div>
 
+<script src="/i18n.js"></script>
 <script>
+document.querySelectorAll(".langsel").forEach(I18N.select);
 const $ = (s, el = document) => el.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const store = { get(k) { try { return localStorage.getItem(k) } catch { return null } }, set(k, v) { try { localStorage.setItem(k, v) } catch {} } };
@@ -244,7 +248,7 @@ let token = store.get("gwtok") || "", range = store.get("gwrange") || "48h", dat
 if (!["48h", "60d", "6w", "6m"].includes(range)) range = "6m"; // former 12-month / 3-year views
 const S = { cfg: null, orig: "", meta: null, usage: null, tab: store.get("gwtab") || "overview", privTab: store.get("gwpriv") || "detectors", tgtOpen: new Set((() => { try { return JSON.parse(store.get("gwtgtopen") || "[]"); } catch { return []; } })()), profOpen: new Set((() => { try { return JSON.parse(store.get("gwprofopen") || "[]"); } catch { return []; } })()), newKeys: {}, tests: {}, testOut: "" };
 
-const nf = new Intl.NumberFormat("fr-BE");
+const nf = new Intl.NumberFormat(I18N.loc);
 const fmt = n => { n = +n || 0; const a = Math.abs(n); return a >= 1e9 ? (n / 1e9).toFixed(1) + " G" : a >= 1e6 ? (n / 1e6).toFixed(1) + " M" : a >= 1e4 ? (n / 1e3).toFixed(1) + " k" : nf.format(Math.round(n)); };
 const fmtB = n => { n = +n || 0; const u = ["o", "Ko", "Mo", "Go", "To"]; let i = 0; while (n >= 1024 && i < 4) { n /= 1024; i++; } return (i ? n.toFixed(1) : n) + " " + u[i]; };
 const fmtMs = n => n >= 10000 ? (n / 1000).toFixed(1) + " s" : Math.round(n) + " ms";
@@ -290,8 +294,8 @@ function niceMax(v) { if (v <= 0) return 1; const p = 10 ** Math.floor(Math.log1
 function shortLabel(b) {
   if (range === "48h") return b.slice(11, 13) + "h";
   if (range === "60d") return b.slice(8, 10) + "/" + b.slice(5, 7);
-  if (range === "6w") return "S" + b.slice(6);
-  if (range === "6m") return ["janv", "févr", "mars", "avr", "mai", "juin", "juil", "août", "sept", "oct", "nov", "déc"][+b.slice(5, 7) - 1];
+  if (range === "6w") return (I18N.lang === "fr" ? "S" : "W") + b.slice(6);
+  if (range === "6m") return new Date(2000, +b.slice(5, 7) - 1, 1).toLocaleString(I18N.loc, { month: "short" }).replace(".", "");
   return b;
 }
 function scale(v) { const step = niceMax(v / 4), k = Math.max(1, Math.ceil(v / step - 1e-9)); return { max: step * k, k }; }
@@ -394,7 +398,7 @@ function detTable(el, dets) {
 function recentTable(el, rec) {
   if (!rec?.length) { el.innerHTML = `<p class="sub">Aucune requête pour l'instant.</p>`; return; }
   el.innerHTML = `<table><thead><tr><th>Heure</th><th>Utilisateur</th><th>LLM</th><th>Modèle</th><th class="n">Statut</th><th class="n">Tokens</th><th class="n">Total</th><th class="n">LLM</th><th class="n">Gateway</th><th class="n">Conv.</th><th>Remarque</th></tr></thead><tbody>` +
-    rec.map(r => `<tr><td>${new Date(r.TS * 1000).toLocaleString("fr-BE", { dateStyle: "short", timeStyle: "medium" })}</td><td>${esc(r.User)}</td><td>${esc(r.Target)}</td><td>${esc(r.Model)}${r.Stream ? " ⇢" : ""}</td>
+    rec.map(r => `<tr><td>${new Date(r.TS * 1000).toLocaleString(I18N.loc, { dateStyle: "short", timeStyle: "medium" })}</td><td>${esc(r.User)}</td><td>${esc(r.Target)}</td><td>${esc(r.Model)}${r.Stream ? " ⇢" : ""}</td>
       <td class="n">${r.Blocked ? `<span class="badge bad">${r.Status}</span>` : r.Status >= 400 || !r.Status ? `<span class="badge warn">${r.Status}</span>` : r.Status}</td>
       <td class="n">${fmt(r.TokIn)} / ${fmt(r.TokOut)}</td><td class="n">${fmtMs(r.TotalMs)}</td><td class="n">${fmtMs(r.UpMs)}</td><td class="n">${fmtMs(r.GwMs)}</td><td class="n">${r.Anon}</td><td class="err">${esc(r.Err)}</td></tr>`).join("") + `</tbody></table>`;
 }
@@ -591,7 +595,7 @@ function viewUsers() {
         <span class="chev" aria-hidden="true">▸</span>
         <h3 class="pname ${active ? "on" : "off"}">${esc(pn)}</h3>
         <span class="badge" style="${active ? "" : "color:var(--muted)"}">${esc(use)}</span>
-        <span class="psum">${esc(sum)}</span>
+        <span class="psum" translate="no">${esc(sum)}</span>
         <button class="icon" data-act="prof-del" data-n="${esc(pn)}" title="Supprimer le profil">✕</button>
       </div>
       ${open ? `<div class="fields">
@@ -717,7 +721,7 @@ function viewTargets() {
         <span class="ldot ${st[0]}" title="${esc(st[1])}" role="img" aria-label="${esc(st[1])}"></span>
         <h3 class="pname ${used ? "on" : "off"}">${esc(n)}</h3>
         <span class="badge" style="${st[0] === "ko" ? "color:var(--critical)" : st[0] === "ok" ? "" : "color:var(--muted)"}">${esc(st[1])}</span>
-        <span class="psum">${esc(sum)}</span>
+        <span class="psum" translate="no">${esc(sum)}</span>
         <button class="btn" data-act="tgt-test" data-n="${esc(n)}" ${saved && !t.Disabled ? "" : 'disabled title="Enregistrer d\'abord"'}>Tester</button>
         <button class="icon" data-act="tgt-del" data-n="${esc(n)}" title="Supprimer la cible">✕</button>
       </div>
@@ -878,7 +882,7 @@ function drawReport() {
 }
 async function loadStats() { try { data = await api("/admin/api/stats?range=" + range); drawReport(); stamp(); } catch (e) { if (e.message !== "401") toast(e.message, true); } }
 async function loadUsage() { try { S.usage = await api("/admin/api/usage"); } catch {} }
-function stamp() { $("#upd").textContent = "Mis à jour " + new Date().toLocaleTimeString("fr-BE"); }
+function stamp() { $("#upd").textContent = "Mis à jour " + new Date().toLocaleTimeString(I18N.loc); }
 
 // ---------- shell ----------
 // ---------- tab: debug ----------
@@ -886,7 +890,7 @@ const ACTL = { anonymize: "anonymisé", block: "bloqué", log: "journalisé", st
 function viewDebug() {
   const c = S.cfg, D = S.dbg || {}, saved = S.meta.config.Debug?.Enabled;
   const rows = (D.rows || []).map(r => `<tr class="click ${S.dbgSel?.ID === r.ID ? "sel" : ""}" data-act="dbg-open" data-id="${r.ID}">
-      <td>${new Date(r.TS * 1000).toLocaleString("fr-BE", { dateStyle: "short", timeStyle: "medium" })}</td><td>${esc(r.User)}</td><td>${esc(r.Target)}/${esc(r.Model)}</td>
+      <td>${new Date(r.TS * 1000).toLocaleString(I18N.loc, { dateStyle: "short", timeStyle: "medium" })}</td><td>${esc(r.User)}</td><td>${esc(r.Target)}/${esc(r.Model)}</td>
       <td class="n">${r.Blocked ? `<span class="badge bad">${r.Status}</span>` : r.Status >= 400 ? `<span class="badge warn">${r.Status}</span>` : r.Status}</td>
       <td class="wrap">${Object.entries(r.Kinds || {}).map(([k, n]) => { const [kind, act] = k.split(":"); return `<b class="hl ${act}" title="${ACTL[act] || act}">${esc(kind)} ×${n}</b>`; }).join(" ") || '<span class="sub">—</span>'}</td>
       <td class="n">${fmtB(r.Size)}</td><td class="err">${esc(r.Err)}</td></tr>`).join("");
@@ -960,14 +964,14 @@ function viewDebugDetail(e) {
     const inResp = x.Placeholder && resp.includes("«" + x.Placeholder + "»");
     return { ...x, src, inResp, n: src.reduce((a, [, n]) => a + n, 0) };
   }).filter(x => x.src.length || x.inResp);
-  const msgHTML = list => list.map(m => `<details class="dbgmsg" ${m.text.length > 3000 ? "" : "open"}><summary>${esc(m.src || m.role)} · ${fmt(m.text.length)} car.</summary><div class="txt">${hlText(m.text, e, orig)}</div></details>`).join("");
+  const msgHTML = list => list.map(m => `<details class="dbgmsg" ${m.text.length > 3000 ? "" : "open"}><summary>${esc(m.src || m.role)} · ${fmt(m.text.length)} car.</summary><div class="txt" translate="no">${hlText(m.text, e, orig)}</div></details>`).join("");
   const allWhere = x => Object.entries(x.Sources || {}).sort((a, b) => (+(/#(\d+)$/.exec(b[0]) || [0, 0])[1]) - (+(/#(\d+)$/.exec(a[0]) || [0, 0])[1])).map(([k, n]) => chip(k, n)).join("");
-  return `<section class="card"><div class="chead"><div><h2>Échange #${e.ID}</h2><div class="sub">${new Date(e.TS * 1000).toLocaleString("fr-BE")} · ${esc(e.User)} (${esc(e.Profile)}) → ${esc(e.Target)}/${esc(e.Model)} · statut ${e.Status}${e.Blocked ? " · BLOQUÉ" : ""}${e.Err ? " · " + esc(e.Err) : ""}</div></div><span class="spacer"></span>
+  return `<section class="card"><div class="chead"><div><h2>Échange #${e.ID}</h2><div class="sub">${new Date(e.TS * 1000).toLocaleString(I18N.loc)} · ${esc(e.User)} (${esc(e.Profile)}) → ${esc(e.Target)}/${esc(e.Model)} · statut ${e.Status}${e.Blocked ? " · BLOQUÉ" : ""}${e.Err ? " · " + esc(e.Err) : ""}</div></div><span class="spacer"></span>
       <div class="seg"><button data-act="dbg-view" data-o="0" aria-pressed="${!orig}">Vue anonymisée</button><button data-act="dbg-view" data-o="1" aria-pressed="${orig}">Vue d'origine</button></div><button class="icon" data-act="dbg-close" title="Fermer">✕</button></div>
     <h3>Détecté dans cet échange</h3><div class="sub" style="margin:2px 0 0">Nouveaux messages de cet échange (${turn.length}) et réponse du LLM. Le contexte renvoyé par le client est en bas de page.</div>
     ${dbgTable(mine, x => x.src.map(([k, n]) => chip(k, n)).join("") + (x.inResp ? chip("réponse", 1) : ""), "Rien de détecté dans cet échange")}
     <h3>${turn.length > 1 ? "Messages" : "Message"} de cet échange ${orig ? "(valeurs d'origine en gras)" : "(tel que reçu par le LLM)"}</h3>${msgHTML(turn) || '<p class="sub">—</p>'}
-    <h3 style="margin-top:14px">Réponse du LLM ${orig ? "(restaurée)" : "(brute, avant restauration)"}</h3><div class="dbgmsg"><div class="txt">${resp ? hlText(resp, e, orig) : '<span class="sub">vide</span>'}</div></div>
+    <h3 style="margin-top:14px">Réponse du LLM ${orig ? "(restaurée)" : "(brute, avant restauration)"}</h3><div class="dbgmsg"><div class="txt" translate="no">${resp ? hlText(resp, e, orig) : '<span class="sub">vide</span>'}</div></div>
     <details style="margin-top:14px"><summary style="cursor:pointer"><b>Contexte complet envoyé au LLM</b> <span class="sub">· ${context.length} message(s) antérieurs ou système · ${(e.Events || []).length} valeur(s) détectée(s) au total · ${e.Conv} conversion(s)</span></summary>
       <div class="sub" style="margin-top:6px">Le client (Hermes, chat…) renvoie à chaque appel son prompt système et tout l'historique : ils sont anonymisés à chaque fois.</div>
       ${dbgTable(e.Events || [], allWhere, "Aucune détection")}
@@ -1039,7 +1043,7 @@ function viewOverview() {
   add(saved.Alerts?.Enabled ? "" : "i", saved.Alerts?.Enabled ? "Alertes email actives" : "Alertes email inactives",
     saved.Alerts?.Enabled ? "Récapitulatif toutes les " + (saved.Alerts.IntervalMinutes || 15) + " min." : "Les violations et les pannes ne sont pas signalées par email.", "settings", "Paramètres");
   const status = items.sort((a, b) => ({ c: 0, w: 1, i: 2, "": 3 }[a.lvl] - { c: 0, w: 1, i: 2, "": 3 }[b.lvl])).map(x => `<div class="it"><span class="dot ${x.lvl}"></span><div><div class="t">${x.t}</div><div class="d">${x.desc}</div></div>${allowed(x.tab) ? `<button class="btn go" onclick="go('${x.tab}')">${x.label}</button>` : ""}</div>`).join("");
-  const rec = (d?.recent || []).slice(0, 8).map(r => `<tr><td>${new Date(r.TS * 1000).toLocaleTimeString("fr-BE", { hour: "2-digit", minute: "2-digit" })}</td><td>${esc(r.User)}</td><td>${esc(r.Target)}<span class="sub"> / ${esc(r.Model)}</span></td>
+  const rec = (d?.recent || []).slice(0, 8).map(r => `<tr><td>${new Date(r.TS * 1000).toLocaleTimeString(I18N.loc, { hour: "2-digit", minute: "2-digit" })}</td><td>${esc(r.User)}</td><td>${esc(r.Target)}<span class="sub"> / ${esc(r.Model)}</span></td>
       <td class="n">${r.Blocked ? `<span class="badge bad">${r.Status}</span>` : r.Status >= 400 || !r.Status ? `<span class="badge warn">${r.Status}</span>` : r.Status}</td><td class="n">${r.Anon || ""}</td></tr>`).join("");
   const top = sumRows(d?.user || []).slice(0, 5).map(r => `<tr><td>${esc(r.G)}</td><td class="n">${fmt(r.N)}</td><td class="n">${fmt(r.TI + r.TO)}</td><td class="n">${fmt(r.An)}</td><td class="n">${r.Bl ? `<span class="badge bad">${r.Bl}</span>` : "0"}</td></tr>`).join("");
   return `<section class="kpis">
@@ -1065,7 +1069,7 @@ function viewOverview() {
 async function loadAudit() { try { S.audit = await api("/admin/api/audit?limit=1000"); } catch (e) { if (e.message !== "401") toast(e.message, true); } }
 function viewAccounts() {
   const A = S.cfg.Admins, aud = S.audit || [], P = S.meta.config.Auth?.Providers || [];
-  const last = email => { const x = aud.find(e => e.Action === "connexion" && e.Actor.toLowerCase() === (email || "").toLowerCase()); return x ? new Date(x.TS * 1000).toLocaleString("fr-BE", { dateStyle: "short", timeStyle: "short" }) : "—"; };
+  const last = email => { const x = aud.find(e => e.Action === "connexion" && e.Actor.toLowerCase() === (email || "").toLowerCase()); return x ? new Date(x.TS * 1000).toLocaleString(I18N.loc, { dateStyle: "short", timeStyle: "short" }) : "—"; };
   const rows = A.map((a, i) => { const b = `Admins|${i}|`;
     return `<tr><td><input class="mono" style="min-width:220px" data-bind="${b}Email" value="${esc(a.Email)}" placeholder="prenom.nom@exemple.be"></td>
       <td><input data-bind="${b}Name" value="${esc(a.Name)}" placeholder="nom affiché"></td>
@@ -1098,7 +1102,7 @@ function viewAudit() {
   return `<section class="card"><div class="chead"><div><h2>Événements</h2><div class="sub">${(S.audit || []).length} événement(s) récents, conservés 400 jours. Aucune valeur sensible n'y figure.</div></div>
       <input id="auditfilter" placeholder="filtrer…" value="${esc(S.auditFilter || "")}" style="width:200px"><button class="btn" data-act="audit-refresh">Rafraîchir</button></div>
     <div class="tw"><table><thead><tr><th>Date</th><th>Acteur</th><th>Rôle</th><th>Action</th><th>Cible</th><th>Détail</th></tr></thead><tbody>${A.slice(0, 1000).map(e =>
-      `<tr><td>${new Date(e.TS * 1000).toLocaleString("fr-BE", { dateStyle: "short", timeStyle: "medium" })}</td><td>${esc(e.Actor)}</td><td>${e.Role ? `<span class="badge">${e.Role === "admin" ? "Admin" : e.Role === "support" ? "Support" : esc(e.Role)}</span>` : ""}</td>
+      `<tr><td>${new Date(e.TS * 1000).toLocaleString(I18N.loc, { dateStyle: "short", timeStyle: "medium" })}</td><td>${esc(e.Actor)}</td><td>${e.Role ? `<span class="badge">${e.Role === "admin" ? "Admin" : e.Role === "support" ? "Support" : esc(e.Role)}</span>` : ""}</td>
        <td><b>${esc(e.Action)}</b></td><td>${esc(e.Target)}</td><td class="wrap" style="min-width:280px">${esc(e.Detail).replace(/ ; /g, "<br>")}</td></tr>`).join("") || '<tr><td colspan="6" class="sub">Aucun événement</td></tr>'}</tbody></table></div></section>`;
 }
 document.addEventListener("input", e => { if (e.target.id === "auditfilter") { S.auditFilter = e.target.value; const p = e.target.selectionStart; render(); const f = $("#auditfilter"); f.focus(); f.setSelectionRange(p, p); } });

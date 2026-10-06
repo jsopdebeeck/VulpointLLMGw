@@ -22,6 +22,9 @@ var dashboardHTML []byte
 //go:embed chat.html
 var chatHTML []byte
 
+//go:embed i18n.js
+var i18nJS []byte
+
 var sessKey []byte
 
 func main() {
@@ -94,6 +97,11 @@ func main() {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-store")
 		w.Write(chatHTML)
+	})
+	mux.HandleFunc("GET /i18n.js", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Write(i18nJS)
 	})
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, "/dashboard", http.StatusFound) })
