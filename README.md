@@ -1,6 +1,6 @@
 # LLMGW by Vulpoint.com : gateway LLM avec anonymisation
 
-Version **1.0.0** · notes de version dans [RELEASE_NOTES.md](RELEASE_NOTES.md) · documentation intégrée sur `/docs/` (administration) et `/docs/chat.html` (guide utilisateur du chat), sources dans [docs/](docs/).
+Version **1.0.1** · notes de version dans [RELEASE_NOTES.md](RELEASE_NOTES.md) · documentation intégrée sur `/docs/` (administration) et `/docs/chat.html` (guide utilisateur du chat), sources dans [docs/](docs/).
 
 Un seul binaire Go, sans dépendance externe (SQLite et dashboard embarqués), pour Mac et Linux.
 

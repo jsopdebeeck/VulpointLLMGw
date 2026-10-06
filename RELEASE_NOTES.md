@@ -2,6 +2,12 @@
 
 Le numéro suit le schéma `majeur.mineur.correctif`. La version en cours s'affiche en bas du menu du dashboard, dans l'en-tête de connexion du chat, sur `GET /version` et avec `./llmgw -version`.
 
+## 1.0.1 (7 octobre 2026)
+
+### Corrections
+- PDF dont la police est mal encodée : quand le texte extrait contient des lettres remplacées par des symboles (« J@an S©basti@ »), ces symboles restent rattachés au mot, qui est bien détecté et masqué comme un nom.
+- Chat : un avertissement « ⚠ texte extrait abîmé » s'affiche sur un document dont le texte est de mauvaise qualité, en anglais, français et néerlandais.
+
 ## 1.0.0 (7 octobre 2026)
 
 Première version de référence.
