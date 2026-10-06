@@ -188,6 +188,8 @@ async function docxText(buf) {
   return (await mammoth.extractRawText({ arrayBuffer: buf })).value;
 }
 async function addFile(f) {
+  let ext = (f.name.includes(".") ? f.name.split(".").pop() : "").toLowerCase(); if (ext === "jpeg") ext = "jpg";
+  if (ext && (me?.blocked_files || []).includes(ext)) { pending.push({ name: f.name, error: `fichiers .${ext} interdits par votre profil` }); renderAtts(); return; }
   const a = { name: f.name, size: f.size, loading: true }; pending.push(a); renderAtts();
   try {
     if (f.type.startsWith("image/")) {

@@ -90,8 +90,9 @@ func (t *Target) Allows(model string) bool {
 
 type Profile struct {
 	Description   string            `toml:"description,omitempty"`
-	Targets       []string          `toml:"targets"` // allowed LLMs, in priority / fallback order
-	Images        string            `toml:"images"`  // pass | strip | block
+	Targets       []string          `toml:"targets"`                 // allowed LLMs, in priority / fallback order
+	Images        string            `toml:"images"`                  // pass | strip | block
+	BlockedFiles  []string          `toml:"blocked_files,omitempty"` // file extensions refused (pdf, docx, zip…)
 	DefaultAction string            `toml:"default_action"`
 	Actions       map[string]string `toml:"actions,omitempty"` // detector kind -> anonymize | block | log | off
 	Hint          bool              `toml:"placeholder_hint,omitempty"`
@@ -261,6 +262,13 @@ func ParseConfig(data []byte, base string) (*Config, error) {
 		if err := checkQuota(p.Quota); err != nil {
 			return nil, fmt.Errorf("profil %q : %w", n, err)
 		}
+		var exts []string
+		for _, e := range p.BlockedFiles {
+			if e = normExt(e); e != "" {
+				exts = append(exts, e)
+			}
+		}
+		p.BlockedFiles = exts
 		if p.Images == "" {
 			p.Images = "strip"
 		}

@@ -982,3 +982,30 @@ func TestRolesAndAudit(t *testing.T) {
 		t.Errorf("journal d'audit : %d %s", st, body)
 	}
 }
+
+func TestBlockedFiles(t *testing.T) {
+	gw, oai, _, g := setup(t)
+	g.C().Profiles["standard"].BlockedFiles = []string{"pdf", "zip", "jpg"}
+	send := func(content any) (int, string) {
+		r := post(t, gw.URL+"/v1/chat/completions", "gw-alice-remplace-moi", map[string]any{"model": "mistral-large",
+			"messages": []any{map[string]any{"role": "user", "content": content}}})
+		b, _ := io.ReadAll(r.Body)
+		return r.StatusCode, string(b)
+	}
+	n0 := len(oai.bodies)
+	if st, b := send([]any{map[string]any{"type": "text", "text": "résume"}, map[string]any{"type": "file", "file": map[string]any{"filename": "rapport.pdf", "file_data": "data:application/pdf;base64,AAAA"}}}); st != 403 || !strings.Contains(b, "rapport.pdf") {
+		t.Errorf("PDF joint : %d %s", st, b)
+	}
+	if st, _ := send("Voici le fichier\n\n--- Document joint : archive.zip ---\ncontenu\n--- Fin du document ---"); st != 403 {
+		t.Errorf("document zip du chat : %d", st)
+	}
+	if st, _ := send([]any{map[string]any{"type": "image_url", "image_url": map[string]any{"url": "data:image/jpeg;base64,AAAA"}}}); st != 403 {
+		t.Errorf("image jpeg : %d", st)
+	}
+	if len(oai.bodies) != n0 {
+		t.Error("un fichier interdit a atteint le LLM")
+	}
+	if st, _ := send("--- Document joint : note.docx ---\ntexte\n--- Fin du document ---"); st != 200 {
+		t.Errorf("docx autorisé : %d", st)
+	}
+}

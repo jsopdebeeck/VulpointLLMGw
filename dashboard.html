@@ -622,6 +622,35 @@ function viewProfiles() {
       <span class="sub" style="margin:4px 0 0 8px"><b style="color:var(--good)">Vert</b> : profil utilisé · <b style="color:var(--muted)">gris</b> : aucun utilisateur ni règle SSO</span></div>
     <div class="plist">${S._profs}</div></section>`;
 }
+// ---------- files blocked per profile ----------
+const FILECATS = [["PDF", ["pdf"]], ["Word et texte riche", ["doc", "docx", "odt", "rtf"]], ["Tableurs", ["xls", "xlsx", "ods", "csv"]],
+  ["Présentations", ["ppt", "pptx", "odp"]], ["Archives", ["zip", "rar", "7z", "tar", "gz"]], ["Images", ["png", "jpg", "gif", "webp", "heic"]],
+  ["Texte et code", ["txt", "md", "json", "xml", "html", "log"]]];
+const KNOWN_EXT = new Set(FILECATS.flatMap(c => c[1]));
+function viewFiles() {
+  const c = S.cfg, P = sortedNames(c.Profiles);
+  const cell = (pn, i) => { const b = c.Profiles[pn].BlockedFiles || [], ex = FILECATS[i][1], n = ex.filter(e => b.includes(e)).length;
+    return `<td><label><input type="checkbox" data-filecat="${esc(pn)}|${i}" ${n === ex.length ? "checked" : ""} ${n && n < ex.length ? "data-partial=1" : ""}> ${n === ex.length ? '<b style="color:var(--critical)">bloqués</b>' : n ? `${n}/${ex.length} bloqué(s)` : '<span class="sub">autorisés</span>'}</label></td>`; };
+  return `<section class="card"><h2>Fichiers bloqués</h2><div class="sub">Une requête qui contient un fichier d'un type coché est refusée (violation de type FILE) : fichier joint via l'API, document joint dans le chat, ou image. Le chat refuse le fichier dès qu'on le joint.</div>
+    <div class="tw" style="margin-top:8px"><table class="matrix"><thead><tr><th>Type de fichier</th>${P.map(p => `<th>${esc(p)}</th>`).join("")}</tr></thead><tbody>
+      ${FILECATS.map(([label, ex], i) => `<tr><td>${esc(label)}<div class="sub" style="margin:0;font-weight:400">${ex.map(e => "." + e).join(" ")}</div></td>${P.map(pn => cell(pn, i)).join("")}</tr>`).join("")}
+      <tr><td>Autres extensions<div class="sub" style="margin:0;font-weight:400">séparées par des virgules</div></td>${P.map(pn => `<td><input data-fileother="${esc(pn)}" value="${esc((c.Profiles[pn].BlockedFiles || []).filter(e => !KNOWN_EXT.has(e)).join(", "))}" placeholder="ex. exe, iso" style="width:140px"></td>`).join("")}</tr>
+    </tbody></table></div></section>`;
+}
+document.addEventListener("change", e => {
+  const el = e.target.closest("[data-filecat], [data-fileother]"); if (!el) return;
+  if (el.dataset.filecat) {
+    const [pn, i] = el.dataset.filecat.split("|"), p = S.cfg.Profiles[pn], ex = FILECATS[+i][1];
+    const set = new Set(p.BlockedFiles || []);
+    ex.forEach(x => el.checked ? set.add(x) : set.delete(x));
+    p.BlockedFiles = [...set];
+  } else {
+    const p = S.cfg.Profiles[el.dataset.fileother];
+    const other = el.value.split(",").map(x => x.trim().toLowerCase().replace(/^\./, "")).filter(Boolean).map(x => x === "jpeg" ? "jpg" : x);
+    p.BlockedFiles = [...(p.BlockedFiles || []).filter(x => KNOWN_EXT.has(x)), ...other];
+  }
+  markDirty(); render();
+});
 // SSO providers that give this profile (default profile or mapping rule)
 function ssoProfileUses(pn) {
   return (S.meta.config.Auth?.Providers || []).filter(p => p.DefaultProfile === pn || (p.Mappings || []).some(m => m.Profile === pn)).map(p => p.Label || p.ID);
@@ -748,9 +777,9 @@ function viewPrivacy() {
     <tr><td>IMAGE / FICHIER</td>${P.map(pn => `<td><select data-bind="Profiles|${esc(pn)}|Images">${opts(L.img, c.Profiles[pn].Images)}</select></td>`).join("")}</tr>
     <tr><td>Consigne « jetons »</td>${P.map(pn => `<td><label><input type="checkbox" data-bind="Profiles|${esc(pn)}|Hint" ${c.Profiles[pn].Hint ? "checked" : ""}> ajouter</label></td>`).join("")}</tr>
     </tbody></table>`;
-  const sub = S.privTab, tabs = [["detectors", "Détecteurs"], ["rules", "Règles par profil"], ["exceptions", "Exceptions et mémoire"], ["test", "Tester"]];
+  const sub = S.privTab, tabs = [["detectors", "Détecteurs"], ["rules", "Règles par profil"], ["files", "Fichiers"], ["exceptions", "Exceptions et mémoire"], ["test", "Tester"]];
   const head = `<nav class="subtabs" role="tablist">${tabs.map(([k, l]) => `<button role="tab" data-act="priv-tab" data-k="${k}" aria-selected="${k === sub}">${l}</button>`).join("")}</nav>`;
-  const parts = { detectors: "", rules: "", exceptions: "", test: "" };
+  const parts = { detectors: "", rules: "", files: viewFiles(), exceptions: "", test: "" };
   parts.detectors = `<section class="card"><div class="chead"><div><h2>Détecteurs de données sensibles</h2><div class="sub">Le type (ex. PERSON) donne le nom des jetons «PERSON_1». Plusieurs détecteurs peuvent partager un type. En cas de chevauchement, la correspondance la plus longue l'emporte, puis l'ordre.</div></div><span class="spacer"></span><button class="btn primary" data-act="det-add">+ Détecteur</button></div>
       <div class="tw"><table><thead><tr><th>#</th><th>Type</th><th>Méthode</th><th>Paramètre</th><th>Note</th><th></th></tr></thead><tbody>${dets}</tbody></table></div></section>`;
   parts.exceptions = `<section class="card"><h2>Jamais anonymiser</h2><div class="sub">Produits, marques, personnalités publiques… Un terme par ligne, sans accents ni casse. Pour un nom, il suffit que le premier mot soit listé : « Claude » couvre « Claude Code ».</div>
@@ -1117,6 +1146,7 @@ function render() {
   $("#cnt-profiles").textContent = Object.keys(S.cfg.Profiles).length || "";
   $("#cnt-targets").textContent = Object.keys(S.cfg.Targets).length || "";
   $("#view").innerHTML = VIEWS[S.tab]();
+  document.querySelectorAll("[data-partial]").forEach(cb => cb.indeterminate = true);
   applyRole();
   if (S.tab === "report") drawReport();
   scrollTo(0, y); if (a && $("#" + a)) $("#" + a).focus();

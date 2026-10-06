@@ -331,7 +331,7 @@ func (g *Gateway) handleLLM(api string) http.HandlerFunc {
 		rec.Anon, rec.Blocked = sess.Anon, sess.Blocked
 		if sess.Blocked > 0 {
 			rec.Status, rec.Err = 403, "policy"
-			apiError(w, api, 403, "permission_error", "requête bloquée par la politique de données : "+sess.BlockedKinds())
+			apiError(w, api, 403, "permission_error", blockMessage(sess))
 			return
 		}
 
@@ -726,7 +726,7 @@ func (g *Gateway) handleMe(w http.ResponseWriter, r *http.Request) {
 	}
 	us := g.meter.Snapshot()["u:"+name]
 	writeJSON(w, map[string]any{"user": name, "description": u.Description, "profile": u.Profile,
-		"profileDescription": p.Description, "images": p.Images, "targets": ts,
+		"profileDescription": p.Description, "images": p.Images, "blocked_files": p.BlockedFiles, "targets": ts,
 		"quota": cfg.EffectiveQuota(u), "usage": us})
 }
 
@@ -817,7 +817,7 @@ func (g *Gateway) handleCountTokens(w http.ResponseWriter, r *http.Request) {
 	sess.NoLearn = true
 	sess.Process(body, api)
 	if sess.Blocked > 0 {
-		apiError(w, api, 403, "permission_error", "requête bloquée par la politique de données : "+sess.BlockedKinds())
+		apiError(w, api, 403, "permission_error", blockMessage(sess))
 		return
 	}
 	var resp *http.Response
@@ -840,4 +840,11 @@ func (g *Gateway) handleCountTokens(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(resp.StatusCode)
 	io.Copy(w, resp.Body)
+}
+
+func blockMessage(s *Session) string {
+	if len(s.BlockedFiles) > 0 {
+		return "fichier interdit par votre profil : " + strings.Join(s.BlockedFiles, ", ")
+	}
+	return "requête bloquée par la politique de données : " + s.BlockedKinds()
 }

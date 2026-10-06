@@ -271,25 +271,26 @@ func validLuhn(s string) bool {
 // ---------- per-request session: anonymize in, restore out ----------
 
 type Session struct {
-	prof      *Profile
-	dets      []*Detector
-	learned   *Detector
-	learn     map[string]string // lower(value) -> kind
-	fwd       map[string]string // kind \x00 lower(value) -> placeholder id
-	rev       map[string]string // placeholder id -> original value
-	cnt       map[string]int
-	fuzzy     map[string]string // one-deletion variant of a learned name word -> lower(word)
-	allow     map[string]bool
-	nameWords map[string]bool // learned values that are names (case-sensitive match)
-	toLearn   []string
-	learnOn   bool // a person_learned detector is configured
-	NoLearn   bool
-	Stats     map[string]map[string]int // kind -> action -> count
-	Debug     bool                      // record every detected value (debug archive)
-	cur       string                    // part of the request being processed (debug)
-	Events    map[string]*DebugEvent
-	Anon      int
-	Blocked   int
+	prof         *Profile
+	dets         []*Detector
+	learned      *Detector
+	learn        map[string]string // lower(value) -> kind
+	fwd          map[string]string // kind \x00 lower(value) -> placeholder id
+	rev          map[string]string // placeholder id -> original value
+	cnt          map[string]int
+	fuzzy        map[string]string // one-deletion variant of a learned name word -> lower(word)
+	allow        map[string]bool
+	nameWords    map[string]bool // learned values that are names (case-sensitive match)
+	toLearn      []string
+	learnOn      bool // a person_learned detector is configured
+	NoLearn      bool
+	Stats        map[string]map[string]int // kind -> action -> count
+	Debug        bool                      // record every detected value (debug archive)
+	BlockedFiles []string                  // names of the files refused by the profile
+	cur          string                    // part of the request being processed (debug)
+	Events       map[string]*DebugEvent
+	Anon         int
+	Blocked      int
 }
 
 func NewSession(cfg *Config, prof *Profile) *Session {
@@ -562,6 +563,7 @@ const hintText = "Note : certaines données ont été pseudonymisées et remplac
 // Process anonymizes a request body in place (both API formats).
 func (s *Session) Process(body map[string]any, api string) {
 	s.media(body)
+	walk(body, 0, s.docMarkers)
 	walk(body, 0, s.learnFrom)
 	s.buildLearned()
 	if s.Debug {
@@ -652,6 +654,99 @@ func injectHint(body map[string]any, api string) {
 var mediaKinds = map[string]string{"image_url": "IMAGE", "image": "IMAGE", "input_image": "IMAGE",
 	"document": "FILE", "file": "FILE", "input_file": "FILE", "input_audio": "AUDIO"}
 
+// ---------- files: blocking by extension ----------
+
+func normExt(e string) string {
+	e = strings.ToLower(strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(e), ".")))
+	if e == "jpeg" {
+		e = "jpg"
+	}
+	return e
+}
+
+var mimeExt = map[string]string{"application/pdf": "pdf", "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp",
+	"image/heic": "heic", "application/zip": "zip", "application/x-zip-compressed": "zip", "application/x-7z-compressed": "7z",
+	"application/vnd.rar": "rar", "application/x-tar": "tar", "application/gzip": "gz", "application/msword": "doc",
+	"application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx", "application/vnd.ms-excel": "xls",
+	"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx", "application/vnd.ms-powerpoint": "ppt",
+	"application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx", "text/plain": "txt", "text/csv": "csv",
+	"text/markdown": "md", "application/json": "json", "text/html": "html", "application/rtf": "rtf",
+	"application/vnd.oasis.opendocument.text": "odt", "application/vnd.oasis.opendocument.spreadsheet": "ods"}
+
+// fileOf returns a display name and the extension of a file or image content part.
+func fileOf(m map[string]any, typ string) (string, string) {
+	var name, mime string
+	look := func(x map[string]any) {
+		for _, k := range []string{"filename", "file_name", "name", "title"} {
+			if v, _ := x[k].(string); v != "" && name == "" {
+				name = v
+			}
+		}
+		for _, k := range []string{"media_type", "mime_type"} {
+			if v, _ := x[k].(string); v != "" && mime == "" {
+				mime = v
+			}
+		}
+		for _, k := range []string{"url", "file_data", "data"} {
+			if v, _ := x[k].(string); strings.HasPrefix(v, "data:") && mime == "" {
+				mime = strings.SplitN(strings.TrimPrefix(v, "data:"), ";", 2)[0]
+			} else if k == "url" && v != "" && name == "" && !strings.HasPrefix(v, "data:") {
+				if i := strings.LastIndexAny(strings.SplitN(v, "?", 2)[0], "/"); i >= 0 {
+					name = strings.SplitN(v, "?", 2)[0][i+1:]
+				}
+			}
+		}
+	}
+	look(m)
+	for _, k := range []string{typ, "source", "file", "image_url"} {
+		if sub, ok := m[k].(map[string]any); ok {
+			look(sub)
+		}
+	}
+	ext := ""
+	if i := strings.LastIndex(name, "."); i >= 0 && i < len(name)-1 {
+		ext = normExt(name[i+1:])
+	}
+	if ext == "" {
+		ext = mimeExt[strings.ToLower(mime)]
+	}
+	if name == "" && ext != "" {
+		name = "fichier ." + ext
+	}
+	return name, ext
+}
+
+func (s *Session) fileBlocked(ext string) bool {
+	for _, e := range s.prof.BlockedFiles {
+		if e == ext {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Session) blockFile(name string) {
+	s.count("FILE", "block")
+	s.event("FILE", "block", name, "")
+	s.BlockedFiles = append(s.BlockedFiles, name)
+}
+
+// documents attached in the chat portal travel as extracted text with this marker
+var reDocMarker = regexp.MustCompile(`--- Document joint : (.+?) ---`)
+
+func (s *Session) docMarkers(t string) string {
+	if len(s.prof.BlockedFiles) == 0 || !strings.Contains(t, "--- Document joint") {
+		return t
+	}
+	for _, m := range reDocMarker.FindAllStringSubmatch(t, -1) {
+		name := strings.TrimSpace(m[1])
+		if i := strings.LastIndex(name, "."); i >= 0 && s.fileBlocked(normExt(name[i+1:])) {
+			s.blockFile(name)
+		}
+	}
+	return t
+}
+
 func (s *Session) media(v any) any {
 	switch x := v.(type) {
 	case map[string]any:
@@ -663,6 +758,10 @@ func (s *Session) media(v any) any {
 			if m, ok := c.(map[string]any); ok {
 				if t, _ := m["type"].(string); mediaKinds[t] != "" {
 					kind := mediaKinds[t]
+					if name, ext := fileOf(m, t); ext != "" && s.fileBlocked(ext) {
+						s.blockFile(name)
+						continue
+					}
 					s.count(kind, s.prof.Images)
 					s.event(kind, s.prof.Images, "["+t+"]", "")
 					if s.prof.Images == "strip" {
