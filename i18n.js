@@ -226,6 +226,9 @@
     ["+ Extension", "+ Extension", "+ Extensie"], ["Extension invalide", "Invalid extension", "Ongeldige extensie"], ["Fichier", "File", "Bestand"], ["Image", "Image", "Afbeelding"], ["SHA-256", "SHA-256", "SHA-256"],
     ["images remplacées par un carré blanc", "images replaced by a white square", "afbeeldingen vervangen door een wit vierkant"],
     ["Données sensibles pseudonymisées avant envoi · images remplacées par un carré blanc", "Sensitive data pseudonymised before sending · images replaced by a white square", "Gevoelige gegevens gepseudonimiseerd vóór verzending · afbeeldingen vervangen door een wit vierkant"],
+    // branding, documentation, version
+    ["📖 Documentation", "📖 Documentation", "📖 Documentatie"], ["Notes de version", "Release notes", "Release notes"], ["? Aide", "? Help", "? Help"],
+    ["Guide d'utilisation du chat", "Chat user guide", "Gebruikershandleiding van de chat"],
   ];
 
   // dynamic texts: [regex on the French text, English, Dutch] (string with $1… or function)

@@ -1,12 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"context"
-	_ "embed"
+	"embed"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -25,12 +27,27 @@ var chatHTML []byte
 //go:embed i18n.js
 var i18nJS []byte
 
+// documentation (administration and chat user guide), logo
+//
+//go:embed docs
+var docsFS embed.FS
+
+// Version of LLMGW; every release is described in RELEASE_NOTES.md.
+const Version = "1.0.0"
+
 var sessKey []byte
 
 func main() {
 	cfgPath := flag.String("config", "config.toml", "fichier de configuration")
 	check := flag.Bool("check", false, "valide la configuration et quitte")
+	showVersion := flag.Bool("version", false, "affiche la version et quitte")
 	flag.Parse()
+	if *showVersion {
+		fmt.Println("LLMGW by Vulpoint.com", Version)
+		return
+	}
+	dashboardHTML = bytes.ReplaceAll(dashboardHTML, []byte("__LLMGW_VERSION__"), []byte(Version))
+	chatHTML = bytes.ReplaceAll(chatHTML, []byte("__LLMGW_VERSION__"), []byte(Version))
 
 	cfg, err := LoadConfig(*cfgPath)
 	if err != nil {
@@ -103,6 +120,10 @@ func main() {
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Write(i18nJS)
 	})
+	docs, _ := fs.Sub(docsFS, "docs")
+	mux.Handle("GET /docs/", http.StripPrefix("/docs/", http.FileServerFS(docs)))
+	mux.HandleFunc("GET /docs", func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, "/docs/", http.StatusFound) })
+	mux.HandleFunc("GET /version", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, map[string]string{"version": Version}) })
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, "/dashboard", http.StatusFound) })
 	mux.HandleFunc("GET /dashboard", func(w http.ResponseWriter, r *http.Request) {
@@ -171,7 +192,7 @@ func main() {
 
 	srv := &http.Server{Addr: cfg.Server.Listen, Handler: mux, ReadHeaderTimeout: 15 * time.Second}
 	go func() {
-		log.Printf("llmgw à l'écoute sur http://%s (dashboard : /dashboard)", cfg.Server.Listen)
+		log.Printf("LLMGW %s à l'écoute sur http://%s (dashboard : /dashboard, documentation : /docs)", Version, cfg.Server.Listen)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatal(err)
 		}

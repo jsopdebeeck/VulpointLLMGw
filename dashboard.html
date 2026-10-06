@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>LLM Gateway</title>
+<title>LLMGW by Vulpoint.com</title>
 <style>
 :root {
   color-scheme: light;
@@ -36,7 +36,11 @@ body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 -ap
 .app { display: grid; grid-template-columns: 236px minmax(0, 1fr); min-height: 100vh; }
 .side { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; background: var(--side); border-right: 1px solid var(--border); padding: 18px 12px 14px; overflow-y: auto; }
 .brand { display: flex; align-items: center; gap: 10px; padding: 0 8px 18px; }
-.brand .logo { width: 30px; height: 30px; border-radius: 8px; background: var(--accent); color: #fff; display: grid; place-items: center; font-weight: 700; font-size: 15px; }
+.brand .logo { width: 36px; height: 36px; border-radius: 50%; background: #fff; object-fit: cover; box-shadow: 0 0 0 1px var(--border); }
+.brand small a, .lbrand a { color: var(--muted); text-decoration: none; } .brand small a:hover, .lbrand a:hover { color: var(--accent); }
+.lbrand { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; } .lbrand img { width: 44px; height: 44px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px var(--border); }
+.lbrand b { display: block; font-size: 16px; } .lbrand small { color: var(--muted); font-size: 12px; }
+.ver { color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
 .brand b { display: block; font-size: 15px; letter-spacing: -.01em; }
 .brand small { display: block; color: var(--muted); font-size: 12px; }
 #tabs { display: grid; gap: 1px; }
@@ -87,11 +91,11 @@ body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 -ap
 .seg button { border: 0; background: none; color: var(--text2); padding: 6px 12px; font: inherit; cursor: pointer; }
 .seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
 .spacer { flex: 1; }
-input, select, textarea, button.btn { font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 5px 9px; }
+input, select, textarea, button.btn, a.btn { font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 5px 9px; }
 input[type=checkbox] { width: 16px; height: 16px; padding: 0; accent-color: var(--accent); }
 input.num { width: 110px; text-align: right; font-variant-numeric: tabular-nums; }
 input.w100, textarea.w100, select.w100 { width: 100%; }
-button.btn { cursor: pointer; white-space: nowrap; }
+button.btn, a.btn { cursor: pointer; white-space: nowrap; text-decoration: none; }
 a.sso { display: block; text-align: center; text-decoration: none; font-weight: 600; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }
 a.sso:hover, a.sso:focus-visible { border-color: var(--accent); outline: none; }
 button.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
@@ -192,6 +196,7 @@ tr.click { cursor: pointer; } tr.click:hover td { background: var(--grid); } tr.
 <body>
 
 <div id="login" class="card" hidden>
+  <div class="lbrand" translate="no"><img src="/docs/img/vulpoint-logo.jpg" alt="Vulpoint"><div><b>LLMGW</b><small>by <a href="https://vulpoint.com" target="_blank" rel="noopener">Vulpoint.com</a> · v__LLMGW_VERSION__</small></div></div>
   <h2>Administration</h2>
   <div id="sso" style="display:grid;gap:8px;margin:12px 0" hidden></div>
   <p class="sub">Ou le jeton <code>admin_token</code> de la section [server] de config.toml. Il reste dans ce navigateur.</p>
@@ -202,7 +207,7 @@ tr.click { cursor: pointer; } tr.click:hover td { background: var(--grid); } tr.
 
 <div class="app" id="app" hidden>
   <aside class="side">
-    <div class="brand"><span class="logo">⇄</span><div><b>LLMGW</b><small>Passerelle IA</small></div></div>
+    <div class="brand" translate="no"><img class="logo" src="/docs/img/vulpoint-logo.jpg" alt="Vulpoint"><div><b>LLMGW</b><small>by <a href="https://vulpoint.com" target="_blank" rel="noopener">Vulpoint.com</a></small></div></div>
     <nav id="tabs" aria-label="Navigation">
       <div class="grp">Pilotage</div>
       <button data-tab="overview"><span class="ic">◉</span>Vue d'ensemble</button>
@@ -226,6 +231,8 @@ tr.click { cursor: pointer; } tr.click:hover td { background: var(--grid); } tr.
       <div id="who"></div>
       <div class="row"><span id="upd" style="color:var(--muted)"></span><span class="spacer"></span><button class="btn" id="theme" title="Thème clair / sombre">◐</button></div>
       <select class="langsel" aria-label="Langue"></select>
+      <div class="row"><a class="btn" href="/docs/" target="_blank" rel="noopener" style="flex:1;text-align:center;text-decoration:none">📖 Documentation</a></div>
+      <div class="ver">LLMGW v__LLMGW_VERSION__ · <a href="/docs/#versions" target="_blank" rel="noopener" style="color:inherit">Notes de version</a></div>
     </div>
   </aside>
   <div class="content">
@@ -1171,7 +1178,7 @@ function render() {
   const y = scrollY, a = document.activeElement?.id;
   if (!VIEWS[S.tab] || !allowed(S.tab)) S.tab = "overview";
   document.querySelectorAll("#tabs button").forEach(b => b.dataset.tab === S.tab ? b.setAttribute("aria-current", "page") : b.removeAttribute("aria-current"));
-  const [t, d] = PAGES[S.tab]; $("#ptitle").textContent = t; $("#pdesc").textContent = d; document.title = t + " · LLMGW";
+  const [t, d] = PAGES[S.tab]; $("#ptitle").textContent = t; $("#pdesc").textContent = d; document.title = t + " · LLMGW by Vulpoint.com";
   $("#cnt-users").textContent = Object.keys(S.cfg.Users).length || "";
   $("#cnt-profiles").textContent = Object.keys(S.cfg.Profiles).length || "";
   $("#cnt-targets").textContent = Object.keys(S.cfg.Targets).length || "";

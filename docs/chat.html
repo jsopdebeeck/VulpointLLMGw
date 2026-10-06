@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LLMGW Chat by Vulpoint.com · Guide utilisateur</title>
+<link rel="icon" href="img/vulpoint-logo.jpg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Sans+Condensed:wght@500;600&display=swap">
+<style>
+/* Layout: technical specification, left menu in three parts (features, setup, pages) + one reading column; diagrams and screenshots break out to full width */
+:root {
+  --bg: #f5f6f4;
+  --paper: #ffffff;
+  --ink: #16201f;
+  --ink-2: #4a5654;
+  --ink-3: #7d8886;
+  --line: #d9dedb;
+  --accent: #0e7c6b;        /* teal: the gateway */
+  --accent-soft: #dcefe9;
+  --src: #2f5d9e;           /* blue: sources */
+  --src-soft: #e2ebf7;
+  --dst: #7a4b12;           /* amber-brown: destinations */
+  --dst-soft: #f5ead9;
+  --block: #b3261e;         /* red: blocked, violations */
+  --block-soft: #f8e1df;
+  --log: #9a6200;
+  --log-soft: #fbefd4;
+  --code-bg: #eef1ef;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-label: "IBM Plex Sans Condensed", "IBM Plex Sans", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111615; --paper: #182120; --ink: #e7eeec; --ink-2: #b1bcb9; --ink-3: #7f8c89; --line: #2c3836;
+    --accent: #3fbfa7; --accent-soft: #173a34; --src: #7fa9e3; --src-soft: #1b2a3f; --dst: #e0ae6a; --dst-soft: #37291a;
+    --block: #f08a82; --block-soft: #3d1f1d; --log: #e9b75a; --log-soft: #3a2e17; --code-bg: #1f2a28;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111615; --paper: #182120; --ink: #e7eeec; --ink-2: #b1bcb9; --ink-3: #7f8c89; --line: #2c3836;
+  --accent: #3fbfa7; --accent-soft: #173a34; --src: #7fa9e3; --src-soft: #1b2a3f; --dst: #e0ae6a; --dst-soft: #37291a;
+  --block: #f08a82; --block-soft: #3d1f1d; --log: #e9b75a; --log-soft: #3a2e17; --code-bg: #1f2a28;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 16px/1.6 var(--f-body); }
+.page { max-width: 1220px; margin: 0 auto; padding-inline: 24px; padding-block: 40px 80px; display: grid; grid-template-columns: 236px minmax(0, 1fr); gap: 48px; }
+nav.toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 20px); align-self: start; font-size: 14px; max-height: calc(100vh - 40px); overflow-y: auto; padding-right: 4px; }
+nav.toc .label { font: 600 12px/1 var(--f-label); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); margin: 18px 0 8px 8px; }
+nav.toc .label:first-child { margin-top: 0; }
+nav.toc ol { list-style: none; padding: 0; margin: 0; display: grid; gap: 1px; }
+nav.toc a { display: flex; gap: 8px; color: var(--ink-2); text-decoration: none; padding: 4px 8px; border-radius: 6px; }
+nav.toc a:hover, nav.toc a:focus-visible { background: var(--paper); color: var(--ink); outline: none; }
+nav.toc a span { font-family: var(--f-mono); font-size: 12px; color: var(--ink-3); min-width: 24px; padding-top: 1px; }
+main { min-width: 0; }
+header.doc { border-bottom: 1px solid var(--line); padding-bottom: 28px; margin-bottom: 8px; }
+.eyebrow { font: 600 12px/1 var(--f-label); letter-spacing: .1em; text-transform: uppercase; color: var(--accent); }
+h1 { font: 600 40px/1.15 var(--f-body); letter-spacing: -.02em; margin: 12px 0 14px; text-wrap: balance; }
+.lede { font-size: 19px; color: var(--ink-2); max-width: 62ch; margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 20px; font: 500 13px/1.4 var(--f-label); color: var(--ink-3); }
+.meta b { color: var(--ink-2); font-weight: 600; }
+.part { margin-top: 56px; padding: 14px 0 0; border-top: 2px solid var(--ink); font: 600 13px/1 var(--f-label); letter-spacing: .12em; text-transform: uppercase; color: var(--ink); }
+section { padding-top: 36px; }
+h2 { font: 600 26px/1.25 var(--f-body); letter-spacing: -.01em; margin: 0 0 14px; display: flex; gap: 14px; align-items: baseline; text-wrap: balance; }
+h2 .n { font: 500 15px/1 var(--f-mono); color: var(--accent); }
+h3 { font: 600 18px/1.3 var(--f-body); margin: 28px 0 8px; display: flex; gap: 10px; align-items: baseline; }
+h3 .n { font: 500 13px/1 var(--f-mono); color: var(--accent); }
+p, ul, ol { max-width: 68ch; }
+p { margin: 0 0 12px; }
+ul, ol.steps { padding-left: 22px; margin: 0 0 12px; }
+li { margin: 4px 0; }
+li::marker { color: var(--ink-3); }
+code, .mono { font-family: var(--f-mono); font-size: .88em; }
+code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+.tok { font-family: var(--f-mono); font-size: .88em; color: var(--accent); background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; white-space: nowrap; }
+.figure { background: var(--paper); border: 1px solid var(--line); border-radius: 14px; padding: 20px; margin: 20px 0 8px; }
+.figure .scroll { overflow-x: auto; }
+.figure svg { display: block; width: 100%; min-width: 760px; height: auto; }
+.caption { font-size: 13px; color: var(--ink-3); margin-top: 10px; }
+.shot { margin: 14px 0 6px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--paper); }
+.shot .frame { max-height: 620px; overflow-y: auto; }
+.shot img { display: block; width: 100%; height: auto; }
+.shot .bar { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 8px 14px; border-top: 1px solid var(--line); font-size: 13px; color: var(--ink-3); background: var(--bg); }
+.shot .bar a { white-space: nowrap; }
+.tw { overflow-x: auto; margin: 12px 0 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; vertical-align: top; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+th { font: 600 12px/1.3 var(--f-label); letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3); background: var(--bg); }
+tr:last-child td { border-bottom: 0; }
+td.k { font-weight: 600; white-space: nowrap; }
+.pill { display: inline-block; font: 600 12px/1.6 var(--f-label); letter-spacing: .03em; padding: 0 8px; border-radius: 999px; white-space: nowrap; }
+.pill.anon { color: var(--accent); background: var(--accent-soft); }
+.pill.block { color: var(--block); background: var(--block-soft); }
+.pill.log { color: var(--log); background: var(--log-soft); }
+.pill.off { color: var(--ink-2); background: var(--code-bg); }
+.pill.src { color: var(--src); background: var(--src-soft); }
+.pill.dst { color: var(--dst); background: var(--dst-soft); }
+.flow { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin: 16px 0 8px; }
+.step { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 12px; min-width: 0; }
+.step .who { font: 600 11px/1 var(--f-label); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 8px; }
+.step .txt { font-size: 13.5px; line-height: 1.5; overflow-wrap: anywhere; }
+.step.gw { border-color: var(--accent); }
+.step.gw .who { color: var(--accent); }
+.step.llm .who { color: var(--dst); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--ink-2); font-size: 15px; max-width: 68ch; margin: 12px 0; }
+.note.warn { border-left-color: var(--log); }
+.note strong { color: var(--ink); }
+.cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 14px 0; }
+.card { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 16px; min-width: 0; }
+.card h4 { margin: 0 0 6px; font: 600 15px/1.3 var(--f-body); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.card p { font-size: 14px; color: var(--ink-2); margin: 0; }
+.card ul { font-size: 14px; color: var(--ink-2); margin: 6px 0 0; }
+pre { background: var(--code-bg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 13px/1.55 var(--f-mono); margin: 10px 0 14px; max-width: 100%; }
+pre .c { color: var(--ink-3); }
+a { color: var(--accent); }
+/* diagram text colours from tokens */
+.d-t { fill: var(--ink); font-family: var(--f-body); }
+.d-t2 { fill: var(--ink-2); font-family: var(--f-body); }
+.d-lab { fill: var(--ink-3); font-family: var(--f-label); letter-spacing: .08em; }
+@media (max-width: 900px) {
+  .page { grid-template-columns: minmax(0, 1fr); gap: 16px; padding-block: 24px 64px; padding-inline: 16px; }
+  nav.toc { position: static; max-height: none; }
+  nav.toc ol { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  h1 { font-size: 30px; }
+  .flow { grid-template-columns: minmax(0, 1fr); }
+  .cards { grid-template-columns: minmax(0, 1fr); }
+  .shot .frame { max-height: 480px; }
+}
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+.brandline { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+.brandline img { width: 56px; height: 56px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px var(--line); }
+.brandline b { display: block; font: 600 20px/1.2 var(--f-body); }
+.brandline span { color: var(--ink-3); font-size: 14px; }
+.brandline a { color: inherit; text-decoration: none; }
+.toc-brand { display: flex; align-items: center; gap: 10px; margin: 0 0 18px 8px; text-decoration: none; color: var(--ink); }
+.toc-brand img { width: 34px; height: 34px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px var(--line); }
+.toc-brand b { display: block; font-size: 14px; } .toc-brand small { color: var(--ink-3); font-size: 12px; }
+.crosslink { display: inline-flex; gap: 8px; align-items: center; background: var(--accent-soft); color: var(--accent); border-radius: 999px; padding: 6px 14px; text-decoration: none; font: 600 13px/1.2 var(--f-label); margin-top: 18px; }
+.rel { border: 1px solid var(--line); border-radius: 12px; background: var(--paper); padding: 16px 18px; margin: 12px 0; }
+.rel h3 { margin-top: 0; }
+footer.doc { margin-top: 64px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--ink-3); font-size: 13px; display: flex; gap: 10px; align-items: center; }
+footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff; }
+</style>
+</head>
+<body>
+<div class="page">
+  <nav class="toc" aria-label="Sommaire">
+    <a class="toc-brand" href="https://vulpoint.com" target="_blank" rel="noopener"><img src="img/vulpoint-logo.jpg" alt="Vulpoint"><div><b>LLMGW Chat</b><small>by Vulpoint.com · v1.0.0</small></div></a>
+    <div class="label">Guide utilisateur</div>
+    <ol>
+      <li><a href="#principe"><span>1</span>À quoi sert le chat</a></li>
+      <li><a href="#connexion"><span>2</span>Se connecter</a></li>
+      <li><a href="#ecran"><span>3</span>L'écran</a></li>
+      <li><a href="#message"><span>4</span>Poser une question</a></li>
+      <li><a href="#donnees"><span>5</span>Vos données</a></li>
+      <li><a href="#fichiers"><span>6</span>Documents et images</a></li>
+      <li><a href="#historique"><span>7</span>Historique</a></li>
+      <li><a href="#reglages"><span>8</span>Langue et thème</a></li>
+      <li><a href="#erreurs"><span>9</span>Messages d'erreur</a></li>
+      <li><a href="#conseils"><span>10</span>Bonnes pratiques</a></li>
+      <li><a href="#faq"><span>11</span>Questions fréquentes</a></li>
+    </ol>
+    <div class="label">Administration</div>
+    <ol>
+      <li><a href="index.html"><span>↗</span>Documentation complète</a></li>
+    </ol>
+  </nav>
+
+  <main>
+    <header class="doc">
+      <div class="brandline"><img src="img/vulpoint-logo.jpg" alt="Logo Vulpoint"><div><b>LLMGW Chat</b><span>by <a href="https://vulpoint.com" target="_blank" rel="noopener">Vulpoint.com</a></span></div></div>
+      <div class="eyebrow">Guide utilisateur</div>
+      <h1>Utiliser le chat IA de l'organisation</h1>
+      <p class="lede">Le chat vous donne accès aux modèles d'IA autorisés par votre organisation. Vos messages passent par une passerelle qui protège les données sensibles avant qu'elles ne quittent le réseau.</p>
+      <div class="meta"><span><b>Version</b> 1.0.0</span><span><b>Adresse</b> /chat sur la passerelle de votre organisation</span><span><b>Langues</b> anglais, français, néerlandais</span></div>
+    </header>
+
+    <section id="principe">
+      <h2><span class="n">1</span>À quoi sert le chat</h2>
+      <p>Le chat fonctionne comme les assistants IA grand public : vous écrivez une question, l'IA répond. La différence, c'est que tout passe par la <strong>passerelle LLMGW</strong> de votre organisation :</p>
+      <ul>
+        <li>vous n'utilisez que les modèles autorisés pour votre profil ;</li>
+        <li>les noms, emails, numéros de dossier et autres données sensibles sont <strong>remplacés par des jetons</strong> avant l'envoi à l'IA, puis remis en clair dans la réponse que vous lisez ;</li>
+        <li>certains fichiers peuvent être remplacés ou refusés selon les règles de votre profil.</li>
+      </ul>
+      <p class="note">Vous n'avez rien à faire de particulier : la protection est automatique. Ce guide explique ce que vous voyez à l'écran et comment réagir à un message de la passerelle.</p>
+    </section>
+
+    <section id="connexion">
+      <h2><span class="n">2</span>Se connecter</h2>
+      <p>Ouvrez l'adresse <code>/chat</code> de la passerelle (votre service informatique vous la communique). Deux façons de vous connecter :</p>
+      <ul>
+        <li><strong>Avec votre compte de travail</strong> : bouton « Se connecter avec Microsoft » ou « Se connecter avec Google ». C'est la méthode recommandée ; la session dure 12 heures par défaut.</li>
+        <li><strong>Avec une clé personnelle</strong> (commence par <code>gw-</code>), fournie par l'administrateur. Elle reste dans l'onglet du navigateur et disparaît à sa fermeture.</li>
+      </ul>
+      <p>La liste en bas de la carte permet de choisir la langue dès cet écran.</p>
+      <figure class="shot"><div class="frame"><img src="img/chat-login.jpg" width="1600" height="894" alt="Écran de connexion du chat : logo, boutons Microsoft et Google, champ de clé, choix de la langue" loading="lazy"></div><figcaption class="bar"><span>Écran de connexion</span><a href="img/chat-login.jpg">Taille réelle</a></figcaption></figure>
+      <p class="note warn"><strong>Votre clé est personnelle.</strong> Ne la partagez pas et ne la collez pas dans un autre outil : tout ce qui est fait avec elle vous est attribué. En cas de doute, demandez une nouvelle clé à l'administrateur.</p>
+    </section>
+
+    <section id="ecran">
+      <h2><span class="n">3</span>L'écran</h2>
+      <div class="tw"><table>
+        <thead><tr><th>Zone</th><th>Contenu</th></tr></thead>
+        <tbody>
+          <tr><td class="k">En-tête</td><td>votre nom et votre profil ; la liste des <strong>modèles</strong> autorisés ; « Nouvelle conversation » ; la langue ; « ? Aide » (ce guide) ; le thème clair ou sombre ; « Déconnexion »</td></tr>
+          <tr><td class="k">Panneau de gauche</td><td>vos 10 dernières conversations (bouton ☰ pour l'afficher ou le masquer sur petit écran)</td></tr>
+          <tr><td class="k">Centre</td><td>la conversation ; sous chaque message, le modèle utilisé, les données protégées, la durée et les tokens</td></tr>
+          <tr><td class="k">Bas</td><td>la zone de saisie, le bouton « Joindre », le rappel de la politique de votre profil et « Envoyer »</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <section id="message">
+      <h2><span class="n">4</span>Poser une question</h2>
+      <ol class="steps">
+        <li>Choisissez un <strong>modèle</strong> dans la liste de l'en-tête. Les modèles sont regroupés par fournisseur ; votre choix est mémorisé.</li>
+        <li>Écrivez votre message. <kbd>Entrée</kbd> envoie, <kbd>Maj</kbd> + <kbd>Entrée</kbd> passe à la ligne.</li>
+        <li>La réponse s'affiche au fil de l'eau. Le bouton « Arrêter » interrompt une réponse trop longue.</li>
+        <li>Pour changer de sujet, cliquez sur « Nouvelle conversation » : l'IA repart sans le contexte précédent.</li>
+      </ol>
+      <p>L'IA ne garde pas de mémoire entre deux conversations ; dans une même conversation, elle reçoit l'historique des échanges à chaque question.</p>
+    </section>
+
+    <section id="donnees">
+      <h2><span class="n">5</span>Ce que la passerelle fait de vos données</h2>
+      <p>Avant l'envoi, la passerelle repère les données sensibles et les remplace par des jetons. L'IA travaille sur les jetons ; la passerelle remet les vraies valeurs dans la réponse que vous lisez.</p>
+      <div class="flow" aria-label="Exemple">
+        <div class="step"><div class="who">1 · Vous écrivez</div><div class="txt">« Prépare une réponse pour Mme Claire Dubois (claire.dubois@acme.be), dossier DOS-2025-00042. »</div></div>
+        <div class="step gw"><div class="who">2 · Passerelle</div><div class="txt">Repère une personne, un email, un dossier.</div></div>
+        <div class="step llm"><div class="who">3 · L'IA reçoit</div><div class="txt">« … pour Mme <span class="tok">«PERSON_1»</span> (<span class="tok">«EMAIL_1»</span>), dossier <span class="tok">«DOSSIER_1»</span>. »</div></div>
+        <div class="step gw"><div class="who">4 · Passerelle</div><div class="txt">Remet les vraies valeurs dans la réponse.</div></div>
+        <div class="step"><div class="who">5 · Vous lisez</div><div class="txt">« Nous revenons vers vous au sujet de Claire Dubois… »</div></div>
+      </div>
+      <p>Le badge <strong>⇄ « 3 donnée(s) pseudonymisée(s) : DOSSIER ×1, EMAIL ×1, PERSON ×1 »</strong> sous le message indique combien de valeurs ont été protégées, et de quels types.</p>
+      <figure class="shot"><div class="frame"><img src="img/chat-conversation.jpg" width="1600" height="1011" alt="Conversation : message avec nom, email et dossier, réponse restaurée, badge de pseudonymisation" loading="lazy"></div><figcaption class="bar"><span>Une conversation avec données protégées</span><a href="img/chat-conversation.jpg">Taille réelle</a></figcaption></figure>
+      <p class="note">Selon votre profil, certaines données peuvent être <strong>interdites</strong> (par exemple un numéro de registre national ou un IBAN dans un profil « santé ») : la question est alors refusée, rien n'est envoyé, et un message vous l'indique. Reformulez sans la donnée.</p>
+    </section>
+
+    <section id="fichiers">
+      <h2><span class="n">6</span>Joindre des documents et des images</h2>
+      <p>Cliquez sur « Joindre » ou glissez des fichiers dans la zone de saisie. Formats acceptés : texte (txt, md, csv, json, xml, html, log, yaml), <strong>PDF</strong>, <strong>Word (docx)</strong> et images. Le texte des documents est extrait dans votre navigateur (jusqu'à 300 000 caractères, au-delà le document est tronqué), puis passe par la passerelle comme vos messages.</p>
+      <p>Votre profil fixe ce qui arrive à chaque type de fichier :</p>
+      <div class="tw"><table>
+        <thead><tr><th>Règle du profil</th><th>Ce que vous voyez</th><th>Ce que l'IA reçoit</th></tr></thead>
+        <tbody>
+          <tr><td><span class="pill log">transmis</span></td><td>une réponse normale</td><td>le document ou l'image</td></tr>
+          <tr><td><span class="pill anon">carré blanc</span></td><td>une réponse normale ; l'IA indique souvent qu'elle ne voit pas le contenu</td><td>un carré blanc à la place de l'image, ou « [contenu remplacé par le gateway] » à la place du texte du document</td></tr>
+          <tr><td><span class="pill block">bloqué</span></td><td>le message « fichier interdit par votre profil : nom du fichier »</td><td>rien : la question n'est pas envoyée</td></tr>
+        </tbody>
+      </table></div>
+      <p>Le rappel en bas de l'écran indique la règle de votre profil pour les images (par exemple « images remplacées par un carré blanc »).</p>
+      <figure class="shot"><div class="frame"><img src="img/chat-files.jpg" width="1600" height="1011" alt="Un PDF remplacé par la passerelle puis un fichier .exe refusé avec le message fichier interdit par votre profil" loading="lazy"></div><figcaption class="bar"><span>Un document remplacé, puis un fichier refusé</span><a href="img/chat-files.jpg">Taille réelle</a></figcaption></figure>
+      <p class="note warn"><strong>Les fichiers sont journalisés.</strong> Pour la plupart des règles, la passerelle consigne le nom du fichier, sa taille et son empreinte pendant 30 jours (jamais son contenu). Certains fichiers bloqués déclenchent aussi une alerte au responsable sécurité. Ne joignez que ce dont l'IA a besoin.</p>
+    </section>
+
+    <section id="historique">
+      <h2><span class="n">7</span>Historique des conversations</h2>
+      <ul>
+        <li>Les <strong>10 dernières conversations</strong> s'affichent dans le panneau de gauche, la plus récente en haut. Elles sont conservées <strong>dans votre navigateur uniquement</strong>, pas sur le serveur.</li>
+        <li>Cliquez sur une conversation pour la rouvrir, ou utilisez le menu <strong>⋯</strong> : « Afficher » ou « Supprimer ».</li>
+        <li>Les images ne sont pas conservées (trop volumineuses) : une conversation rouverte n'affiche que leur nom.</li>
+        <li>Sur un autre ordinateur ou un autre navigateur, l'historique est vide.</li>
+      </ul>
+      <figure class="shot"><div class="frame"><img src="img/chat-history.jpg" width="1600" height="1011" alt="Panneau des conversations avec le menu Afficher et Supprimer" loading="lazy"></div><figcaption class="bar"><span>Le panneau des conversations</span><a href="img/chat-history.jpg">Taille réelle</a></figcaption></figure>
+      <p class="note">Sur un ordinateur partagé, supprimez vos conversations et déconnectez-vous en fin de session.</p>
+    </section>
+
+    <section id="reglages">
+      <h2><span class="n">8</span>Langue et thème</h2>
+      <ul>
+        <li><strong>Langue</strong> : la liste de l'en-tête bascule l'interface en anglais, français ou néerlandais. Vous pouvez écrire à l'IA dans la langue de votre choix, quelle que soit celle de l'interface.</li>
+        <li><strong>Thème</strong> : le bouton ◐ alterne entre clair et sombre.</li>
+        <li><strong>Déconnexion</strong> : ferme la session SSO ou oublie la clé de l'onglet.</li>
+      </ul>
+    </section>
+
+    <section id="erreurs">
+      <h2><span class="n">9</span>Messages d'erreur</h2>
+      <div class="tw"><table>
+        <thead><tr><th>Message</th><th>Signification</th><th>Que faire</th></tr></thead>
+        <tbody>
+          <tr><td class="k">fichier interdit par votre profil : …</td><td>le type de fichier est bloqué pour votre profil</td><td>retirer le fichier, ou en copier l'extrait utile dans le message s'il ne contient pas de données interdites</td></tr>
+          <tr><td class="k">requête bloquée par la politique de données : …</td><td>une donnée interdite par votre profil a été détectée (le type est indiqué)</td><td>reformuler sans cette donnée</td></tr>
+          <tr><td class="k">quota … atteint</td><td>vous avez atteint votre limite de requêtes ou de tokens</td><td>attendre la minute, le jour ou le mois suivant, ou demander une hausse à l'administrateur</td></tr>
+          <tr><td class="k">modèle « … » non autorisé</td><td>ce modèle n'est pas ouvert à votre profil</td><td>choisir un autre modèle dans la liste</td></tr>
+          <tr><td class="k">aucun LLM cible disponible</td><td>les fournisseurs de votre profil sont momentanément indisponibles</td><td>réessayer un peu plus tard, puis prévenir le support</td></tr>
+          <tr><td class="k">Clé refusée</td><td>clé inconnue ou utilisateur bloqué</td><td>vérifier la clé ou contacter l'administrateur</td></tr>
+          <tr><td class="k">aucun profil de chat ne vous est attribué</td><td>votre compte SSO n'est rattaché à aucun profil</td><td>contacter l'administrateur</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <section id="conseils">
+      <h2><span class="n">10</span>Bonnes pratiques</h2>
+      <ul>
+        <li><strong>Donnez le contexte</strong> : rôle, objectif, format attendu (« en 5 points », « ton formel »). Les réponses sont meilleures.</li>
+        <li><strong>Limitez les données personnelles</strong> au strict nécessaire, même si la passerelle les protège : la détection automatique n'est pas infaillible, surtout pour un nom isolé jamais vu.</li>
+        <li><strong>Vérifiez les réponses</strong> : l'IA peut se tromper ou inventer. Relisez toujours avant de transmettre un texte.</li>
+        <li>Si une réponse contient un jeton entre guillemets (<span class="tok">«PERSON_1»</span>), l'IA l'a modifié et la passerelle n'a pas pu le restaurer : remplacez-le à la main ou reposez la question.</li>
+        <li>Pour un sujet nouveau, ouvrez une <strong>nouvelle conversation</strong> : l'IA est plus précise et chaque question coûte moins de tokens.</li>
+      </ul>
+    </section>
+
+    <section id="faq">
+      <h2><span class="n">11</span>Questions fréquentes</h2>
+      <h3>Le fournisseur d'IA voit-il mes données ?</h3>
+      <p>Il voit votre texte, sauf les données sensibles détectées, remplacées par des jetons. La correspondance entre jetons et valeurs ne quitte pas la passerelle.</p>
+      <h3>Mes conversations sont-elles enregistrées ?</h3>
+      <p>L'historique est stocké dans votre navigateur. La passerelle enregistre des statistiques (volumes, durées, nombre de données protégées) sans le contenu, et le journal des fichiers (nom, taille, empreinte). Un mode de dépannage temporaire peut être activé par l'administrateur ; il est signalé dans le dashboard d'administration.</p>
+      <h3>Pourquoi un modèle n'apparaît-il pas dans la liste ?</h3>
+      <p>Seuls les modèles autorisés pour votre profil et réellement joignables sont proposés.</p>
+      <h3>Puis-je utiliser un autre outil (ChatGPT, Claude…) directement ?</h3>
+      <p>Non : les accès directs aux fournisseurs sont bloqués par la politique IA de l'organisation. Les outils compatibles (Claude Code, agents, scripts) se raccordent à la passerelle avec une clé d'application ; voir la <a href="index.html#clients">documentation d'administration</a>.</p>
+    </section>
+
+    <footer class="doc"><img src="img/vulpoint-logo.jpg" alt=""><span>LLMGW 1.0.0 by <a href="https://vulpoint.com" target="_blank" rel="noopener">Vulpoint.com</a> · <a href="index.html">Documentation complète</a></span></footer>
+  </main>
+</div>
+</body>
+</html>
