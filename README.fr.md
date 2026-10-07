@@ -2,7 +2,7 @@
 
 [English version](README.md)
 
-Version **1.1.0** · notes de version dans [RELEASE_NOTES.md](RELEASE_NOTES.md) · documentation intégrée sur `/docs/` (administration) et `/docs/chat.html` (guide utilisateur du chat), sources dans [docs/](docs/).
+Version **1.2.0** · notes de version dans [RELEASE_NOTES.md](RELEASE_NOTES.md) · documentation intégrée sur `/docs/` (administration) et `/docs/chat.html` (guide utilisateur du chat), sources dans [docs/](docs/).
 
 <p align="center"><img src="docs/img/architecture-fr.svg" alt="Architecture de LLMGW : utilisateurs, agents et applications de la zone de confiance ne joignent les LLM que par la passerelle, en bordure de zone ; les accès directs vers Internet sont bloqués" width="100%"></p>
 
@@ -27,7 +27,7 @@ export MISTRAL_API_KEY=… ANTHROPIC_API_KEY=… OPENAI_API_KEY=…
 
 ### App macOS (barre des menus)
 
-`macapp/build.sh` construit **LLMGW.app** à côté de `config.toml` (Go et les Command Line Tools d'Xcode suffisent). Double-cliquer : une icône apparaît dans la barre des menus, avec une pastille d'état (verte en marche, orange au démarrage, rouge arrêtée) et un menu pour démarrer, arrêter ou redémarrer la passerelle, ouvrir le dashboard, le chat et la documentation, afficher le journal (`llmgw.log`) et ouvrir l'app à l'ouverture de session. L'app charge `secrets.env`, démarre la passerelle à son ouverture et l'arrête quand on la quitte. Menu en anglais, français ou néerlandais. Sans l'app, `start.command` lance la passerelle dans le Terminal en double-clic et ouvre le dashboard.
+`macapp/build.sh` construit une **LLMGW.app autonome** dans `dist/`, ainsi que `dist/LLMGW-<version>.dmg` pour l'installer par glisser-déposer dans Applications (Go et les Command Line Tools d'Xcode servent à la construction, rien n'est nécessaire à l'exécution). La passerelle est embarquée dans l'app, en binaire universel (Apple Silicon et Intel) qui n'utilise que des bibliothèques fournies avec macOS. Les données sont dans `~/Library/Application Support/LLMGW` : au premier lancement, l'app y crée une configuration de départ avec un jeton d'administration aléatoire et un modèle `secrets.env` (droits 600). Le menu permet de modifier la configuration et les secrets, de copier le jeton d'administration et de choisir un autre dossier de données (par exemple une installation existante). Double-cliquer : une icône apparaît dans la barre des menus, avec une pastille d'état (verte en marche, orange au démarrage, rouge arrêtée) et un menu pour démarrer, arrêter ou redémarrer la passerelle, ouvrir le dashboard, le chat et la documentation, afficher le journal (`llmgw.log`) et ouvrir l'app à l'ouverture de session. L'app charge `secrets.env`, démarre la passerelle à son ouverture et l'arrête quand on la quitte. Menu en anglais, français ou néerlandais. Sans l'app, `start.command` lance la passerelle dans le Terminal en double-clic et ouvre le dashboard.
 
 Construire : `go build -o llmgw .`. Pour Linux depuis le Mac : `GOOS=linux GOARCH=amd64 go build -o dist/llmgw-linux-amd64 .` (ou directement `deploy/deploy.sh`, voir plus bas).
 
@@ -145,7 +145,7 @@ Un nom repéré une fois (« Mme Claire Dubois ») est aussi remplacé ailleurs 
 | `docs/` | documentation intégrée : administration, guide utilisateur du chat, captures |
 | `RELEASE_NOTES.md` | notes de version |
 | `gateway_test.go` | tests de bout en bout avec faux LLM : `go test ./...` |
-| `macapp/LLMGW.swift`, `macapp/build.sh` | app macOS de la barre des menus et son script de construction |
+| `macapp/LLMGW.swift`, `macapp/build.sh` | app macOS autonome de la barre des menus (passerelle embarquée) et son script de construction (app + DMG) |
 | `start.command` | démarrage en double-clic dans le Terminal (macOS) |
 | `deploy/deploy.sh` | compilation, copie et redémarrage sur un VPS (`--help`) |
 | `deploy/remote-install.sh` | partie serveur de `deploy.sh` : validation, installation, retour arrière |

@@ -150,7 +150,7 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
 
 <div class="page">
   <nav class="toc" aria-label="Sommaire">
-    <a class="toc-brand" href="https://vulpoint.com" target="_blank" rel="noopener"><img src="img/vulpoint-logo.jpg" alt="Vulpoint"><div><b>LLMGW</b><small>by Vulpoint.com · v1.1.0</small></div></a>
+    <a class="toc-brand" href="https://vulpoint.com" target="_blank" rel="noopener"><img src="img/vulpoint-logo.jpg" alt="Vulpoint"><div><b>LLMGW</b><small>by Vulpoint.com · v1.2.0</small></div></a>
     <div class="label">Fonctionnalités</div>
     <ol>
       <li><a href="#objectif"><span>1</span>Objectif</a></li>
@@ -209,7 +209,7 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
       <div class="eyebrow">Documentation fonctionnelle, technique et d'administration</div>
       <h1>LLMGW, la passerelle IA de l'organisation</h1>
       <p class="lede">Un point de connexion unique entre les utilisateurs, les agents et les modèles de langage. Il applique la politique IA : qui peut utiliser quel modèle, quelles données peuvent sortir, et avec quelle traçabilité.</p>
-      <div class="meta"><span><b>Version</b> 1.1.0 (7 octobre 2026)</span><span><b>Composant</b> llmgw (binaire unique Go, macOS et Linux)</span><span><b>Formats d'API</b> OpenAI et Anthropic</span><span><b>Interface</b> anglais, français, néerlandais</span></div>
+      <div class="meta"><span><b>Version</b> 1.2.0 (7 octobre 2026)</span><span><b>Composant</b> llmgw (binaire unique Go, macOS et Linux)</span><span><b>Formats d'API</b> OpenAI et Anthropic</span><span><b>Interface</b> anglais, français, néerlandais</span></div>
       <a class="crosslink" href="chat.html">Guide utilisateur du chat ↗</a>
     </header>
 
@@ -647,20 +647,24 @@ files_default = "pass_log"                         <span class="c"># autres exte
       <h3>Lancement manuel</h3>
 <pre>export MISTRAL_API_KEY=… ANTHROPIC_API_KEY=…
 ./llmgw -config config.toml
-<span class="c"># LLMGW 1.1.0 à l'écoute sur http://127.0.0.1:8088 (dashboard : /dashboard, documentation : /docs)</span></pre>
+<span class="c"># LLMGW 1.2.0 à l'écoute sur http://127.0.0.1:8088 (dashboard : /dashboard, documentation : /docs)</span></pre>
       <p>Une seule instance par port. Arrêt avec Ctrl+C : les métriques en attente sont enregistrées avant la sortie.</p>
 
       <h3>App macOS dans la barre des menus</h3>
-      <p><code>macapp/build.sh</code> compile la passerelle et construit <strong>LLMGW.app</strong> à côté de <code>config.toml</code> (Go et les Command Line Tools d'Xcode suffisent, sans projet Xcode). Un double-clic sur l'app affiche une icône dans la barre des menus :</p>
+      <p><code>macapp/build.sh</code> construit une <strong>LLMGW.app autonome</strong> dans <code>dist/</code>, et <code>dist/LLMGW-&lt;version&gt;.dmg</code> pour l'installer par glisser-déposer dans Applications. Go et les Command Line Tools d'Xcode ne servent qu'à la construction : l'app embarque la passerelle (binaire universel Apple Silicon et Intel, sans dépendance hors macOS) et ne demande rien d'autre pour fonctionner.</p>
+      <p>Les données sont dans <code>~/Library/Application Support/LLMGW</code> : <code>config.toml</code>, <code>secrets.env</code>, la base et le journal. Au premier lancement, l'app y crée une configuration de départ, avec un <strong>jeton d'administration aléatoire</strong>, et un modèle <code>secrets.env</code> (droits 600). Une installation existante (dossier contenant déjà <code>config.toml</code>) est reprise telle quelle via « Dossier de données… ».</p>
+      <p>Un double-clic sur l'app affiche une icône dans la barre des menus :</p>
       <ul>
         <li>une <strong>pastille d'état</strong> : verte en marche, orange au démarrage, rouge arrêtée, grise si le dossier de la passerelle est introuvable ;</li>
         <li><strong>Démarrer</strong>, <strong>Arrêter</strong>, <strong>Redémarrer</strong> ; une passerelle lancée ailleurs est reconnue et peut être arrêtée ;</li>
         <li><strong>Ouvrir le dashboard</strong>, <strong>le chat</strong>, <strong>la documentation</strong> ;</li>
-        <li><strong>Afficher le journal</strong> (<code>llmgw.log</code>, dans Console) et le dossier de la passerelle ;</li>
+        <li><strong>Copier le jeton d'administration</strong>, pour se connecter au dashboard ;</li>
+        <li><strong>Modifier la configuration</strong> et <strong>Modifier les secrets</strong> (clés API, secrets SSO) dans TextEdit ; la configuration se modifie aussi depuis le dashboard ;</li>
+        <li><strong>Afficher le journal</strong> (<code>llmgw.log</code>, dans Console), le dossier de données, et <strong>Dossier de données…</strong> pour en choisir un autre ;</li>
         <li><strong>Ouvrir à l'ouverture de session</strong>, pour une passerelle disponible dès la connexion au Mac ;</li>
         <li>menu en anglais, français ou néerlandais.</li>
       </ul>
-      <p>L'app charge <code>secrets.env</code>, démarre la passerelle à son ouverture et l'arrête quand on la quitte. Elle retrouve le dossier de la passerelle à côté d'elle ; déplacée ailleurs (dans Applications par exemple), elle garde le dernier dossier connu, ou le demande. Sans l'app, <code>start.command</code> lance la passerelle dans le Terminal en double-clic et ouvre le dashboard.</p>
+      <p>L'app charge <code>secrets.env</code>, démarre la passerelle à son ouverture et l'arrête quand on la quitte. Sans l'app, <code>start.command</code> lance la passerelle dans le Terminal en double-clic et ouvre le dashboard.</p>
 
       <h3>Service permanent sous Linux (systemd)</h3>
 <pre><span class="c"># /etc/systemd/system/llmgw.service</span>
@@ -935,6 +939,14 @@ default_profile = "anonymisation"</pre>
       <h2><span class="n">37</span>Notes de version</h2>
       <p>La version en cours s'affiche en bas du menu du dashboard, sur l'écran de connexion du chat, sur <code>GET /version</code> et avec <code>./llmgw -version</code>. Le journal complet est tenu dans <code>RELEASE_NOTES.md</code>, à la racine du dépôt.</p>
       <div class="rel">
+        <h3>1.2.0, 7 octobre 2026</h3>
+        <ul>
+          <li>LLMGW.app autonome : passerelle embarquée (binaire universel, sans dépendance), DMG d'installation.</li>
+          <li>Données dans Application Support, configuration de départ et jeton d'administration aléatoire au premier lancement.</li>
+          <li>Menu : modifier la configuration et les secrets, copier le jeton d'administration, choisir le dossier de données.</li>
+        </ul>
+      </div>
+      <div class="rel">
         <h3>1.1.0, 7 octobre 2026</h3>
         <ul>
           <li>App macOS LLMGW.app dans la barre des menus : état, démarrer, arrêter, redémarrer, accès au dashboard, au chat, à la documentation et au journal, ouverture à la session.</li>
@@ -962,7 +974,7 @@ default_profile = "anonymisation"</pre>
       </div>
     </section>
 
-    <footer class="doc"><img src="img/vulpoint-logo.jpg" alt=""><span>LLMGW 1.1.0 by <a href="https://vulpoint.com" target="_blank" rel="noopener">Vulpoint.com</a></span></footer>
+    <footer class="doc"><img src="img/vulpoint-logo.jpg" alt=""><span>LLMGW 1.2.0 by <a href="https://vulpoint.com" target="_blank" rel="noopener">Vulpoint.com</a></span></footer>
   </main>
 </div>
 </body>

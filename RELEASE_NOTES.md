@@ -2,6 +2,13 @@
 
 Le numéro suit le schéma `majeur.mineur.correctif`. La version en cours s'affiche en bas du menu du dashboard, dans l'en-tête de connexion du chat, sur `GET /version` et avec `./llmgw -version`.
 
+## 1.2.0 (7 octobre 2026)
+
+### Nouveautés
+- LLMGW.app devient **autonome** : la passerelle est embarquée dans l'app (binaire universel Apple Silicon et Intel, sans aucune dépendance hors macOS). `macapp/build.sh` produit `dist/LLMGW.app` et `dist/LLMGW-<version>.dmg`.
+- Données dans `~/Library/Application Support/LLMGW` ; au premier lancement, configuration de départ avec un jeton d'administration aléatoire et modèle `secrets.env` (droits 600). Une installation existante est reprise telle quelle.
+- Menu : modifier la configuration, modifier les secrets (clés API), copier le jeton d'administration, choisir le dossier de données ; textes en anglais, français et néerlandais.
+
 ## 1.1.0 (7 octobre 2026)
 
 ### Nouveautés

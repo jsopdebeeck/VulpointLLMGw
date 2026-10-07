@@ -2,7 +2,7 @@
 
 [Version française](README.fr.md)
 
-Version **1.1.0** · release notes in [RELEASE_NOTES.md](RELEASE_NOTES.md) (French) · built-in documentation at `/docs/` (administration) and `/docs/chat.html` (chat user guide), sources in [docs/](docs/) (French).
+Version **1.2.0** · release notes in [RELEASE_NOTES.md](RELEASE_NOTES.md) (French) · built-in documentation at `/docs/` (administration) and `/docs/chat.html` (chat user guide), sources in [docs/](docs/) (French).
 
 <p align="center"><img src="docs/img/architecture-en.svg" alt="LLMGW architecture: users, agents and applications in the trusted zone reach the LLMs only through the gateway, on the zone boundary; direct access to the Internet is blocked" width="100%"></p>
 
@@ -27,7 +27,7 @@ export MISTRAL_API_KEY=… ANTHROPIC_API_KEY=… OPENAI_API_KEY=…
 
 ### macOS app (menu bar)
 
-`macapp/build.sh` builds **LLMGW.app** next to `config.toml` (Go and the Xcode Command Line Tools are enough). Double-click it: an icon appears in the menu bar with a status dot (green running, orange starting, red stopped) and a menu to start, stop or restart the gateway, open the dashboard, the chat and the documentation, show the log (`llmgw.log`) and open the app at login. The app loads `secrets.env`, starts the gateway when it opens and stops it when it quits. Menu in English, French or Dutch. Without the app, `start.command` starts the gateway in Terminal with a double-click and opens the dashboard.
+`macapp/build.sh` builds a **self-contained LLMGW.app** in `dist/`, plus `dist/LLMGW-<version>.dmg` to install it by drag and drop into Applications (Go and the Xcode Command Line Tools are needed to build, nothing to run). The gateway is embedded in the app as a universal binary (Apple Silicon and Intel) that only uses libraries shipped with macOS. The data lives in `~/Library/Application Support/LLMGW`: on first launch the app creates a starting configuration with a random admin token and a `secrets.env` template (both 600). The menu edits the configuration and the secrets, copies the admin token, and can point to another data folder (for example an existing installation). Double-click it: an icon appears in the menu bar with a status dot (green running, orange starting, red stopped) and a menu to start, stop or restart the gateway, open the dashboard, the chat and the documentation, show the log (`llmgw.log`) and open the app at login. The app loads `secrets.env`, starts the gateway when it opens and stops it when it quits. Menu in English, French or Dutch. Without the app, `start.command` starts the gateway in Terminal with a double-click and opens the dashboard.
 
 Build with `go build -o llmgw .`. For Linux from a Mac: `GOOS=linux GOARCH=amd64 go build -o dist/llmgw-linux-amd64 .`, or run `deploy/deploy.sh` directly (see below).
 
@@ -208,7 +208,7 @@ The detail view switches between the anonymised view and the original view, with
 | `docs/` | built-in documentation (French): administration, chat user guide, screenshots |
 | `RELEASE_NOTES.md` | release notes (French) |
 | `gateway_test.go` | end-to-end tests with fake LLMs: `go test ./...` |
-| `macapp/LLMGW.swift`, `macapp/build.sh` | macOS menu bar app and its build script |
+| `macapp/LLMGW.swift`, `macapp/build.sh` | self-contained macOS menu bar app (embedded gateway) and its build script (app + DMG) |
 | `start.command` | double-click start in Terminal (macOS) |
 | `deploy/deploy.sh` | build, copy and restart on a VPS (`--help`) |
 | `deploy/remote-install.sh` | server side of `deploy.sh`: validation, installation, rollback |

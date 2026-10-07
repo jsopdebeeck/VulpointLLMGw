@@ -33,7 +33,7 @@ var i18nJS []byte
 var docsFS embed.FS
 
 // Version of LLMGW; every release is described in RELEASE_NOTES.md.
-const Version = "1.1.0"
+const Version = "1.2.0"
 
 var sessKey []byte
 

@@ -1,6 +1,9 @@
 // LLMGW menu bar app: starts and stops the gateway, shows its status, opens the dashboard, chat and docs.
-// Build with macapp/build.sh (Command Line Tools are enough, no Xcode project).
+// Self-contained: the gateway binary is embedded in the bundle (Contents/Resources/llmgw); the data
+// (config.toml, secrets.env, gateway.db, llmgw.log) lives in ~/Library/Application Support/LLMGW,
+// or in another folder chosen from the menu. Build with macapp/build.sh (no Xcode project needed).
 import AppKit
+import Security
 import ServiceManagement
 import SwiftUI
 
@@ -20,12 +23,17 @@ let strings: [String: [String: String]] = [
     "docs": ["en": "Documentation", "fr": "Documentation", "nl": "Documentatie"],
     "logs": ["en": "Show the log", "fr": "Afficher le journal", "nl": "Logboek tonen"],
     "folder": ["en": "Show the gateway folder", "fr": "Afficher le dossier de la passerelle", "nl": "Gatewaymap tonen"],
-    "choose": ["en": "Choose the gateway folder…", "fr": "Choisir le dossier de la passerelle…", "nl": "Gatewaymap kiezen…"],
+    "choose": ["en": "Data folder…", "fr": "Dossier de données…", "nl": "Gegevensmap…"],
+    "config": ["en": "Edit the configuration", "fr": "Modifier la configuration", "nl": "Configuratie bewerken"],
+    "secrets": ["en": "Edit the secrets (API keys)", "fr": "Modifier les secrets (clés API)", "nl": "Geheimen bewerken (API-sleutels)"],
+    "token": ["en": "Copy the admin token", "fr": "Copier le jeton d'administration", "nl": "Beheertoken kopiëren"],
+    "copied": ["en": "Admin token copied to the clipboard", "fr": "Jeton d'administration copié dans le presse-papiers", "nl": "Beheertoken gekopieerd naar het klembord"],
+    "notoken": ["en": "No admin token in config.toml", "fr": "Aucun jeton d'administration dans config.toml", "nl": "Geen beheertoken in config.toml"],
+    "nobin": ["en": "The gateway binary is missing from the app", "fr": "Le binaire de la passerelle manque dans l'app", "nl": "Het gatewayprogramma ontbreekt in de app"],
     "login": ["en": "Open at login", "fr": "Ouvrir à l'ouverture de session", "nl": "Openen bij aanmelden"],
     "language": ["en": "Language", "fr": "Langue", "nl": "Taal"],
     "quit": ["en": "Quit (stops the gateway)", "fr": "Quitter (arrête la passerelle)", "nl": "Stoppen (stopt de gateway)"],
-    "pick": ["en": "Choose the folder that contains llmgw and config.toml", "fr": "Choisissez le dossier qui contient llmgw et config.toml", "nl": "Kies de map met llmgw en config.toml"],
-    "missing": ["en": "llmgw or config.toml is missing in this folder.", "fr": "llmgw ou config.toml manque dans ce dossier.", "nl": "llmgw of config.toml ontbreekt in deze map."],
+    "pick": ["en": "Choose the folder that contains config.toml (or an empty folder to start a new configuration)", "fr": "Choisissez le dossier qui contient config.toml (ou un dossier vide pour une nouvelle configuration)", "nl": "Kies de map met config.toml (of een lege map voor een nieuwe configuratie)"],
     "loginerr": ["en": "The login item could not be changed: ", "fr": "Impossible de modifier l'ouverture à la session : ", "nl": "Het aanmeldonderdeel kon niet worden gewijzigd: "],
     "exited": ["en": "The gateway stopped. See the log for the reason.", "fr": "La passerelle s'est arrêtée. Le motif est dans le journal.", "nl": "De gateway is gestopt. Zie het logboek voor de reden."],
 ]
@@ -42,6 +50,7 @@ final class Gateway: ObservableObject {
     @Published var lang: String
     @Published var loginItem = SMAppService.mainApp.status == .enabled
     @Published var lastError = ""
+    @Published var info = ""
 
     private var proc: Process?
     private var listen = "127.0.0.1:8088"
@@ -68,17 +77,65 @@ final class Gateway: ObservableObject {
         UserDefaults.standard.set(l, forKey: "lang")
     }
 
-    // The app next to config.toml (repository folder), otherwise the folder chosen earlier.
+    // Gateway binary: embedded in the app, or next to config.toml for a development build.
+    var binary: URL? {
+        if let u = Bundle.main.url(forResource: "llmgw", withExtension: nil) { return u }
+        if let f = folder, FileManager.default.isExecutableFile(atPath: f.appendingPathComponent("llmgw").path) { return f.appendingPathComponent("llmgw") }
+        return nil
+    }
+
+    static var appSupport: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("LLMGW")
+    }
+
+    // Data folder: the one chosen earlier, the app's own folder (repository), otherwise Application Support.
     static func findFolder() -> URL? {
         let fm = FileManager.default
-        let ok = { (u: URL) in fm.fileExists(atPath: u.appendingPathComponent("config.toml").path) && fm.fileExists(atPath: u.appendingPathComponent("llmgw").path) }
+        let hasConfig = { (u: URL) in fm.fileExists(atPath: u.appendingPathComponent("config.toml").path) }
+        if let p = UserDefaults.standard.string(forKey: "folder"), hasConfig(URL(fileURLWithPath: p)) { return URL(fileURLWithPath: p) }
         let beside = Bundle.main.bundleURL.deletingLastPathComponent()
-        if ok(beside) {
+        if hasConfig(beside) {
             UserDefaults.standard.set(beside.path, forKey: "folder")
             return beside
         }
-        if let p = UserDefaults.standard.string(forKey: "folder"), ok(URL(fileURLWithPath: p)) { return URL(fileURLWithPath: p) }
-        return nil
+        let d = appSupport
+        guard initFolder(d) else { return nil }
+        UserDefaults.standard.set(d.path, forKey: "folder")
+        return d
+    }
+
+    // First launch: a starting configuration with a random admin token, and a secrets.env template (600).
+    @discardableResult
+    static func initFolder(_ d: URL) -> Bool {
+        let fm = FileManager.default
+        try? fm.createDirectory(at: d, withIntermediateDirectories: true)
+        let cfg = d.appendingPathComponent("config.toml")
+        if !fm.fileExists(atPath: cfg.path) {
+            guard let ex = Bundle.main.url(forResource: "config.example", withExtension: "toml"),
+                  var txt = try? String(contentsOf: ex, encoding: .utf8) else { return false }
+            var bytes = [UInt8](repeating: 0, count: 24)
+            _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+            let token = bytes.map { String(format: "%02x", $0) }.joined()
+            txt = txt.replacingOccurrences(of: #"admin_token = "change-moi""#, with: "admin_token = \"\(token)\"")
+            guard (try? txt.write(to: cfg, atomically: true, encoding: .utf8)) != nil else { return false }
+            try? fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: cfg.path)
+        }
+        let sec = d.appendingPathComponent("secrets.env")
+        if !fm.fileExists(atPath: sec.path) {
+            let tpl = """
+            # LLMGW: provider API keys and SSO secrets, one per line (NAME=value). Never in config.toml.
+            # MISTRAL_API_KEY=
+            # ANTHROPIC_API_KEY=
+            # OPENAI_API_KEY=
+            # DEEPSEEK_API_KEY=
+            # GOOGLE_CLIENT_SECRET=
+            # ENTRA_CLIENT_SECRET=
+            # SMTP_PASSWORD=
+
+            """
+            fm.createFile(atPath: sec.path, contents: tpl.data(using: .utf8), attributes: [.posixPermissions: 0o600])
+        }
+        return true
     }
 
     func readConfig() {
@@ -112,6 +169,7 @@ final class Gateway: ObservableObject {
     func start() {
         guard let f = folder else { chooseFolder(); return }
         guard state == .stopped else { return }
+        guard let bin = binary else { lastError = t("nobin"); return }
         readConfig()
         lastError = ""
         let logURL = f.appendingPathComponent("llmgw.log")
@@ -121,8 +179,9 @@ final class Gateway: ObservableObject {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/bin/zsh")
         // secrets.env holds the provider keys and the SSO secrets (never in config.toml)
-        p.arguments = ["-c", "set -a; [ -f secrets.env ] && . ./secrets.env; set +a; exec ./llmgw -config config.toml"]
+        p.arguments = ["-c", "set -a; [ -f secrets.env ] && . ./secrets.env; set +a; exec \"$LLMGW_BIN\" -config config.toml"]
         p.currentDirectoryURL = f
+        p.environment = ProcessInfo.processInfo.environment.merging(["LLMGW_BIN": bin.path]) { $1 }
         p.standardOutput = log
         p.standardError = log
         p.terminationHandler = { _ in
@@ -199,15 +258,29 @@ final class Gateway: ObservableObject {
         panel.message = t("pick")
         NSApp.activate(ignoringOtherApps: true)
         guard panel.runModal() == .OK, let u = panel.url else { return }
-        let fm = FileManager.default
-        guard fm.fileExists(atPath: u.appendingPathComponent("config.toml").path), fm.fileExists(atPath: u.appendingPathComponent("llmgw").path) else {
-            lastError = t("missing")
-            return
-        }
+        guard Gateway.initFolder(u) else { return }
         UserDefaults.standard.set(u.path, forKey: "folder")
         folder = u
         readConfig()
         Task { await poll() }
+    }
+
+    func edit(_ name: String) {
+        guard let f = folder else { return }
+        let u = f.appendingPathComponent(name)
+        if name == "secrets.env" { Gateway.initFolder(f) }
+        NSWorkspace.shared.open([u], withApplicationAt: URL(fileURLWithPath: "/System/Applications/TextEdit.app"), configuration: NSWorkspace.OpenConfiguration())
+    }
+
+    func copyToken() {
+        guard let f = folder, let txt = try? String(contentsOf: f.appendingPathComponent("config.toml"), encoding: .utf8),
+              let r = txt.range(of: #"(?m)^\s*admin_token\s*=\s*"([^"]+)""#, options: .regularExpression) else { lastError = t("notoken"); return }
+        let line = String(txt[r])
+        guard let q1 = line.firstIndex(of: "\""), let q2 = line.lastIndex(of: "\""), q1 < q2 else { lastError = t("notoken"); return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(String(line[line.index(after: q1)..<q2]), forType: .string)
+        lastError = ""
+        info = t("copied")
     }
 
     func toggleLogin() {
@@ -280,6 +353,7 @@ struct MenuContent: View {
         let up = gw.state == .running || gw.state == .external
         Text(gw.statusLine)
         if !gw.lastError.isEmpty { Text("⚠ " + gw.lastError) }
+        if !gw.info.isEmpty { Text("✓ " + gw.info) }
         Divider()
         if gw.state == .stopped {
             Button(gw.t("start")) { gw.start() }.keyboardShortcut("s")
@@ -292,6 +366,10 @@ struct MenuContent: View {
         Button(gw.t("chat")) { gw.open("/chat") }.disabled(!up)
         Button(gw.t("docs")) { gw.open("/docs/") }.disabled(!up)
         Divider()
+        Button(gw.t("token")) { gw.copyToken() }.disabled(gw.folder == nil)
+        Divider()
+        Button(gw.t("config")) { gw.edit("config.toml") }.disabled(gw.folder == nil)
+        Button(gw.t("secrets")) { gw.edit("secrets.env") }.disabled(gw.folder == nil)
         Button(gw.t("logs")) { gw.openLog() }.disabled(gw.folder == nil)
         Button(gw.t("folder")) { gw.showFolder() }.disabled(gw.folder == nil)
         Button(gw.t("choose")) { gw.chooseFolder() }

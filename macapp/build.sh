@@ -1,22 +1,32 @@
 #!/bin/zsh
-# Builds LLMGW.app (menu bar app) next to config.toml, and the llmgw binary it starts.
-# Needs Go and the Xcode Command Line Tools (xcode-select --install).
+# Builds the self-contained LLMGW.app (menu bar app + embedded gateway, universal arm64 / x86_64)
+# in dist/, and a DMG to install it. Needs Go and the Xcode Command Line Tools (xcode-select --install).
+# The app depends on nothing else: the gateway is a static Go binary (pure-Go SQLite).
 set -euo pipefail
 cd "${0:A:h}/.."
 
 version=$(sed -n 's/^const Version = "\(.*\)"/\1/p' main.go)
 echo "LLMGW $version"
 
-go build -o llmgw .
-
-app=LLMGW.app
+mkdir -p dist
+app=dist/LLMGW.app
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 rm -rf "$app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 
-swiftc -O -swift-version 5 -parse-as-library -target "$(uname -m)-apple-macos13" \
-	-o "$app/Contents/MacOS/LLMGW" macapp/LLMGW.swift
+# gateway: one binary per architecture, merged into a universal binary
+for arch in arm64 amd64; do
+	CGO_ENABLED=0 GOOS=darwin GOARCH=$arch go build -trimpath -ldflags "-s -w" -o "$tmp/llmgw-$arch" .
+done
+lipo -create -output "$app/Contents/Resources/llmgw" "$tmp/llmgw-arm64" "$tmp/llmgw-amd64"
+cp config.example.toml "$app/Contents/Resources/config.example.toml"
+
+# menu bar app, same for both architectures
+for arch in arm64 x86_64; do
+	swiftc -O -swift-version 5 -parse-as-library -target "$arch-apple-macos13" -o "$tmp/LLMGW-$arch" macapp/LLMGW.swift
+done
+lipo -create -output "$app/Contents/MacOS/LLMGW" "$tmp/LLMGW-arm64" "$tmp/LLMGW-x86_64"
 
 # icon: the Vulpoint logo in every size macOS asks for
 set=$tmp/LLMGW.iconset
@@ -46,5 +56,17 @@ cat > "$app/Contents/Info.plist" <<EOF
 </dict></plist>
 EOF
 
-codesign --force --sign - "$app" # local ad-hoc signature
-echo "OK : $PWD/$app (double-clic pour lancer, icône dans la barre des menus)"
+# local ad-hoc signature: the embedded binary first, then the bundle
+codesign --force --sign - "$app/Contents/Resources/llmgw"
+codesign --force --sign - "$app"
+
+# DMG: the app and a shortcut to Applications, to install by drag and drop
+dmg=dist/LLMGW-$version.dmg
+mkdir -p "$tmp/dmg"
+cp -R "$app" "$tmp/dmg/"
+ln -s /Applications "$tmp/dmg/Applications"
+rm -f "$dmg"
+hdiutil create -quiet -volname "LLMGW $version" -srcfolder "$tmp/dmg" -ov -format UDZO "$dmg"
+
+echo "OK : $PWD/$app"
+echo "     $PWD/$dmg"
