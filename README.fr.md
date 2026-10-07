@@ -2,7 +2,7 @@
 
 [English version](README.md)
 
-Version **1.0.1** · notes de version dans [RELEASE_NOTES.md](RELEASE_NOTES.md) · documentation intégrée sur `/docs/` (administration) et `/docs/chat.html` (guide utilisateur du chat), sources dans [docs/](docs/).
+Version **1.1.0** · notes de version dans [RELEASE_NOTES.md](RELEASE_NOTES.md) · documentation intégrée sur `/docs/` (administration) et `/docs/chat.html` (guide utilisateur du chat), sources dans [docs/](docs/).
 
 <p align="center"><img src="docs/img/architecture-fr.svg" alt="Architecture de LLMGW : utilisateurs, agents et applications de la zone de confiance ne joignent les LLM que par la passerelle, en bordure de zone ; les accès directs vers Internet sont bloqués" width="100%"></p>
 
@@ -24,6 +24,10 @@ export MISTRAL_API_KEY=… ANTHROPIC_API_KEY=… OPENAI_API_KEY=…
 ./llmgw -config config.toml            # http://127.0.0.1:8080/dashboard
 ./llmgw -version                       # affiche la version
 ```
+
+### App macOS (barre des menus)
+
+`macapp/build.sh` construit **LLMGW.app** à côté de `config.toml` (Go et les Command Line Tools d'Xcode suffisent). Double-cliquer : une icône apparaît dans la barre des menus, avec une pastille d'état (verte en marche, orange au démarrage, rouge arrêtée) et un menu pour démarrer, arrêter ou redémarrer la passerelle, ouvrir le dashboard, le chat et la documentation, afficher le journal (`llmgw.log`) et ouvrir l'app à l'ouverture de session. L'app charge `secrets.env`, démarre la passerelle à son ouverture et l'arrête quand on la quitte. Menu en anglais, français ou néerlandais. Sans l'app, `start.command` lance la passerelle dans le Terminal en double-clic et ouvre le dashboard.
 
 Construire : `go build -o llmgw .`. Pour Linux depuis le Mac : `GOOS=linux GOARCH=amd64 go build -o dist/llmgw-linux-amd64 .` (ou directement `deploy/deploy.sh`, voir plus bas).
 
@@ -141,6 +145,8 @@ Un nom repéré une fois (« Mme Claire Dubois ») est aussi remplacé ailleurs 
 | `docs/` | documentation intégrée : administration, guide utilisateur du chat, captures |
 | `RELEASE_NOTES.md` | notes de version |
 | `gateway_test.go` | tests de bout en bout avec faux LLM : `go test ./...` |
+| `macapp/LLMGW.swift`, `macapp/build.sh` | app macOS de la barre des menus et son script de construction |
+| `start.command` | démarrage en double-clic dans le Terminal (macOS) |
 | `deploy/deploy.sh` | compilation, copie et redémarrage sur un VPS (`--help`) |
 | `deploy/remote-install.sh` | partie serveur de `deploy.sh` : validation, installation, retour arrière |
 | `deploy/llmgw.service` | service systemd durci |

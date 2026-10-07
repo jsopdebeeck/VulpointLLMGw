@@ -9,3 +9,5 @@ config.toml.bak-*
 secrets.env
 client_secret_*.json
 _archive/
+LLMGW.app/
+llmgw.log

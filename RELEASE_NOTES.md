@@ -2,6 +2,12 @@
 
 Le numéro suit le schéma `majeur.mineur.correctif`. La version en cours s'affiche en bas du menu du dashboard, dans l'en-tête de connexion du chat, sur `GET /version` et avec `./llmgw -version`.
 
+## 1.1.0 (7 octobre 2026)
+
+### Nouveautés
+- App macOS **LLMGW.app** dans la barre des menus : pastille d'état (verte, orange, rouge), démarrer, arrêter, redémarrer, ouvrir le dashboard, le chat et la documentation, afficher le journal, ouverture à la session. Elle charge `secrets.env`, démarre la passerelle à son ouverture et l'arrête à sa fermeture. Menu en anglais, français et néerlandais. Construction : `macapp/build.sh`.
+- `start.command` : démarrage en double-clic dans le Terminal, avec ouverture du dashboard.
+
 ## 1.0.1 (7 octobre 2026)
 
 ### Corrections
