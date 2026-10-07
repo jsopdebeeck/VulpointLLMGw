@@ -23,9 +23,10 @@ lipo -create -output "$app/Contents/Resources/llmgw" "$tmp/llmgw-arm64" "$tmp/ll
 cp config.example.toml "$app/Contents/Resources/config.example.toml"
 
 # menu bar app, same for both architectures
-for arch in arm64 x86_64; do
-	swiftc -O -swift-version 5 -parse-as-library -target "$arch-apple-macos13" -o "$tmp/LLMGW-$arch" macapp/LLMGW.swift
-done
+# (x86_64: the Command Line Tools ship libswiftCompatibilityPacks for arm64 only; the Intel build
+# does not need it, so the linker warning about it is silenced)
+swiftc -O -swift-version 5 -parse-as-library -target arm64-apple-macos13 -o "$tmp/LLMGW-arm64" macapp/LLMGW.swift
+swiftc -O -swift-version 5 -parse-as-library -target x86_64-apple-macos13 -Xlinker -w -o "$tmp/LLMGW-x86_64" macapp/LLMGW.swift
 lipo -create -output "$app/Contents/MacOS/LLMGW" "$tmp/LLMGW-arm64" "$tmp/LLMGW-x86_64"
 
 # icon: the Vulpoint logo in every size macOS asks for
