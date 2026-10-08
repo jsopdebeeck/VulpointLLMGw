@@ -2,6 +2,7 @@
 # Builds the self-contained LLMGW.app (menu bar app + embedded gateway, universal arm64 / x86_64)
 # in dist/, and a DMG to install it. Needs Go and the Xcode Command Line Tools (xcode-select --install).
 # The app depends on nothing else: the gateway is a static Go binary (pure-Go SQLite).
+# --install: also installs the app in /Applications (quits and relaunches the running copy).
 set -euo pipefail
 cd "${0:A:h}/.."
 
@@ -71,3 +72,16 @@ hdiutil create -quiet -volname "LLMGW $version" -srcfolder "$tmp/dmg" -ov -forma
 
 echo "OK : $PWD/$app"
 echo "     $PWD/$dmg"
+
+if [ "${1:-}" = "--install" ]; then
+	running=0
+	if pgrep -f "/Applications/LLMGW.app/Contents/MacOS/LLMGW" >/dev/null; then
+		running=1
+		osascript -e 'tell application "LLMGW" to quit' 2>/dev/null || pkill -f "/Applications/LLMGW.app/Contents/MacOS/LLMGW"
+		sleep 2
+	fi
+	rm -rf /Applications/LLMGW.app
+	ditto "$app" /Applications/LLMGW.app
+	echo "Installée : /Applications/LLMGW.app"
+	[ $running = 1 ] && open /Applications/LLMGW.app
+fi
