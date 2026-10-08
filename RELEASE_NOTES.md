@@ -2,6 +2,12 @@
 
 Le numéro suit le schéma `majeur.mineur.correctif`. La version en cours s'affiche en bas du menu du dashboard, dans l'en-tête de connexion du chat, sur `GET /version` et avec `./llmgw -version`.
 
+## 1.2.1 (8 octobre 2026)
+
+### Corrections
+- LLMGW.app arrête la passerelle qu'elle a lancée quelle que soit la façon de la quitter (menu, commande Quitter du système, fermeture de session) ; auparavant, seul le menu l'arrêtait.
+- `macapp/build.sh --install` installe l'app dans Applications et relance la copie en cours.
+
 ## 1.2.0 (7 octobre 2026)
 
 ### Nouveautés

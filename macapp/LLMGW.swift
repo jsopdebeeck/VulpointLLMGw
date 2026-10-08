@@ -292,13 +292,14 @@ final class Gateway: ObservableObject {
         loginItem = SMAppService.mainApp.status == .enabled
     }
 
-    func quit() {
-        if ours {
-            stopping = true
-            proc?.terminate()
-            proc?.waitUntilExit()
-        }
-        NSApp.terminate(nil)
+    func quit() { NSApp.terminate(nil) }
+
+    // Called whenever the app ends (menu, quit Apple event, logout): the gateway it started stops too.
+    func shutdown() {
+        guard ours else { return }
+        stopping = true
+        proc?.terminate()
+        proc?.waitUntilExit()
     }
 
     // Menu bar icon: two arrows (the gateway) with a status dot, redrawn for light and dark menu bars.
@@ -385,9 +386,23 @@ struct MenuContent: View {
     }
 }
 
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    @MainActor static var gateway: Gateway?
+    func applicationWillTerminate(_ notification: Notification) {
+        MainActor.assumeIsolated { AppDelegate.gateway?.shutdown() }
+    }
+}
+
 @main
 struct LLMGWApp: App {
-    @StateObject private var gw = Gateway()
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
+    @StateObject private var gw: Gateway
+
+    init() {
+        let g = Gateway()
+        _gw = StateObject(wrappedValue: g)
+        AppDelegate.gateway = g
+    }
 
     var body: some Scene {
         MenuBarExtra {
