@@ -2,6 +2,12 @@
 
 Le numéro suit le schéma `majeur.mineur.correctif`. La version en cours s'affiche en bas du menu du dashboard, dans l'en-tête de connexion du chat, sur `GET /version` et avec `./llmgw -version`.
 
+## 1.3.0 (9 octobre 2026)
+
+### Nouveautés
+- Détecteur intégré `inami` : numéro INAMI / RIZIV d'un prestataire de soins (médecin, dentiste, kinésithérapeute, infirmier…), sous les formes 1-23456-25-001, 1.23456.25.001 ou 12345625001. La clé de contrôle (chiffres 7 et 8) est vérifiée selon les modulos 97, 89, 83 et 79 de l'INAMI. La forme courte à 8 chiffres, sans code de qualification, n'est reconnue qu'après « INAMI », « RIZIV » ou « NIHII ».
+- Banc de test du dashboard : le texte d'exemple contient un numéro INAMI.
+
 ## 1.2.1 (8 octobre 2026)
 
 ### Corrections

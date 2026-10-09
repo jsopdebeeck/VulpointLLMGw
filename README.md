@@ -2,7 +2,7 @@
 
 [Version française](README.fr.md)
 
-Version **1.2.1** · release notes in [RELEASE_NOTES.md](RELEASE_NOTES.md) (French) · built-in documentation at `/docs/` (administration) and `/docs/chat.html` (chat user guide), sources in [docs/](docs/) (French).
+Version **1.3.0** · release notes in [RELEASE_NOTES.md](RELEASE_NOTES.md) (French) · built-in documentation at `/docs/` (administration) and `/docs/chat.html` (chat user guide), sources in [docs/](docs/) (French).
 
 <p align="center"><img src="docs/img/architecture-en.svg" alt="LLMGW architecture: users, agents and applications in the trusted zone reach the LLMs only through the gateway, on the zone boundary; direct access to the Internet is blocked" width="100%"></p>
 
@@ -110,7 +110,7 @@ At startup, the log shows the redirect URI of each provider. The Alerts and SSO 
 **Routing.** The key identifies the user, the user has a profile, and the profile lists the allowed targets in order of preference. The gateway uses the first target that accepts the API format and the model. On a network error, a 5xx or a 429, the next one takes over. Model aliases per target (`claude-*` → `deepseek-flash`) and a `json_schema` → `json_object` downgrade are available for providers that need them.
 
 **Anonymisation.** Detectors (`[[detectors]]`) find:
-- emails, phone numbers, IBANs, Belgian national numbers (NISS), cards and IP addresses;
+- emails, phone numbers, IBANs, Belgian national numbers (NISS), INAMI / RIZIV numbers of healthcare providers (check key verified), cards and IP addresses;
 - names (title, known first name in FR/NL/EN, lists) and companies;
 - addresses, Belgian places and pets;
 - Belgian healthcare organisations;

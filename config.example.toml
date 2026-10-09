@@ -137,6 +137,7 @@ disable_keys = false                         # true : portail en SSO uniquement
 
 # ---------------------------------------------------------------- détecteurs
 # Types intégrés : email, phone, iban, niss (NISS belge, avec contrôle), card (Luhn), ipv4,
+#   inami            : numéro INAMI / RIZIV d'un prestataire de soins (1-23456-25-001, clé vérifiée)
 #   person_title     : nom après un titre (fautes tolérées : Moniseur) ou un mot de contexte (patient, client, nommé…)
 #   person_firstname : prénom connu + nom (Gérald Keizer) ou NOM + prénom (KEIZER Gérald)
 #   person_learned   : mémoire des noms déjà vus, fautes de frappe comprises (empreintes HMAC seulement)
@@ -154,6 +155,10 @@ builtin = "email"
 [[detectors]]
 name = "NISS"
 builtin = "niss"
+
+[[detectors]]
+name = "INAMI"
+builtin = "inami"
 
 [[detectors]]
 name = "IBAN"

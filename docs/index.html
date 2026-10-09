@@ -150,7 +150,7 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
 
 <div class="page">
   <nav class="toc" aria-label="Sommaire">
-    <a class="toc-brand" href="https://vulpoint.com" target="_blank" rel="noopener"><img src="img/vulpoint-logo.jpg" alt="Vulpoint"><div><b>LLMGW</b><small>by Vulpoint.com · v1.2.1</small></div></a>
+    <a class="toc-brand" href="https://vulpoint.com" target="_blank" rel="noopener"><img src="img/vulpoint-logo.jpg" alt="Vulpoint"><div><b>LLMGW</b><small>by Vulpoint.com · v1.3.0</small></div></a>
     <div class="label">Fonctionnalités</div>
     <ol>
       <li><a href="#objectif"><span>1</span>Objectif</a></li>
@@ -209,7 +209,7 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
       <div class="eyebrow">Documentation fonctionnelle, technique et d'administration</div>
       <h1>LLMGW, la passerelle IA de l'organisation</h1>
       <p class="lede">Un point de connexion unique entre les utilisateurs, les agents et les modèles de langage. Il applique la politique IA : qui peut utiliser quel modèle, quelles données peuvent sortir, et avec quelle traçabilité.</p>
-      <div class="meta"><span><b>Version</b> 1.2.1 (8 octobre 2026)</span><span><b>Composant</b> llmgw (binaire unique Go, macOS et Linux)</span><span><b>Formats d'API</b> OpenAI et Anthropic</span><span><b>Interface</b> anglais, français, néerlandais</span></div>
+      <div class="meta"><span><b>Version</b> 1.3.0 (9 octobre 2026)</span><span><b>Composant</b> llmgw (binaire unique Go, macOS et Linux)</span><span><b>Formats d'API</b> OpenAI et Anthropic</span><span><b>Interface</b> anglais, français, néerlandais</span></div>
       <a class="crosslink" href="chat.html">Guide utilisateur du chat ↗</a>
     </header>
 
@@ -440,7 +440,7 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
       <div class="tw"><table>
         <thead><tr><th>Famille</th><th>Exemples</th><th>Méthode</th></tr></thead>
         <tbody>
-          <tr><td class="k">Identifiants</td><td>email, téléphone, IBAN, NISS belge, carte bancaire, adresse IP</td><td>motifs avec clé de contrôle (IBAN, NISS, Luhn)</td></tr>
+          <tr><td class="k">Identifiants</td><td>email, téléphone, IBAN, NISS belge, numéro INAMI / RIZIV d'un prestataire de soins (1-23456-25-001), carte bancaire, adresse IP</td><td>motifs avec clé de contrôle (IBAN, NISS, INAMI, Luhn)</td></tr>
           <tr><td class="k">Références</td><td>numéro de dossier, de patient, de facture, matricule</td><td>motifs métier, ou identifiant après « dossier », « patient », « n° »…</td></tr>
           <tr><td class="k">Personnes</td><td>« M. Keizer », « Gérald Keizer », « KEIZER Gérald », prénoms seuls</td><td>titres (fautes de frappe tolérées), mots de contexte, dictionnaire de prénoms FR, NL et EN</td></tr>
           <tr><td class="k">Organisations</td><td>clients, établissements de soins (HUB, Erasme, Bordet, HUDERF…)</td><td>listes paramétrables ; les sigles aussi avec points (H.U.B.)</td></tr>
@@ -647,7 +647,7 @@ files_default = "pass_log"                         <span class="c"># autres exte
       <h3>Lancement manuel</h3>
 <pre>export MISTRAL_API_KEY=… ANTHROPIC_API_KEY=…
 ./llmgw -config config.toml
-<span class="c"># LLMGW 1.2.1 à l'écoute sur http://127.0.0.1:8088 (dashboard : /dashboard, documentation : /docs)</span></pre>
+<span class="c"># LLMGW 1.3.0 à l'écoute sur http://127.0.0.1:8088 (dashboard : /dashboard, documentation : /docs)</span></pre>
       <p>Une seule instance par port. Arrêt avec Ctrl+C : les métriques en attente sont enregistrées avant la sortie.</p>
 
       <h3>App macOS dans la barre des menus</h3>
@@ -939,6 +939,12 @@ default_profile = "anonymisation"</pre>
       <h2><span class="n">37</span>Notes de version</h2>
       <p>La version en cours s'affiche en bas du menu du dashboard, sur l'écran de connexion du chat, sur <code>GET /version</code> et avec <code>./llmgw -version</code>. Le journal complet est tenu dans <code>RELEASE_NOTES.md</code>, à la racine du dépôt.</p>
       <div class="rel">
+        <h3>1.3.0, 9 octobre 2026</h3>
+        <ul>
+          <li>Détecteur intégré des numéros INAMI / RIZIV des prestataires de soins, avec vérification de la clé de contrôle.</li>
+        </ul>
+      </div>
+      <div class="rel">
         <h3>1.2.1, 8 octobre 2026</h3>
         <ul>
           <li>LLMGW.app arrête sa passerelle quelle que soit la façon de la quitter.</li>
@@ -981,7 +987,7 @@ default_profile = "anonymisation"</pre>
       </div>
     </section>
 
-    <footer class="doc"><img src="img/vulpoint-logo.jpg" alt=""><span>LLMGW 1.2.1 by <a href="https://vulpoint.com" target="_blank" rel="noopener">Vulpoint.com</a></span></footer>
+    <footer class="doc"><img src="img/vulpoint-logo.jpg" alt=""><span>LLMGW 1.3.0 by <a href="https://vulpoint.com" target="_blank" rel="noopener">Vulpoint.com</a></span></footer>
   </main>
 </div>
 </body>

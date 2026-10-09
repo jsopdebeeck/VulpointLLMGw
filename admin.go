@@ -26,7 +26,8 @@ var nameRe = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
 var builtinInfo = map[string]string{
 	"email": "Adresse email", "phone": "Numéro de téléphone (international ou national)",
 	"iban": "IBAN (clé de contrôle vérifiée)", "niss": "Numéro de registre national belge (clé vérifiée)",
-	"card": "Carte bancaire (Luhn)", "ipv4": "Adresse IPv4",
+	"inami": "Numéro INAMI / RIZIV d'un prestataire de soins (1-23456-25-001, clé vérifiée)",
+	"card":  "Carte bancaire (Luhn)", "ipv4": "Adresse IPv4",
 	"person_title":     "Nom après un titre (Monsieur, Mme, Dr, Dhr… fautes de frappe tolérées) ou un mot de contexte (patient, client, nommé, né…)",
 	"person_firstname": "Prénom connu suivi d'un nom (Gérald Keizer) ou NOM + prénom (KEIZER Gérald) ; dictionnaire FR/NL/EN intégré",
 	"ref_context":      "Identifiant après un mot de contexte : dossier, patient, n°, réf., contrat, facture, matricule, client, sinistre… (Dossier patient 676888-67)",

@@ -1146,3 +1146,28 @@ func TestGarbledPDFName(t *testing.T) {
 		t.Errorf("restauration :\n%s\nattendu :\n%s", back, in)
 	}
 }
+
+func TestINAMI(t *testing.T) {
+	// 123456 mod 97 = 72 → key 25 ; 123456 mod 89 = 13 → key 76 (newer series)
+	cases := map[string]bool{
+		"Dr Martin, n° INAMI 1-23456-25-001, consulte le lundi.": true,
+		"prescripteur 12345625001":                               true,
+		"RIZIV 1.23456.76.000":                                   true,
+		"INAMI 1-23456-25":                                       true,  // 8 digits: after the context word only
+		"code 1-23456-25":                                        false, // 8 digits without context
+		"numéro 12345626001":                                     false, // wrong key
+		"total 1 234 567 890 1":                                  false,
+	}
+	for s, want := range cases {
+		if got := len(findINAMI(s)) > 0; got != want {
+			t.Errorf("findINAMI(%q) = %v, attendu %v", s, got, want)
+		}
+	}
+	gw, oai, _, _ := setup(t)
+	r := post(t, gw.URL+"/v1/chat/completions", "gw-alice-remplace-moi", map[string]any{"model": "mistral-large",
+		"messages": []any{map[string]any{"role": "user", "content": "Le Dr Peeters (INAMI 1-23456-25-001) a prescrit le traitement."}}})
+	io.ReadAll(r.Body)
+	if last := oai.last(); strings.Contains(last, "23456") || !strings.Contains(last, "«INAMI_1»") {
+		t.Errorf("numéro INAMI non anonymisé : %s", last)
+	}
+}

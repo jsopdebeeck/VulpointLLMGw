@@ -55,6 +55,7 @@ var builtins = map[string]builtin{
 	"phone":            {re: `(?:\+|\b00)\d{2,3}[\s./-]?(?:\(0\)[\s./-]?)?\d(?:[\s./-]?\d){6,10}\b|\b0\d(?:[\s./-]?\d){7,8}\b`, valid: digitsBetween(8, 15)},
 	"iban":             {re: `\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]{4}){2,7}(?:[ ]?[A-Z0-9]{1,3})?\b`, valid: validIBAN},
 	"niss":             {re: `\b\d{2}\.?\d{2}\.?\d{2}[-.\s]?\d{3}[.\s]?\d{2}\b`, valid: validNISS},
+	"inami":            {find: findINAMI},
 	"card":             {re: `\b(?:\d[ -]?){12,18}\d\b`, valid: validLuhn},
 	"ipv4":             {re: `\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b`},
 	"person_title":     {find: findTitled, names: true},
@@ -237,6 +238,42 @@ func validNISS(s string) bool {
 	fmt.Sscan(d[:9], &n9)
 	fmt.Sscan(d[9:], &cc)
 	return 97-n9%97 == cc || 97-(2000000000+n9)%97 == cc
+}
+
+// INAMI / RIZIV number of a healthcare provider: 11 digits (1-23456-25-001), digits 7-8 are a check key
+// (m - first six digits mod m, with m = 97, then 89, 83, 79 for newer series; INAMI e-billing
+// instructions, annex 16.3), the last 3 the qualification code. The 8-digit form without
+// qualification is only accepted right after « INAMI », « RIZIV » or « NIHII ».
+var (
+	reINAMI    = regexp.MustCompile(`\b[1-9][-./ ]?\d{5}[-./ ]?\d{2}(?:[-./ ]?\d{3})?\b`)
+	reINAMICtx = regexp.MustCompile(`(?i)\b(?:inami|riziv|nihii)\b[^\d\n]{0,25}$`)
+)
+
+func validINAMI(d string) bool {
+	if len(d) != 8 && len(d) != 11 {
+		return false
+	}
+	var n6, cc int
+	fmt.Sscan(d[:6], &n6)
+	fmt.Sscan(d[6:8], &cc)
+	for _, m := range []int{97, 89, 83, 79} {
+		if m-n6%m == cc {
+			return true
+		}
+	}
+	return false
+}
+
+func findINAMI(s string) [][2]int {
+	var out [][2]int
+	for _, m := range reINAMI.FindAllStringIndex(s, -1) {
+		d := onlyDigits(s[m[0]:m[1]])
+		if !validINAMI(d) || len(d) == 8 && !reINAMICtx.MatchString(s[max(0, m[0]-40):m[0]]) {
+			continue
+		}
+		out = append(out, [2]int{m[0], m[1]})
+	}
+	return out
 }
 
 func validIBAN(s string) bool {

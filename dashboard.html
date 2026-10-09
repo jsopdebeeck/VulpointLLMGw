@@ -827,7 +827,7 @@ function viewPrivacy() {
       <div class="tw">${matrix}</div></section>`;
   parts.test = `<section class="card"><h2>Tester l'anonymisation</h2><div class="sub">Utilise la configuration <b>enregistrée</b>${isDirty() ? ' <span class="badge warn">modifications non enregistrées ignorées</span>' : ""}. Rien n'est envoyé à un LLM.</div>
       <div style="display:flex;gap:8px;margin-bottom:8px"><select id="tprof">${P.map(p => `<option ${p === (S.testProf || "") ? "selected" : ""}>${esc(p)}</option>`).join("")}</select><button class="btn" data-act="test-run">Tester</button></div>
-      <textarea id="ttext" class="w100">${esc(S.testText ?? "Bonjour, je suis Mme Claire Dubois (claire.dubois@acme.be, +32 470 12 34 56). Mon NISS est 90.01.01-123.95 et le dossier DOS-2025-00042 concerne ACME SA. IBAN BE68 5390 0754 7034.")}</textarea>
+      <textarea id="ttext" class="w100">${esc(S.testText ?? "Bonjour, je suis Mme Claire Dubois (claire.dubois@acme.be, +32 470 12 34 56). Mon NISS est 90.01.01-123.95, mon médecin le Dr Luc Peeters (INAMI 1-23456-25-001), et le dossier DOS-2025-00042 concerne ACME SA. IBAN BE68 5390 0754 7034.")}</textarea>
       <div>${S.testOut}</div></section>`;
   return head + parts[sub];
 }
