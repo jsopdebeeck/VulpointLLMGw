@@ -150,7 +150,7 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
 
 <div class="page">
   <nav class="toc" aria-label="Sommaire">
-    <a class="toc-brand" href="https://vulpoint.com" target="_blank" rel="noopener"><img src="img/vulpoint-logo.jpg" alt="Vulpoint"><div><b>LLMGW</b><small>by Vulpoint.com · v1.3.0</small></div></a>
+    <a class="toc-brand" href="https://vulpoint.com" target="_blank" rel="noopener"><img src="img/vulpoint-logo.jpg" alt="Vulpoint"><div><b>LLMGW</b><small>by Vulpoint.com · v1.4.0</small></div></a>
     <div class="label">Fonctionnalités</div>
     <ol>
       <li><a href="#objectif"><span>1</span>Objectif</a></li>
@@ -184,22 +184,24 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
       <li><a href="#page-overview"><span>23</span>Vue d'ensemble</a></li>
       <li><a href="#page-report"><span>24</span>Reporting</a></li>
       <li><a href="#page-users"><span>25</span>Utilisateurs</a></li>
-      <li><a href="#page-profiles"><span>26</span>Profils</a></li>
-      <li><a href="#page-targets"><span>27</span>LLM cibles</a></li>
-      <li><a href="#page-quotas"><span>28</span>Quotas</a></li>
-      <li><a href="#page-privacy"><span>29</span>Filtrage et privacy</a></li>
-      <li><a href="#page-filelog"><span>30</span>Journal des fichiers</a></li>
-      <li><a href="#page-debug"><span>31</span>Debug</a></li>
-      <li><a href="#page-settings"><span>32</span>Alertes et SSO</a></li>
-      <li><a href="#page-accounts"><span>33</span>Comptes d'administration</a></li>
-      <li><a href="#page-audit"><span>34</span>Journal d'audit</a></li>
+      <li><a href="#page-access"><span>26</span>Demandes d'accès</a></li>
+      <li><a href="#page-profiles"><span>27</span>Profils</a></li>
+      <li><a href="#page-targets"><span>28</span>LLM cibles</a></li>
+      <li><a href="#page-quotas"><span>29</span>Quotas</a></li>
+      <li><a href="#page-privacy"><span>30</span>Filtrage et privacy</a></li>
+      <li><a href="#page-filelog"><span>31</span>Journal des fichiers</a></li>
+      <li><a href="#page-debug"><span>32</span>Debug</a></li>
+      <li><a href="#page-settings"><span>33</span>Alertes et SSO</a></li>
+      <li><a href="#page-security"><span>34</span>Sécurité web</a></li>
+      <li><a href="#page-accounts"><span>35</span>Comptes d'administration</a></li>
+      <li><a href="#page-audit"><span>36</span>Journal d'audit</a></li>
     </ol>
     <div class="label">Chat et versions</div>
     <ol>
-      <li><a href="#page-chat"><span>35</span>Chat (aperçu)</a></li>
+      <li><a href="#page-chat"><span>37</span>Chat (aperçu)</a></li>
       <li><a href="chat.html"><span>↗</span>Guide utilisateur du chat</a></li>
-      <li><a href="#limites"><span>36</span>Limites</a></li>
-      <li><a href="#versions"><span>37</span>Notes de version</a></li>
+      <li><a href="#limites"><span>38</span>Limites</a></li>
+      <li><a href="#versions"><span>39</span>Notes de version</a></li>
     </ol>
   </nav>
 
@@ -209,7 +211,7 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
       <div class="eyebrow">Documentation fonctionnelle, technique et d'administration</div>
       <h1>LLMGW, la passerelle IA de l'organisation</h1>
       <p class="lede">Un point de connexion unique entre les utilisateurs, les agents et les modèles de langage. Il applique la politique IA : qui peut utiliser quel modèle, quelles données peuvent sortir, et avec quelle traçabilité.</p>
-      <div class="meta"><span><b>Version</b> 1.3.0 (9 octobre 2026)</span><span><b>Composant</b> llmgw (binaire unique Go, macOS et Linux)</span><span><b>Formats d'API</b> OpenAI et Anthropic</span><span><b>Interface</b> anglais, français, néerlandais</span></div>
+      <div class="meta"><span><b>Version</b> 1.4.0 (19 octobre 2026)</span><span><b>Composant</b> llmgw (binaire unique Go, macOS et Linux)</span><span><b>Formats d'API</b> OpenAI et Anthropic</span><span><b>Interface</b> anglais, français, néerlandais</span></div>
       <a class="crosslink" href="chat.html">Guide utilisateur du chat ↗</a>
     </header>
 
@@ -343,7 +345,7 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
       <div class="cards">
         <div class="card">
           <h4>Portail web <span class="pill src">/chat</span></h4>
-          <p>Pour les utilisateurs. Connexion avec Microsoft (Entra ID), Google ou la clé personnelle, puis choix d'un modèle parmi ceux autorisés par le profil.</p>
+          <p>Pour les utilisateurs. Connexion avec Microsoft (Entra ID), Google ou la clé personnelle, puis choix d'un modèle parmi ceux autorisés par le profil. Sans accès, une personne peut en faire la demande (voir <a href="#demandes">Demandes d'accès</a>).</p>
           <ul>
             <li>Documents joints : txt, md, csv, json, PDF, docx. Le texte est extrait dans le navigateur, puis anonymisé par la passerelle.</li>
             <li>Images et fichiers traités selon le profil : transmis, remplacés par un carré blanc ou refusés (voir <a href="#fichiers">11. Images et fichiers</a>).</li>
@@ -367,7 +369,7 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
         <thead><tr><th>Client</th><th>Raccordement</th><th>État</th></tr></thead>
         <tbody>
           <tr><td class="k">Claude Code</td><td><code>ANTHROPIC_BASE_URL</code> vers la passerelle, <code>ANTHROPIC_AUTH_TOKEN</code> = clé d'application</td><td><span class="pill anon">opérationnel</span></td></tr>
-          <tr><td class="k">Hermes Agent</td><td>fournisseur personnalisé au format OpenAI, adresse <code>/v1</code> de la passerelle</td><td><span class="pill anon">opérationnel</span></td></tr>
+          <tr><td class="k">Hermes Agent</td><td>fournisseur personnalisé au format OpenAI, adresse <code>/v1</code> de la passerelle ; modèle principal, tâches auxiliaires et mélange de modèles à régler sur ce fournisseur (voir <a href="#clients">Raccorder les clients</a>)</td><td><span class="pill anon">opérationnel</span></td></tr>
           <tr><td class="k">SDK OpenAI / Anthropic</td><td>changement d'adresse de base et de clé</td><td><span class="pill anon">opérationnel</span></td></tr>
           <tr><td class="k">Claude Cowork</td><td>trafic redirigé vers la passerelle ; redirection testée avec succès en septembre 2026</td><td><span class="pill anon">opérationnel</span></td></tr>
         </tbody>
@@ -394,7 +396,17 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
         <li>Sinon, l'accès est refusé avec un message explicite.</li>
       </ol>
       <p>Les <strong>administrateurs</strong> sont désignés par rôle d'application, groupe Entra ou adresse email, ou listés dans les <a href="#administration">comptes d'administration</a> (Admin ou Support) : ils ouvrent le dashboard sans jeton. Google ne transmet pas les groupes : avec Google, les profils s'attribuent par domaine, par email ou par utilisateur déclaré.</p>
-      <p class="note">Les arrivées, départs et changements de service suivent l'annuaire. Un changement de groupe s'applique à la connexion suivante (session de 12 heures par défaut).</p>
+      <p class="note">Les arrivées, départs et changements de service suivent l'annuaire. Le rôle et le profil sont recalculés à chaque requête avec la configuration en vigueur : retirer une règle, un compte ou un utilisateur s'applique tout de suite. Un changement de groupe dans l'annuaire s'applique à la connexion suivante (session de 12 heures par défaut). La déconnexion révoque la session, même si son cookie a été copié.</p>
+      <p>Identité retenue : pour Entra ID, l'UPN, fixé par les administrateurs du tenant ; pour Google et les autres fournisseurs OIDC, l'adresse email <strong>marquée vérifiée</strong> par le fournisseur, sinon la connexion est refusée. Un fournisseur OIDC qui ne transmet pas ce marqueur s'accepte avec <code>trust_unverified_email = true</code>, seulement si personne ne peut s'y inscrire librement.</p>
+
+      <h3 id="demandes">Demandes d'accès</h3>
+      <p>Une personne sans accès peut le demander depuis l'écran de connexion du chat (lien « Demander un accès » : nom, email, motif). Section <code>[access]</code>, onglet <a href="#page-access">Demandes d'accès</a> du dashboard.</p>
+      <ol class="steps">
+        <li>La passerelle envoie un email avec un lien de confirmation, valable 24 heures et à usage unique. Le lien ouvre une page avec un bouton « Confirmer » : les filtres de messagerie (Safe Links…) ouvrent les liens qu'ils trouvent, la confirmation exige donc un clic.</li>
+        <li><strong>Domaine de confiance</strong> (<code>trusted_domains</code>) : l'accès est accordé tout de suite. L'utilisateur est créé avec le profil par défaut et sa clé gateway s'affiche <strong>une seule fois</strong> sur la page.</li>
+        <li><strong>Autre domaine</strong> : la demande attend une décision dans le dashboard ; les destinataires de <code>notify</code> (à défaut, ceux des alertes) sont prévenus. Approuver crée l'utilisateur avec le profil choisi et envoie un lien à usage unique vers la clé. Sans décision, la demande est refusée après 14 jours.</li>
+      </ol>
+      <p>La clé n'est jamais envoyée par email. La page de demande répond toujours de la même façon, que l'adresse soit connue ou non. Les demandes sont limitées par adresse IP (5 par heure), par email (3 par jour) et au total (300 par jour) ; un lien inventé compte comme une connexion refusée pour la <a href="#securite">protection web</a>. Chaque étape est inscrite au journal d'audit. Prérequis : le serveur SMTP de <code>[alerts]</code> et l'adresse publique <code>[auth] base_url</code>, vers laquelle pointent les liens.</p>
     </section>
 
     <section id="profils">
@@ -451,7 +463,15 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
         </tbody>
       </table></div>
       <p>Une <strong>mémoire des noms</strong> reconnaît ensuite un nom déjà repéré, même seul et même mal orthographié (« Keizr »). Elle ne contient que des empreintes chiffrées, jamais les noms.</p>
-      <p>Une liste <strong>« jamais anonymiser »</strong> protège les produits, les marques et les termes techniques (Claude, GitHub, API…) contre les faux positifs. Un dictionnaire de mots courants évite de prendre « Transport » ou « Custom » pour un nom de famille.</p>
+      <p>Une liste <strong>« jamais anonymiser »</strong> protège les produits, les marques et les termes techniques (Claude, GitHub, API…) contre les faux positifs ; elle vaut pour le terme entier, si bien que « Mme Claude Dubois » reste pseudonymisé. Un dictionnaire de mots courants évite de prendre « Transport » ou « Custom » pour un nom de famille.</p>
+      <h3>Ce qui est parcouru</h3>
+      <ul>
+        <li>Tout le texte de la requête : messages, système, documents texte, résultats d'outils et arguments de fonctions, noms des messages, descriptions et valeurs d'exemple des outils, champs <code>user</code>, <code>metadata</code> et <code>stop</code>. Les signatures, les blocs chiffrés (<code>encrypted_*</code>) et les données base64 ne sont jamais modifiés.</li>
+        <li>Le texte JSON contenu dans une chaîne (résultat d'un outil, arguments d'une fonction) est analysé une fois ses échappements décodés ; le JSON envoyé reste valide.</li>
+        <li>Les espaces insécables, traits d'union conditionnels, caractères invisibles et chiffres pleine chasse sont neutralisés avant la détection : « 0470 12 34 56 » avec des espaces insécables est reconnu.</li>
+        <li>En cas de chevauchement, l'action la plus stricte l'emporte : un NISS interdit n'est jamais masqué par une référence seulement journalisée.</li>
+        <li>L'ordre de parcours est fixe (outils, système, messages) : la numérotation des jetons reste stable d'un tour à l'autre, et le cache de prompt des fournisseurs reste efficace.</li>
+      </ul>
     </section>
 
     <section id="routage">
@@ -476,7 +496,7 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
         <li><strong>par LLM</strong> : un budget total partagé par tous. Une cible saturée est sautée au profit de la suivante.</li>
       </ul>
       <p>Au dépassement, la requête est <span class="pill block">bloquée</span> (erreur 429) ou simplement <span class="pill log">signalée</span>, au choix.</p>
-      <p><strong>Alertes par email</strong> : un récapitulatif toutes les N minutes, envoyé aux destinataires du profil et aux destinataires par défaut. Déclencheurs : violation, quota atteint, erreur d'un LLM, et fichier bloqué dont la règle demande une alerte (envoyée même si le déclencheur « violation » est désactivé). Les messages ne contiennent aucune valeur sensible, seulement les types de données concernés.</p>
+      <p><strong>Alertes par email</strong> : un récapitulatif toutes les N minutes, envoyé aux destinataires du profil et aux destinataires par défaut. Déclencheurs : violation, quota atteint, erreur d'un LLM, adresse bloquée par la protection web, et fichier bloqué dont la règle demande une alerte (envoyée même si le déclencheur « violation » est désactivé). Les messages ne contiennent aucune valeur sensible, seulement les types de données concernés.</p>
     </section>
 
     <section id="monitoring">
@@ -552,12 +572,13 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
         <tbody>
           <tr><td class="k">Vue d'ensemble, Reporting, Journal des fichiers</td><td>oui</td><td>consultation</td></tr>
           <tr><td class="k">Utilisateurs</td><td>oui</td><td>créer, bloquer, générer une clé, changer le profil</td></tr>
+          <tr><td class="k">Demandes d'accès</td><td>oui</td><td>approuver, refuser, renvoyer le lien de clé (réglages : consultation)</td></tr>
           <tr><td class="k">Profils, Quotas</td><td>oui</td><td>consultation</td></tr>
           <tr><td class="k">Debug (données en clair)</td><td>oui</td><td>si autorisé ; chaque consultation est journalisée</td></tr>
-          <tr><td class="k">LLM cibles, Filtrage, Alertes et SSO, Comptes, Audit</td><td>oui</td><td>non</td></tr>
+          <tr><td class="k">LLM cibles, Filtrage, Alertes et SSO, Sécurité web, Comptes, Audit</td><td>oui</td><td>non</td></tr>
         </tbody>
       </table></div>
-      <p>Le <strong>journal d'audit</strong> trace les connexions, les enregistrements de configuration (avec la liste des changements, sans aucun secret), les consultations et purges de l'archive Debug et les tests d'alerte. Il est conservé 400 jours.</p>
+      <p>Le <strong>journal d'audit</strong> trace les connexions, les enregistrements de configuration (avec la liste des changements, sans aucun secret), les consultations et purges de l'archive Debug, les tests d'alerte, les demandes d'accès et leurs décisions, les adresses bloquées et débloquées, et la fermeture de toutes les sessions. Il est conservé 400 jours.</p>
     </section>
 
     <section id="langues">
@@ -574,7 +595,20 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
         <li>Journaux et statistiques sans valeur sensible ; mémoire des noms sous forme d'empreintes chiffrées ; journal des fichiers sans contenu.</li>
         <li>Rôles Admin et Support vérifiés côté serveur ; journal d'audit de 400 jours.</li>
         <li>Configuration versionnée : les 10 dernières versions sont conservées, et un enregistrement est refusé si le fichier a changé entre-temps.</li>
-        <li>Déploiement : un seul binaire (macOS, Linux), base SQLite locale, aucune dépendance externe.</li>
+        <li>Déploiement : un seul binaire (macOS, Linux), base SQLite locale (droits 600), aucune dépendance externe.</li>
+      </ul>
+      <h3>Protection web (exposition sur Internet)</h3>
+      <p>Section <code>[security]</code> et page <a href="#page-security">Sécurité web</a> du dashboard. Active par défaut ; les appels locaux (app Mac, tunnel SSH) et les réseaux exemptés ne sont jamais limités.</p>
+      <ul>
+        <li><strong>Limites par adresse</strong> : 600 requêtes par minute et 32 requêtes simultanées par défaut (IPv6 : par /64). Le travail d'anonymisation est en outre plafonné à deux fois le nombre de cœurs : au-delà, les requêtes attendent, puis reçoivent une erreur 503.</li>
+        <li><strong>Blocage temporaire</strong> d'une adresse après 10 connexions refusées en 10 minutes : clé gateway ou jeton d'administration invalide, cookie falsifié, lien inventé. 30 minutes, doublées à chaque récidive (24 heures au plus). Chaque blocage est inscrit au journal d'audit et signalé par email (<code>on_security</code>).</li>
+        <li><strong>Administration</strong> réservée aux adresses de <code>admin_allow</code> (dashboard et API d'administration).</li>
+        <li><strong>Adresse réelle du client</strong> derrière un proxy de confiance (<code>trusted_proxies</code>, la machine locale par défaut) : elle sert aux limites, aux blocages et au journal d'audit. Un <code>X-Forwarded-For</code> envoyé directement par un client est ignoré.</li>
+        <li><strong>En-têtes de sécurité</strong> sur toutes les réponses : Content-Security-Policy, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, et HSTS en HTTPS.</li>
+        <li><strong>HTTPS intégré</strong> (<code>tls_cert</code>, <code>tls_key</code>) pour une exposition sans proxy ; Caddy reste conseillé (certificats automatiques).</li>
+        <li><strong>Secrets</strong> : une clé déjà enregistrée n'est conservée que pour l'adresse à laquelle elle était destinée. Changer l'adresse d'une cible demande de ressaisir sa clé, et une variable d'environnement qui alimente une cible ne peut pas être envoyée ailleurs depuis le dashboard. Les en-têtes HTTP des cibles ne sont plus renvoyés au navigateur.</li>
+        <li><strong>Sessions web</strong> : rôle recalculé à chaque requête, déconnexion qui révoque la session, bouton « Fermer toutes les sessions » (nouvelle clé de signature). La redirection après connexion ne mène qu'au chat ou au dashboard.</li>
+        <li><strong>Archive Debug</strong> purgée toutes les heures, même si personne ne la consulte ; les données effacées sont écrasées dans la base (<code>secure_delete</code>).</li>
       </ul>
     </section>
 
@@ -583,10 +617,10 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
     <section id="prerequis">
       <h2><span class="n">15</span>Prérequis</h2>
       <ul>
-        <li><strong>Serveur</strong> : macOS ou Linux (x86-64 ou ARM). Ressources modestes : la passerelle ajoute quelques millisecondes par requête, jusqu'à environ une seconde pour les très longues conversations d'agents.</li>
+        <li><strong>Serveur</strong> : macOS ou Linux (x86-64 ou ARM). Ressources modestes : 1 à 2 vCPU et 1 à 2 Go de mémoire. La passerelle ajoute moins d'une milliseconde par Ko de texte nouveau (10 Ko : environ 4 ms ; 100 Ko : 15 ms en parallèle sur plusieurs cœurs) ; l'historique qu'un agent renvoie à chaque tour est mis en cache (100 Ko : 4 ms). Sur 2 cœurs, le débit dépasse 1 700 requêtes de 2 Ko par seconde : la latence des fournisseurs de LLM reste de loin le facteur dominant.</li>
         <li><strong>Réseau</strong> : accès sortant HTTPS du serveur vers les fournisseurs retenus ; accès entrant des postes vers la passerelle.</li>
         <li><strong>Clés des fournisseurs</strong> (Mistral, Anthropic, OpenAI, DeepSeek…), détenues par la passerelle uniquement.</li>
-        <li><strong>Pour compiler</strong> : Go 1.25 ou plus récent. Des binaires précompilés pour Linux sont fournis dans <code>dist/</code>.</li>
+        <li><strong>Pour compiler</strong> : Go 1.25 ou plus récent. <code>./build.sh</code> produit l'app Mac et les archives Linux dans <code>dist/</code> (voir Installation).</li>
       </ul>
     </section>
 
@@ -596,14 +630,35 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
         <li>Récupérer le code (dépôt privé <code>VulpointLLMGw</code>) :
 <pre>git clone https://github.com/jsopdebeeck/VulpointLLMGw.git
 cd VulpointLLMGw</pre></li>
-        <li>Compiler, ou utiliser un binaire de <code>dist/</code> (<code>./llmgw -version</code> affiche la version) :
-<pre>go build -o llmgw .                                      <span class="c"># poste courant</span>
-GOOS=linux GOARCH=amd64 go build -o dist/llmgw-linux-amd64 .  <span class="c"># serveur Linux</span></pre></li>
+        <li>Compiler (<code>./llmgw -version</code> affiche la version) :
+<pre>go build -o llmgw .                      <span class="c"># poste courant</span>
+./build.sh                               <span class="c"># tests, puis app Mac + DMG et archives Linux dans dist/</span>
+./build.sh --linux-only --skip-tests     <span class="c"># archives Linux seulement</span></pre>
+          <code>dist/</code> contient alors <code>LLMGW.app</code> et <code>LLMGW-&lt;version&gt;.dmg</code> (Mac, Apple Silicon et Intel), <code>llmgw-&lt;version&gt;-linux-amd64.tar.gz</code> et <code>-arm64.tar.gz</code> (binaire, <code>setup.sh</code>, service systemd, Caddyfile, <code>LISEZMOI.txt</code>) et <code>SHA256SUMS</code>.</li>
         <li>Préparer la configuration :
 <pre>cp config.example.toml config.toml
 ./llmgw -config config.toml -check     <span class="c"># valide la configuration et quitte</span></pre></li>
       </ol>
       <p>Le binaire contient tout : le dashboard, le chat, cette documentation, la base SQLite et les dictionnaires. Aucune autre installation n'est nécessaire.</p>
+
+      <h3>Serveur Linux neuf (Ubuntu 22.04 / 24.04, Debian 12)</h3>
+      <p><code>setup.sh</code>, livré dans l'archive Linux, installe ou met à jour la passerelle sur un serveur fraîchement installé. Il se relance sans risque : une mise à jour garde la configuration, la base et le Caddyfile.</p>
+<pre>scp dist/llmgw-&lt;version&gt;-linux-amd64.tar.gz admin@serveur:
+ssh admin@serveur
+tar xzf llmgw-&lt;version&gt;-linux-amd64.tar.gz &amp;&amp; cd llmgw-&lt;version&gt;
+sudo ./setup.sh --domain gateway.exemple.be --email it@exemple.be --admin-ip 203.0.113.7</pre>
+      <ul>
+        <li>Paquets et mises à jour de sécurité automatiques (unattended-upgrades), fail2ban pour SSH, pare-feu ufw (SSH d'abord, puis 80 et 443).</li>
+        <li>Utilisateur système <code>llmgw</code>, dossier <code>/opt/llmgw</code> (700), service systemd durci, <code>secrets.env</code> (600) pour les clés des fournisseurs.</li>
+        <li>Première installation : <code>config.toml</code> généré avec un jeton d'administration et des clés d'exemple aléatoires, l'écoute sur la machine locale, les proxys de confiance et les adresses d'administration. Le jeton est affiché une fois et gardé dans <code>/opt/llmgw/admin_token.txt</code> (root, 600).</li>
+        <li>Avec <code>--domain</code> : Caddy et son certificat Let's Encrypt ; le dashboard n'est joignable que depuis les adresses <code>--admin-ip</code> (sinon par tunnel SSH).</li>
+        <li>Le nouveau binaire valide la configuration avant de remplacer l'ancien ; s'il ne démarre pas, l'ancienne version est rétablie.</li>
+        <li>Sauvegarde quotidienne de la base et de la configuration dans <code>/var/backups/llmgw</code>, gardée 14 jours.</li>
+      </ul>
+      <p>Depuis le Mac, <code>deploy/deploy.sh</code> fait tout en une commande : compilation, copie de l'archive, lancement de <code>setup.sh</code>.</p>
+<pre>deploy/deploy.sh --domain gateway.exemple.be --email it@exemple.be --admin-ip 203.0.113.7 admin@serveur
+deploy/deploy.sh admin@serveur            <span class="c"># mise à jour</span></pre>
+      <p class="note">SSH n'est pas modifié par <code>setup.sh</code> : désactivez vous-même la connexion par mot de passe (<code>PasswordAuthentication no</code>) une fois votre clé SSH en place.</p>
     </section>
 
     <section id="configuration">
@@ -622,6 +677,8 @@ GOOS=linux GOARCH=amd64 go build -o dist/llmgw-linux-amd64 .  <span class="c"># 
           <tr><td class="k"><code>[privacy]</code></td><td>termes jamais anonymisés</td></tr>
           <tr><td class="k"><code>[alerts]</code></td><td>serveur SMTP, destinataires, déclencheurs, fréquence</td></tr>
           <tr><td class="k"><code>[debug]</code></td><td>activation et durée de conservation de l'archive</td></tr>
+          <tr><td class="k"><code>[security]</code></td><td>protection web : proxys de confiance, adresses d'administration, réseaux exemptés, limites par adresse, blocages, HTTPS intégré</td></tr>
+          <tr><td class="k"><code>[access]</code></td><td>demandes d'accès : activation, domaines de confiance, profil par défaut, personnes prévenues, validité des liens, refus automatique</td></tr>
         </tbody>
       </table></div>
       <p>Exemple minimal d'une cible et d'un utilisateur :</p>
@@ -647,7 +704,7 @@ files_default = "pass_log"                         <span class="c"># autres exte
       <h3>Lancement manuel</h3>
 <pre>export MISTRAL_API_KEY=… ANTHROPIC_API_KEY=…
 ./llmgw -config config.toml
-<span class="c"># LLMGW 1.3.0 à l'écoute sur http://127.0.0.1:8088 (dashboard : /dashboard, documentation : /docs)</span></pre>
+<span class="c"># LLMGW 1.4.0 à l'écoute sur http://127.0.0.1:8088 (dashboard : /dashboard, documentation : /docs)</span></pre>
       <p>Une seule instance par port. Arrêt avec Ctrl+C : les métriques en attente sont enregistrées avant la sortie.</p>
 
       <h3>App macOS dans la barre des menus</h3>
@@ -667,6 +724,7 @@ files_default = "pass_log"                         <span class="c"># autres exte
       <p>L'app charge <code>secrets.env</code>, démarre la passerelle à son ouverture et l'arrête quand on la quitte. Sans l'app, <code>start.command</code> lance la passerelle dans le Terminal en double-clic et ouvre le dashboard.</p>
 
       <h3>Service permanent sous Linux (systemd)</h3>
+      <p><code>setup.sh</code> installe ce service (<code>deploy/llmgw.service</code>, avec en plus un durcissement systemd). Pour une installation à la main :</p>
 <pre><span class="c"># /etc/systemd/system/llmgw.service</span>
 [Unit]
 Description=LLMGW, passerelle IA
@@ -675,7 +733,7 @@ After=network-online.target
 [Service]
 User=llmgw
 WorkingDirectory=/opt/llmgw
-EnvironmentFile=/opt/llmgw/llmgw.env      <span class="c"># MISTRAL_API_KEY=… (droits 600)</span>
+EnvironmentFile=/opt/llmgw/secrets.env    <span class="c"># MISTRAL_API_KEY=… (droits 600)</span>
 ExecStart=/opt/llmgw/llmgw -config /opt/llmgw/config.toml
 Restart=on-failure
 
@@ -780,17 +838,21 @@ default_profile = "anonymisation"</pre>
     <section id="reseau">
       <h2><span class="n">21</span>Réseau et HTTPS</h2>
       <ul>
-        <li>La passerelle écoute en HTTP sur l'adresse définie dans <code>[server] listen</code>. En production, la placer derrière un reverse proxy HTTPS.</li>
+        <li>La passerelle écoute sur l'adresse de <code>[server] listen</code>. Exposée sur Internet, elle se place derrière un reverse proxy HTTPS (Caddy, installé par <code>setup.sh --domain</code>), ou utilise le HTTPS intégré (<code>[security] tls_cert</code> et <code>tls_key</code>).</li>
+        <li>Derrière un proxy, déclarer son adresse dans <code>[security] trusted_proxies</code> (la machine locale par défaut) : la passerelle lit alors l'adresse du client dans <code>X-Forwarded-For</code>, pour les limites, les blocages et le journal d'audit.</li>
+        <li>Renseigner <code>[auth] base_url</code> avec l'adresse publique : retours SSO et liens des demandes d'accès.</li>
         <li>Firewall et Umbrella : autoriser uniquement le serveur de la passerelle vers les domaines des fournisseurs de LLM ; bloquer ces domaines pour tous les postes.</li>
         <li>Postes et agents : autoriser l'adresse de la passerelle.</li>
       </ul>
-      <p>Exemple nginx. Le streaming exige de désactiver la mise en mémoire tampon :</p>
+      <p>Avec Caddy (<code>deploy/Caddyfile</code>), le streaming exige <code>flush_interval -1</code> et aucune compression ; le dashboard peut être limité à des adresses par un <code>remote_ip</code>. Exemple nginx, où le streaming exige de désactiver la mise en mémoire tampon :</p>
 <pre>location / {
-    proxy_pass http://127.0.0.1:8088;
+    proxy_pass http://127.0.0.1:8080;
     proxy_http_version 1.1;
     proxy_buffering off;            <span class="c"># réponses en streaming</span>
     proxy_read_timeout 600s;        <span class="c"># longues générations</span>
     client_max_body_size 50m;       <span class="c"># documents joints</span>
+    proxy_set_header X-Forwarded-For $remote_addr;   <span class="c"># adresse du client (remplace la valeur reçue)</span>
+    proxy_set_header X-Forwarded-Proto $scheme;
 }</pre>
     </section>
 
@@ -830,14 +892,19 @@ default_profile = "anonymisation"</pre>
       <figure class="shot"><div class="frame"><img src="img/dash-users.jpg" width="1600" height="1011" alt="Page Utilisateurs : tableau des utilisateurs et applications" loading="lazy"></div><figcaption class="bar"><span>Dashboard, Utilisateurs</span><a href="img/dash-users.jpg">Taille réelle</a></figcaption></figure>
     </section>
 
+    <section id="page-access">
+      <h2><span class="n">26</span>Demandes d'accès</h2>
+      <p>Les demandes faites depuis le portail (voir <a href="#demandes">Demandes d'accès</a>). Filtres : en attente, non confirmées, traitées, toutes. Pour chaque demande : date, nom et email, domaine (de confiance ou externe), motif, état, et qui l'a traitée. Une demande en attente s'approuve avec le profil choisi ou se refuse ; une demande approuvée peut recevoir un nouveau lien vers sa clé. Le compteur du menu donne le nombre de demandes en attente, rappelées dans la vue d'ensemble. En bas, les réglages (Admin) : activation, domaines de confiance, profil par défaut, personnes prévenues, validité des liens, refus automatique. Accessible aux rôles Admin et Support.</p>
+    </section>
+
     <section id="page-profiles">
-      <h2><span class="n">26</span>Profils</h2>
+      <h2><span class="n">27</span>Profils</h2>
       <p>Une carte repliable par profil ; un clic sur le titre l'ouvre. Titre <strong>vert</strong> si le profil est utilisé (utilisateur ou règle SSO), <strong>gris</strong> sinon. Une carte ouverte donne les LLM autorisés dans l'ordre de repli, le prompt de comportement, les emails d'alerte, la politique d'images, un résumé des règles de fichiers, de données et du quota, et la liste des utilisateurs.</p>
       <figure class="shot"><div class="frame"><img src="img/dash-profiles.jpg" width="1600" height="1279" alt="Page Profils : cartes repliables, carte anonymisation ouverte" loading="lazy"></div><figcaption class="bar"><span>Dashboard, Profils</span><a href="img/dash-profiles.jpg">Taille réelle</a></figcaption></figure>
     </section>
 
     <section id="page-targets">
-      <h2><span class="n">27</span>LLM cibles</h2>
+      <h2><span class="n">28</span>LLM cibles</h2>
       <ul>
         <li>Une carte repliable par LLM, avec un <strong>voyant</strong> : vert connecté (avec le temps de réponse), rouge injoignable ou clé refusée, gris désactivé ou non testé. « Tout retester » relance les tests.</li>
         <li>Carte ouverte : format d'API, adresse, modèles autorisés, alias, clé (variable d'environnement ou valeur masquée), en-têtes HTTP, options, profils qui l'utilisent.</li>
@@ -847,7 +914,7 @@ default_profile = "anonymisation"</pre>
     </section>
 
     <section id="page-quotas">
-      <h2><span class="n">28</span>Quotas</h2>
+      <h2><span class="n">29</span>Quotas</h2>
       <ul>
         <li>Trois tableaux : <strong>par profil</strong>, <strong>par utilisateur</strong> (surcharge, −1 = illimité) et <strong>par LLM</strong> (budget partagé).</li>
         <li>Action au dépassement : bloquer ou alerter.</li>
@@ -857,7 +924,7 @@ default_profile = "anonymisation"</pre>
     </section>
 
     <section id="page-privacy">
-      <h2><span class="n">29</span>Filtrage et privacy</h2>
+      <h2><span class="n">30</span>Filtrage et privacy</h2>
       <p>Cinq onglets :</p>
       <ul>
         <li><strong>Détecteurs</strong> : type de jeton, méthode (intégré, expression régulière, liste de termes), paramètre, ordre de priorité.</li>
@@ -873,13 +940,13 @@ default_profile = "anonymisation"</pre>
     </section>
 
     <section id="page-filelog">
-      <h2><span class="n">30</span>Journal des fichiers</h2>
+      <h2><span class="n">31</span>Journal des fichiers</h2>
       <p>Les fichiers et images transmis avec journal, bloqués, ou bloqués avec alerte, sur 30 jours : date, utilisateur, profil, LLM, type, nom du fichier, taille, action et début de l'empreinte SHA-256 (empreinte complète au survol). Un filtre cherche dans toutes les colonnes. Accessible aux rôles Admin et Support.</p>
       <figure class="shot"><div class="frame"><img src="img/dash-filelog.jpg" width="1600" height="1011" alt="Journal des fichiers : tableau des événements avec nom, taille, action et empreinte" loading="lazy"></div><figcaption class="bar"><span>Dashboard, Journal des fichiers</span><a href="img/dash-filelog.jpg">Taille réelle</a></figcaption></figure>
     </section>
 
     <section id="page-debug">
-      <h2><span class="n">31</span>Debug</h2>
+      <h2><span class="n">32</span>Debug</h2>
       <ul>
         <li><strong>Mode DEBUG</strong> : activation, durée de conservation, nombre d'échanges archivés, bouton Vider.</li>
         <li><strong>Échanges archivés</strong> : une ligne par requête avec les détections colorées par action.</li>
@@ -890,7 +957,7 @@ default_profile = "anonymisation"</pre>
     </section>
 
     <section id="page-settings">
-      <h2><span class="n">32</span>Alertes et SSO</h2>
+      <h2><span class="n">33</span>Alertes et SSO</h2>
       <ul>
         <li><strong>Alertes par email</strong> : activation, déclencheurs (violation, quota, erreur LLM), destinataires par défaut, fréquence du récapitulatif, serveur SMTP, envoi d'un test. Les fichiers « bloqué + alerte » sont signalés en plus.</li>
         <li><strong>Authentification (SSO)</strong> : fournisseurs configurés, adresse de retour à déclarer, domaines, profil attribué, administrateurs.</li>
@@ -898,14 +965,23 @@ default_profile = "anonymisation"</pre>
       <figure class="shot"><div class="frame"><img src="img/dash-settings.jpg" width="1600" height="1182" alt="Page Alertes et SSO" loading="lazy"></div><figcaption class="bar"><span>Dashboard, Alertes et SSO</span><a href="img/dash-settings.jpg">Taille réelle</a></figcaption></figure>
     </section>
 
+    <section id="page-security">
+      <h2><span class="n">34</span>Sécurité web</h2>
+      <ul>
+        <li><strong>Protection web</strong> : votre adresse telle que la passerelle la voit (directe ou derrière un proxy de confiance), limites par adresse, blocage après des connexions refusées, adresses autorisées pour l'administration, proxys de confiance, réseaux exemptés, HTTPS intégré. Vérifiez que votre adresse figure dans « Administration depuis » avant d'enregistrer.</li>
+        <li><strong>Adresses bloquées</strong> : adresse, fin du blocage, nombre de blocages, motif ; bouton pour débloquer.</li>
+        <li><strong>Sessions web</strong> : « Fermer toutes les sessions » déconnecte tout le monde (nouvelle clé de signature des sessions).</li>
+      </ul>
+    </section>
+
     <section id="page-accounts">
-      <h2><span class="n">33</span>Comptes d'administration</h2>
+      <h2><span class="n">35</span>Comptes d'administration</h2>
       <p>La liste des personnes autorisées dans le dashboard : email, nom, rôle (Admin ou Support), accès Debug pour un Support, désactivation (coupe l'accès immédiatement), dernière connexion. Un tableau rappelle les droits par rôle, puis les autres accès : règles des fournisseurs SSO et jeton d'administration.</p>
       <figure class="shot"><div class="frame"><img src="img/dash-accounts.jpg" width="1600" height="1106" alt="Page Comptes d'administration" loading="lazy"></div><figcaption class="bar"><span>Dashboard, Comptes d'administration</span><a href="img/dash-accounts.jpg">Taille réelle</a></figcaption></figure>
     </section>
 
     <section id="page-audit">
-      <h2><span class="n">34</span>Journal d'audit</h2>
+      <h2><span class="n">36</span>Journal d'audit</h2>
       <p>Qui a fait quoi, et quand : date, acteur, rôle, action, cible et détail des changements. Un filtre cherche dans tous les champs. Aucune valeur sensible n'y figure.</p>
       <figure class="shot"><div class="frame"><img src="img/dash-audit.jpg" width="1600" height="1011" alt="Journal d'audit : connexions et modifications" loading="lazy"></div><figcaption class="bar"><span>Dashboard, Journal d'audit</span><a href="img/dash-audit.jpg">Taille réelle</a></figcaption></figure>
     </section>
@@ -913,17 +989,19 @@ default_profile = "anonymisation"</pre>
     <div class="part">Chat</div>
 
     <section id="page-chat">
-      <h2><span class="n">35</span>Chat (aperçu)</h2>
+      <h2><span class="n">37</span>Chat (aperçu)</h2>
       <p>Adresse <code>/chat</code>. Le mode d'emploi complet, destiné aux utilisateurs, est dans le <a href="chat.html">guide utilisateur du chat</a> (bouton « ? Aide » dans l'en-tête du chat).</p>
       <figure class="shot"><div class="frame"><img src="img/chat-conversation.jpg" width="1600" height="1011" alt="Conversation dans le chat : nom, email et dossier pseudonymisés puis restaurés" loading="lazy"></div><figcaption class="bar"><span>Chat, conversation avec pseudonymisation</span><a href="img/chat-conversation.jpg">Taille réelle</a></figcaption></figure>
     </section>
 
     <section id="limites">
-      <h2><span class="n">36</span>Limites et points ouverts</h2>
+      <h2><span class="n">38</span>Limites et points ouverts</h2>
       <div class="tw"><table>
         <thead><tr><th>Sujet</th><th>Situation</th><th>Piste</th></tr></thead>
         <tbody>
-          <tr><td class="k">Noms sans indice</td><td>un nom sans titre, sans prénom connu, jamais vu (« Keizer est malade ») n'est pas détecté la première fois</td><td>modèle de reconnaissance d'entités (Presidio, spaCy)</td></tr>
+          <tr><td class="k">Noms sans indice</td><td>un nom sans titre, sans prénom connu, jamais vu (« Keizer est malade »), un nom dans une fiche sans libellé reconnu (« Nom : Vandamme »), ou un prénom aussi courant comme mot (Max, Jan, Hugo) n'est pas détecté la première fois ; « Claude Dubois » sans titre reste en clair (sinon « Claude Haiku » serait pseudonymisé)</td><td>modèle de reconnaissance d'entités (Presidio, spaCy)</td></tr>
+          <tr><td class="k">Numérotation au fil de la conversation</td><td>un nom appris à un tour donné est aussi remplacé dans les messages précédents, qui changent donc au tour suivant ; un jeton « «EMAIL_1» » écrit par l'utilisateur lui-même est restauré comme un vrai jeton</td><td>correspondance gardée par conversation (identifiant de session envoyé par l'agent)</td></tr>
+          <tr><td class="k">Accents décomposés</td><td>un texte en Unicode décomposé (NFD, fréquent dans les copier-coller depuis macOS) peut échapper aux listes</td><td>normalisation NFC</td></tr>
           <tr><td class="k">Logos et texte dans les images</td><td>pas d'analyse d'image : les images et les fichiers sont transmis, remplacés par un carré blanc ou refusés en bloc</td><td>OCR et détection de logos</td></tr>
           <tr><td class="k">Traduction de formats</td><td>un client Anthropic n'atteint que des cibles Anthropic (et inversement)</td><td>traduction OpenAI ↔ Anthropic dans la passerelle</td></tr>
           <tr><td class="k">Haute disponibilité</td><td>une seule instance</td><td>deux instances et une base partagée</td></tr>
@@ -936,9 +1014,17 @@ default_profile = "anonymisation"</pre>
     </section>
 
     <section id="versions">
-      <h2><span class="n">37</span>Notes de version</h2>
+      <h2><span class="n">39</span>Notes de version</h2>
       <p>La version en cours s'affiche en bas du menu du dashboard, sur l'écran de connexion du chat, sur <code>GET /version</code> et avec <code>./llmgw -version</code>. Le journal complet est tenu dans <code>RELEASE_NOTES.md</code>, à la racine du dépôt.</p>
       <div class="rel">
+        <h3>1.4.0, 19 octobre 2026</h3>
+        <ul>
+          <li>Protection web : limites par adresse, blocage après des connexions refusées, administration par adresse, en-têtes de sécurité, HTTPS intégré.</li>
+          <li>Demandes d'accès depuis le portail, confirmées par email, approuvées automatiquement pour les domaines de confiance.</li>
+          <li>Sessions web révocables, rôles recalculés à chaque requête ; SSO limité aux adresses email vérifiées.</li>
+          <li>Anonymisation plus complète (JSON dans les résultats d'outils, espaces insécables, documents texte…) et environ 5 fois plus rapide, avec détecteurs en parallèle et cache des historiques.</li>
+          <li><code>build.sh</code> (app Mac, archives Linux) et <code>setup.sh</code> (serveur Ubuntu / Debian neuf).</li>
+        </ul>
         <h3>1.3.0, 9 octobre 2026</h3>
         <ul>
           <li>Détecteur intégré des numéros INAMI / RIZIV des prestataires de soins, avec vérification de la clé de contrôle.</li>
@@ -987,7 +1073,7 @@ default_profile = "anonymisation"</pre>
       </div>
     </section>
 
-    <footer class="doc"><img src="img/vulpoint-logo.jpg" alt=""><span>LLMGW 1.3.0 by <a href="https://vulpoint.com" target="_blank" rel="noopener">Vulpoint.com</a></span></footer>
+    <footer class="doc"><img src="img/vulpoint-logo.jpg" alt=""><span>LLMGW 1.4.0 by <a href="https://vulpoint.com" target="_blank" rel="noopener">Vulpoint.com</a></span></footer>
   </main>
 </div>
 </body>

@@ -22,6 +22,9 @@ type Gateway struct {
 	client  *http.Client
 	saveMu  sync.Mutex
 	sessKey []byte // signs web session cookies
+	keyMu   sync.RWMutex
+	revoked sync.Map // revoked session id -> expiry
+	shield  *Shield
 }
 
 func (g *Gateway) C() *Config { return g.cfg.Load() }
@@ -112,6 +115,7 @@ func (g *Gateway) auth(cfg *Config, r *http.Request) (string, *User) {
 	}
 	name, ok := cfg.keys[key]
 	if !ok {
+		authFailed(r)
 		g.noteSignIn(r, "", nil)
 		return "", nil
 	}
@@ -121,6 +125,15 @@ func (g *Gateway) auth(cfg *Config, r *http.Request) (string, *User) {
 	}
 	g.noteSignIn(r, name, nil)
 	return name, nil
+}
+
+// failNames: the targets tried, without the error details.
+func failNames(cands []cand, n int) string {
+	var out []string
+	for _, c := range cands[:min(n, len(cands))] {
+		out = append(out, c.name)
+	}
+	return strings.Join(out, ", ")
 }
 
 type cand struct {
@@ -227,7 +240,7 @@ func (g *Gateway) handleLLM(api string) http.HandlerFunc {
 				for _, e := range sess.Events {
 					dbg.Events = append(dbg.Events, e)
 				}
-				go g.store.AddDebug(dbg, cfg.Debug.RetentionHours)
+				g.store.QueueDebug(dbg)
 			}
 			g.store.Add(rec)
 			if sess != nil && len(sess.FileLog) > 0 {
@@ -262,6 +275,19 @@ func (g *Gateway) handleLLM(api string) http.HandlerFunc {
 		rec.User, rec.Profile = name, u.Profile
 		prof := cfg.Profiles[u.Profile]
 
+		// user quota before reading the body: a user over quota cannot make the gateway decode 50 MB
+		uq := cfg.EffectiveQuota(u)
+		if lim := g.meter.Reserve("u:"+name, &uq); lim != "" {
+			if uq.Action == "warn" {
+				quotaEvent(lim, "log")
+			} else {
+				quotaEvent(lim, "block")
+				rec.Status, rec.Err, rec.Blocked = 429, "quota", 1
+				apiError(w, api, 429, "rate_limit_error", quotaMsg("utilisateur", name, lim))
+				return
+			}
+		}
+
 		raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, int64(cfg.Server.MaxBodyMB)<<20))
 		inDur = time.Since(t0)
 		rec.BytesIn = int64(len(raw))
@@ -294,17 +320,6 @@ func (g *Gateway) handleLLM(api string) http.HandlerFunc {
 		}
 		rec.Target = cands[0].name
 
-		uq := cfg.EffectiveQuota(u)
-		if lim := g.meter.Exceeded("u:"+name, &uq); lim != "" {
-			if uq.Action == "warn" {
-				quotaEvent(lim, "log")
-			} else {
-				quotaEvent(lim, "block")
-				rec.Status, rec.Err, rec.Blocked = 429, "quota", 1
-				apiError(w, api, 429, "rate_limit_error", quotaMsg("utilisateur", name, lim))
-				return
-			}
-		}
 		// targets over their own quota are skipped (next target in the profile takes over)
 		var ok2 []cand
 		for _, c := range cands {
@@ -326,9 +341,16 @@ func (g *Gateway) handleLLM(api string) http.HandlerFunc {
 		cands = ok2
 		rec.Target = cands[0].name
 
+		release, ok := g.shield.work(r.Context())
+		if !ok {
+			rec.Status, rec.Err = 503, "busy"
+			apiError(w, api, 503, "overloaded_error", "passerelle surchargée, réessayez dans un instant")
+			return
+		}
 		sess = NewSession(cfg, prof)
 		sess.Debug = cfg.Debug.Enabled
 		sess.Process(body, api)
+		release()
 		if cfg.Debug.Enabled {
 			dbg = &DebugEntry{Req: debugBody(encodeJSON(body), cfg.Debug.MaxKB)}
 		}
@@ -343,7 +365,7 @@ func (g *Gateway) handleLLM(api string) http.HandlerFunc {
 		}
 
 		admitted = true
-		g.meter.Admit("u:" + name)
+		g.meter.Count("u:" + name)
 
 		clientSO, hadSO := body["stream_options"]
 		var resp *http.Response
@@ -384,8 +406,13 @@ func (g *Gateway) handleLLM(api string) http.HandlerFunc {
 		rec.Err = strings.Join(fails, " ")
 		if resp == nil {
 			upDur = time.Since(upStart)
+			if r.Context().Err() != nil { // the client gave up (stop button): not an outage, no alert
+				rec.Status, rec.Err = 499, "client"
+				return
+			}
 			rec.Status = 502
-			apiError(w, api, 502, "api_error", "aucun LLM cible disponible : "+rec.Err)
+			// the details (addresses of the targets) stay in the metrics, not in the answer
+			apiError(w, api, 502, "api_error", "aucun LLM cible disponible ("+failNames(cands, len(fails))+"), réessayez plus tard")
 			return
 		}
 		defer resp.Body.Close()
@@ -408,7 +435,7 @@ func (g *Gateway) handleLLM(api string) http.HandlerFunc {
 				rec.Err = strings.TrimSpace(rec.Err + " stream:" + err.Error())
 			}
 		} else {
-			data, err := io.ReadAll(resp.Body)
+			data, err := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
 			if err != nil {
 				rec.Err = strings.TrimSpace(rec.Err + " read:" + err.Error())
 			}

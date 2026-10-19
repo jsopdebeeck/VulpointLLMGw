@@ -39,6 +39,36 @@ func (m *Meter) Exceeded(key string, q *Quota) string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.roll(time.Now())
+	return m.exceeded(key, q)
+}
+
+// Reserve checks the quota and counts the request in the per-minute rate in one step, so that
+// parallel requests cannot all pass a limit they reach together. A request over a "warn"
+// quota is counted too. The day and month counters are updated by Count, once admitted.
+func (m *Meter) Reserve(key string, q *Quota) string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.roll(time.Now())
+	lim := ""
+	if q != nil {
+		lim = m.exceeded(key, q)
+	}
+	if lim == "" || q.Action == "warn" {
+		m.rpm[key]++
+	}
+	return lim
+}
+
+// Count records an admitted request whose rate was already counted by Reserve.
+func (m *Meter) Count(key string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.roll(time.Now())
+	m.dReq[key]++
+	m.mReq[key]++
+}
+
+func (m *Meter) exceeded(key string, q *Quota) string {
 	switch {
 	case q.RPM > 0 && m.rpm[key] >= q.RPM:
 		return "RPM"

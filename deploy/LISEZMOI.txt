@@ -1,0 +1,38 @@
+LLMGW by Vulpoint.com LLMGW_VERSION : gateway LLM avec anonymisation, pour Linux LLMGW_ARCH
+Serveur : Ubuntu 22.04 / 24.04 LTS ou Debian 12 (systemd), installation fraîche, accès root ou sudo.
+
+Installation
+  1. Depuis votre poste, copier l'archive sur le serveur :
+       scp llmgw-LLMGW_VERSION-linux-LLMGW_ARCH.tar.gz utilisateur@serveur:
+  2. Sur le serveur (ssh utilisateur@serveur) :
+       tar xzf llmgw-LLMGW_VERSION-linux-LLMGW_ARCH.tar.gz
+       cd llmgw-LLMGW_VERSION
+       sudo ./setup.sh --domain gateway.exemple.be --email admin@exemple.be --admin-ip 203.0.113.7
+     Le DNS du domaine doit déjà pointer vers le serveur (certificat Let's Encrypt, ports 80 et 443).
+     --admin-ip : votre IP fixe, seule autorisée sur /dashboard et /admin (répétable, plage CIDR
+     acceptée). Sans elle, le dashboard ne s'ouvre que par un tunnel SSH :
+       ssh -L 8080:127.0.0.1:8080 utilisateur@serveur   puis http://127.0.0.1:8080/dashboard
+     Toutes les options : ./setup.sh --help
+  3. Mettre les clés des LLM dans /opt/llmgw/secrets.env (MISTRAL_API_KEY=…), puis :
+       sudo systemctl restart llmgw
+     Le jeton admin du dashboard est affiché une fois à la fin, et gardé dans /opt/llmgw/admin_token.txt.
+
+Mise à jour : mêmes commandes avec la nouvelle archive (--domain etc. facultatifs). config.toml,
+gateway.db, secrets.env et Caddy sont conservés ; l'ancien binaire est gardé (llmgw.prev) et rétabli
+si le nouveau ne démarre pas. Depuis le Mac de développement, deploy/deploy.sh fait tout en une commande.
+
+Ce que setup.sh met en place
+  /opt/llmgw/              binaire, config.toml, gateway.db (utilisateur système llmgw, droits 700)
+                           secrets.env : clés des LLM (root, 600)
+  llmgw.service            service systemd durci ; journal : journalctl -u llmgw -f
+  Caddy                    HTTPS, streaming, /dashboard et /admin réservés aux --admin-ip
+  ufw                      pare-feu : SSH (port détecté), 80 et 443 ; rien d'autre n'est ouvert
+  fail2ban                 bannit les IP après des échecs de connexion SSH répétés
+  unattended-upgrades      mises à jour de sécurité automatiques (le reste, Caddy compris :
+                           sudo apt update && sudo apt upgrade)
+  llmgw-backup.timer       sauvegarde quotidienne de gateway.db et config.toml dans /var/backups/llmgw ;
+                           les sauvegardes de plus de 14 jours y sont supprimées automatiquement
+setup.sh ne modifie pas la configuration SSH : recommandé, connexion par clé seulement
+(PasswordAuthentication no dans /etc/ssh/sshd_config, après avoir vérifié que votre clé fonctionne).
+
+Vérifier l'archive (fichier SHA256SUMS livré à côté) : sha256sum -c --ignore-missing SHA256SUMS

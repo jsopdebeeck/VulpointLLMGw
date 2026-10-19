@@ -10,6 +10,25 @@ agg_retention_days = 200          # ~6 mois d'agrégats (profondeur maximale du 
 max_body_mb = 50
 upstream_timeout_sec = 300
 
+# ---------------------------------------------------------------- protection web
+# Pour une passerelle exposée sur Internet (VPS). Actif par défaut avec ces valeurs ; les appels
+# locaux (app Mac, tunnel SSH) et les réseaux "exempt" ne sont jamais limités ni bloqués.
+# Une adresse est bloquée après ban_after connexions refusées (clé gateway, jeton
+# d'administration, cookie falsifié) en ban_window_min minutes ; la durée double à chaque récidive.
+
+[security]
+trusted_proxies = ["127.0.0.1/32", "::1/128"]  # proxys dont X-Forwarded-For est cru (Caddy, nginx local)
+admin_allow = []                  # adresses ou plages autorisées sur /dashboard et /admin ([] = toutes)
+exempt = []                       # réseaux internes jamais limités, ex. ["10.0.0.0/8"]
+rate_per_min = 600                # requêtes par minute et par adresse (IPv6 : par /64)
+max_concurrent_per_ip = 32        # requêtes simultanées par adresse
+ban_after = 10
+ban_window_min = 10
+ban_minutes = 30                  # 24 h au plus
+# tls_cert = "/etc/llmgw/fullchain.pem"   # HTTPS intégré, sans proxy (redémarrage requis)
+# tls_key = "/etc/llmgw/privkey.pem"
+# disabled = true                 # ni limite ni blocage (réseau interne uniquement)
+
 # ---------------------------------------------------------------- LLM cibles
 # api = "openai"    → base_url se termine par /v1  (POST {base_url}/chat/completions)
 # api = "anthropic" → base_url sans /v1             (POST {base_url}/v1/messages)
@@ -93,6 +112,23 @@ interval_minutes = 15
 on_violation = true
 on_quota = true
 on_error = true
+on_security = true                  # adresse bloquée par la protection web
+
+# ---------------------------------------------------------------- demandes d'accès
+# Lien « Demander un accès » sur l'écran de connexion du chat. La personne confirme son adresse
+# par un lien envoyé par email (smtp_host et from de [alerts] requis, même si enabled = false).
+# Domaine de confiance : accès accordé tout de suite (profil default_profile) ; autre domaine :
+# décision dans le dashboard (onglet Demandes d'accès), refus automatique après expire_days.
+# La clé n'est jamais envoyée par email : elle s'affiche une fois, via un lien à usage unique.
+# Les liens pointent vers [auth] base_url : la renseigner avec l'adresse publique.
+
+[access]
+enabled = false
+trusted_domains = ["exemple.be"]
+default_profile = "standard"
+notify = []                        # prévenus des demandes à traiter ([] = destinataires de [alerts])
+link_hours = 24                    # validité des liens (confirmation, clé)
+expire_days = 14                   # demande sans décision : refusée
 
 # ---------------------------------------------------------------- authentification (SSO)
 # Connexion au portail /chat et au dashboard avec Microsoft Entra ID, Google ou un fournisseur
@@ -103,6 +139,12 @@ on_error = true
 #   1. un [users.x] avec email = son adresse : son profil et ses quotas ;
 #   2. la première règle mappings qui correspond (groupe Entra, rôle d'application, email) ;
 #   3. default_profile ; sinon l'accès est refusé (sauf administrateur : dashboard seulement).
+#
+# Identité : Entra = UPN (fixé par les administrateurs du tenant) ; Google et OIDC = email
+# marqué vérifié (email_verified) par le fournisseur, sinon refus. Pour un fournisseur OIDC
+# sans ce claim : trust_unverified_email = true, seulement si personne ne peut s'y inscrire
+# librement. Rôle et profil sont recalculés à chaque requête : retirer une règle ou un
+# utilisateur s'applique tout de suite ; la déconnexion révoque la session.
 
 [auth]
 # base_url = "https://gateway.exemple.be"   # adresse publique ; défaut http://<listen>

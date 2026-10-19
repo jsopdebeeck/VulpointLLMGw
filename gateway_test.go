@@ -560,6 +560,9 @@ func TestTechnicalFalsePositives(t *testing.T) {
 }
 
 // fakeSMTP: minimal SMTP server capturing messages.
+// smtpMu guards the messages received by fakeSMTP (emails are sent asynchronously).
+var smtpMu sync.Mutex
+
 func fakeSMTP(t *testing.T) (string, int, *[]string) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -567,7 +570,7 @@ func fakeSMTP(t *testing.T) (string, int, *[]string) {
 	}
 	t.Cleanup(func() { ln.Close() })
 	var msgs []string
-	var mu sync.Mutex
+	mu := &smtpMu
 	go func() {
 		for {
 			c, err := ln.Accept()
@@ -790,7 +793,7 @@ func newFakeIdP(t *testing.T) *fakeIdP {
 			fmt.Fprint(w, `{"error":"invalid_grant"}`)
 			return
 		}
-		c := map[string]any{"iss": f.srv.URL, "aud": "client-1", "exp": time.Now().Add(time.Hour).Unix(), "nonce": f.nonce}
+		c := map[string]any{"iss": f.srv.URL, "aud": "client-1", "exp": time.Now().Add(time.Hour).Unix(), "nonce": f.nonce, "email_verified": true}
 		for k, v := range f.claims {
 			c[k] = v
 		}
@@ -823,6 +826,7 @@ func TestSSO(t *testing.T) {
 	mux.HandleFunc("GET /auth/login/{id}", g.handleAuthLogin)
 	mux.HandleFunc("GET /auth/callback/{id}", g.handleAuthCallback)
 	mux.HandleFunc("GET /auth/session", g.handleAuthSession)
+	mux.HandleFunc("POST /auth/logout", g.handleAuthLogout)
 	mux.HandleFunc("GET /admin/api/config", g.admin(g.handleGetConfig))
 	gw := httptest.NewServer(mux)
 	defer gw.Close()
@@ -897,6 +901,30 @@ func TestSSO(t *testing.T) {
 	b, _ := io.ReadAll(r.Body)
 	if !strings.Contains(string(b), `"user":"alice"`) || !strings.Contains(string(b), `"profile":"standard"`) {
 		t.Errorf("utilisateur lié par email : %s", b)
+	}
+	// unverified email: refused (anyone could sign up with an administrator's address)
+	if _, st := login(map[string]any{"email": "it@ok.be", "email_verified": false, "roles": []string{"LLMGW.Admin"}}); st != 403 {
+		t.Errorf("email non vérifié : %d, 403 attendu", st)
+	}
+	// rights follow the configuration: removing the admin rule applies to an open session
+	cl, _ = login(map[string]any{"email": "it@ok.be", "roles": []string{"LLMGW.Admin"}})
+	if c := call(cl, "/admin/api/config", true); c != 200 {
+		t.Errorf("admin avant retrait : %d", c)
+	}
+	cfg.Auth.Providers[0].AdminRoles = nil
+	if c := call(cl, "/admin/api/config", true); c != 401 {
+		t.Errorf("admin après retrait de la règle : %d, 401 attendu", c)
+	}
+	cfg.Auth.Providers[0].AdminRoles = []string{"LLMGW.Admin"}
+	// sign-out revokes the session: a copy of the cookie stops working
+	gwURL, _ := url.Parse(gw.URL)
+	stolen := cl.Jar.Cookies(gwURL)
+	req, _ = http.NewRequest("POST", gw.URL+"/auth/logout", nil)
+	cl.Do(req)
+	jar0, _ := cookiejar.New(nil)
+	jar0.SetCookies(gwURL, stolen)
+	if c := call(&http.Client{Jar: jar0}, "/admin/api/config", true); c != 401 {
+		t.Errorf("cookie copié après déconnexion : %d, 401 attendu", c)
 	}
 	// forged state
 	jar, _ := cookiejar.New(nil)
@@ -1169,5 +1197,260 @@ func TestINAMI(t *testing.T) {
 	io.ReadAll(r.Body)
 	if last := oai.last(); strings.Contains(last, "23456") || !strings.Contains(last, "«INAMI_1»") {
 		t.Errorf("numéro INAMI non anonymisé : %s", last)
+	}
+}
+
+func TestSafeNext(t *testing.T) {
+	for in, want := range map[string]string{"/chat": "/chat", "/dashboard": "/dashboard", "/dashboard#users": "/dashboard#users",
+		"/\t/evil.com": "/chat", "//evil.com": "/chat", "/\\evil.com": "/chat", "https://evil.com": "/chat", "/chat/../admin": "/chat",
+		"/%09/evil.com": "/chat", "": "/chat", "/admin/api/config": "/chat"} {
+		if got := safeNext(in); got != want {
+			t.Errorf("safeNext(%q) = %q, %q attendu", in, got, want)
+		}
+	}
+}
+
+func TestShield(t *testing.T) {
+	_, _, _, g := setup(t)
+	cfg := g.C()
+	cfg.Security = SecurityCfg{BanAfter: 3, RatePerMin: 20, AdminAllow: []string{"10.0.0.0/8"}}
+	if err := cfg.Security.check("."); err != nil {
+		t.Fatal(err)
+	}
+	g.shield = NewShield()
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /v1/chat/completions", g.handleLLM("openai"))
+	mux.HandleFunc("GET /admin/api/config", g.admin(g.handleGetConfig))
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte(clientIP(r))) })
+	gw := httptest.NewServer(g.protect(mux))
+	defer gw.Close()
+	do := func(method, path, ip, key string) *http.Response {
+		req, _ := http.NewRequest(method, gw.URL+path, strings.NewReader(`{"model":"mistral-large","messages":[{"role":"user","content":"x"}]}`))
+		req.Header.Set("X-Forwarded-For", "6.6.6.6, "+ip) // the left part is written by the client: ignored
+		if key != "" {
+			req.Header.Set("Authorization", "Bearer "+key)
+		}
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		io.ReadAll(r.Body)
+		r.Body.Close()
+		return r
+	}
+	r := do("GET", "/healthz", "203.0.113.9", "")
+	if r.Header.Get("X-Frame-Options") != "DENY" || r.Header.Get("Content-Security-Policy") == "" {
+		t.Error("en-têtes de sécurité absents")
+	}
+	req, _ := http.NewRequest("GET", gw.URL+"/healthz", nil)
+	req.Header.Set("X-Forwarded-For", "6.6.6.6, 203.0.113.9")
+	rr, _ := http.DefaultClient.Do(req)
+	if b, _ := io.ReadAll(rr.Body); string(b) != "203.0.113.9" {
+		t.Errorf("adresse du client derrière le proxy : %q", b)
+	}
+	// admin allow list
+	if r := do("GET", "/admin/api/config", "203.0.113.9", ""); r.StatusCode != 403 {
+		t.Errorf("administration hors liste : %d, 403 attendu", r.StatusCode)
+	}
+	// three bad keys: banned, even with a good key afterwards
+	for i := 0; i < 3; i++ {
+		if r := do("POST", "/v1/chat/completions", "198.51.100.7", "gw-mauvaise"); r.StatusCode != 401 {
+			t.Fatalf("mauvaise clé : %d", r.StatusCode)
+		}
+	}
+	if r := do("POST", "/v1/chat/completions", "198.51.100.7", "gw-alice-remplace-moi"); r.StatusCode != 403 {
+		t.Errorf("adresse bannie : %d, 403 attendu", r.StatusCode)
+	}
+	if r := do("POST", "/v1/chat/completions", "198.51.100.8", "gw-alice-remplace-moi"); r.StatusCode != 200 {
+		t.Errorf("autre adresse : %d, 200 attendu", r.StatusCode)
+	}
+	if b := g.shield.Bans(); len(b) != 1 || b[0].Address != "198.51.100.7" {
+		t.Errorf("liste des blocages : %+v", b)
+	}
+	if !g.shield.Unban("198.51.100.7") || do("POST", "/v1/chat/completions", "198.51.100.7", "gw-alice-remplace-moi").StatusCode != 200 {
+		t.Error("déblocage sans effet")
+	}
+	// rate limit: 20 per minute
+	n429 := 0
+	for i := 0; i < 25; i++ {
+		if do("GET", "/healthz", "192.0.2.1", "").StatusCode == 429 {
+			n429++
+		}
+	}
+	if n429 != 5 {
+		t.Errorf("limite de débit : %d refus, 5 attendus", n429)
+	}
+	// IPv6: one bucket per /64
+	if bucket("2001:db8:1:2:aaaa::1") != bucket("2001:db8:1:2:bbbb::9") || bucket("2001:db8:1:3::1") == bucket("2001:db8:1:2::1") {
+		t.Error("regroupement IPv6 par /64")
+	}
+}
+
+func TestSecretBinding(t *testing.T) {
+	_, _, _, g := setup(t)
+	cur := g.C()
+	cur.Server.AdminToken = "tok"
+	cur.Targets["openai"].APIKeyEnv = "OPENAI_API_KEY"
+	put := func(mod func(c *Config)) int {
+		c := cloneConfig(cur)
+		for _, t := range c.Targets {
+			if t.APIKey != "" {
+				t.APIKey = keepSecret
+			}
+		}
+		for _, u := range c.Users {
+			u.Key = keepSecret
+		}
+		mod(c)
+		dir := t.TempDir()
+		p := filepath.Join(dir, "config.toml")
+		os.WriteFile(p, nil, 0o600)
+		cur.path = p
+		b, _ := json.Marshal(map[string]any{"Config": c})
+		req := httptest.NewRequest("PUT", "/admin/api/config", bytes.NewReader(b))
+		req.Header.Set("X-Admin-Token", "tok")
+		w := httptest.NewRecorder()
+		g.handlePutConfig(w, req)
+		return w.Code
+	}
+	if c := put(func(c *Config) { c.Targets["openai"].BaseURL = "https://evil.example/v1" }); c != 400 {
+		t.Errorf("clé d'environnement envoyée vers une nouvelle adresse : %d, 400 attendu", c)
+	}
+	if c := put(func(c *Config) { c.Targets["openai"].Description = "modifiée" }); c != 200 {
+		t.Errorf("modification sans changement d'adresse : %d", c)
+	}
+	g.cfg.Store(cur)
+	cur.Targets["mistral"].APIKey = "sk-secret"
+	if c := put(func(c *Config) { c.Targets["mistral"].BaseURL = "https://evil.example/v1" }); c != 400 {
+		t.Errorf("clé conservée vers une nouvelle adresse : %d, 400 attendu", c)
+	}
+	g.cfg.Store(cur)
+	if c := put(func(c *Config) {
+		c.Targets["evil"] = &Target{API: "openai", BaseURL: "https://evil.example/v1", APIKeyEnv: "OPENAI_API_KEY"}
+	}); c != 400 {
+		t.Errorf("variable d'une autre cible envoyée ailleurs : %d, 400 attendu", c)
+	}
+}
+
+func TestAccessRequests(t *testing.T) {
+	_, _, _, g := setup(t)
+	host, port, msgs := fakeSMTP(t)
+	cfg := g.C()
+	cfg.Server.AdminToken = "tok"
+	cfg.Alerts = AlertsCfg{SMTPHost: host, SMTPPort: port, From: "llmgw@example.test", To: []string{"rssi@example.test"}}
+	cfg.Access = AccessCfg{Enabled: true, TrustedDomains: []string{"hopital.be"}, DefaultProfile: "standard"}
+	cfg.Auth.BaseURL = "https://gw.test"
+	if err := cfg.checkAccess(); err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /access/request", g.handleAccessRequest)
+	mux.HandleFunc("POST /access/verify", g.handleAccessVerify)
+	mux.HandleFunc("POST /access/key", g.handleAccessKey)
+	mux.HandleFunc("GET /admin/api/access", g.staff(g.handleAccessList))
+	mux.HandleFunc("POST /admin/api/access/{id}/{act}", g.staff(g.handleAccessDecide))
+	gw := httptest.NewServer(mux)
+	defer gw.Close()
+	got := func() []string { smtpMu.Lock(); defer smtpMu.Unlock(); return append([]string{}, *msgs...) }
+	mail := func(n int) string { // the n-th email, sent asynchronously
+		for i := 0; i < 100 && len(got()) < n; i++ {
+			time.Sleep(20 * time.Millisecond)
+		}
+		m := got()
+		if len(m) < n {
+			t.Fatalf("%d email(s), %d attendu(s)", len(m), n)
+		}
+		return m[n-1]
+	}
+	link := regexp.MustCompile(`https://gw\.test(/access/\w+)\?t=([\w-]+)`)
+	request := func(email string) {
+		b, _ := json.Marshal(map[string]string{"Name": "Marie Test", "Email": email, "Reason": "projet", "Lang": "fr"})
+		r, err := http.Post(gw.URL+"/access/request", "application/json", bytes.NewReader(b))
+		if err != nil || r.StatusCode != 200 {
+			t.Fatalf("demande : %v %v", err, r)
+		}
+	}
+	form := func(path, tok string) (int, string) {
+		r, err := http.PostForm(gw.URL+path, url.Values{"t": {tok}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, _ := io.ReadAll(r.Body)
+		return r.StatusCode, string(b)
+	}
+	keyRe := regexp.MustCompile(`value="(gw-[0-9a-f]+)"`)
+
+	// trusted domain: confirmed link → approved at once, key shown once
+	request("marie@hopital.be")
+	m := link.FindStringSubmatch(mail(1))
+	if m == nil || m[1] != "/access/verify" {
+		t.Fatalf("lien de confirmation absent :\n%s", mail(1))
+	}
+	st, page := form("/access/verify", m[2])
+	k := keyRe.FindStringSubmatch(page)
+	if st != 200 || k == nil {
+		t.Fatalf("confirmation (domaine de confiance) : %d\n%s", st, page)
+	}
+	if u := g.C().Users["marie"]; u == nil || u.Key != k[1] || u.Profile != "standard" || u.Email != "marie@hopital.be" {
+		t.Errorf("utilisateur créé : %+v", u)
+	}
+	if st, _ := form("/access/verify", m[2]); st != 400 {
+		t.Errorf("lien réutilisé : %d, 400 attendu", st)
+	}
+	if strings.Contains(strings.Join(got(), ""), k[1]) {
+		t.Error("la clé ne doit jamais partir par email")
+	}
+
+	// other domain: waits for a decision, then a link to the key
+	request("paul@ailleurs.com")
+	m = link.FindStringSubmatch(mail(2))
+	if st, page := form("/access/verify", m[2]); st != 200 || keyRe.MatchString(page) {
+		t.Fatalf("confirmation (externe) : %d\n%s", st, page)
+	}
+	if !strings.Contains(mail(3), "rssi@example.test") {
+		t.Error("administrateurs non prévenus")
+	}
+	if g.C().Users["paul"] != nil {
+		t.Fatal("un domaine externe ne doit pas être approuvé automatiquement")
+	}
+	admin := func(method, path, body string) (int, string) {
+		req, _ := http.NewRequest(method, gw.URL+path, strings.NewReader(body))
+		req.Header.Set("X-Admin-Token", "tok")
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, _ := io.ReadAll(r.Body)
+		return r.StatusCode, string(b)
+	}
+	_, list := admin("GET", "/admin/api/access", "")
+	var l struct {
+		Requests []accessReq
+		Pending  int
+	}
+	json.Unmarshal([]byte(list), &l)
+	if l.Pending != 1 || l.Requests[0].Email != "paul@ailleurs.com" || l.Requests[0].Status != "pending" {
+		t.Fatalf("liste des demandes : %s", list)
+	}
+	if st, b := admin("POST", fmt.Sprintf("/admin/api/access/%d/approve", l.Requests[0].ID), `{"Profile":"strict"}`); st != 200 {
+		t.Fatalf("approbation : %d %s", st, b)
+	}
+	if u := g.C().Users["paul"]; u == nil || u.Profile != "strict" {
+		t.Fatalf("utilisateur approuvé : %+v", u)
+	}
+	m = link.FindStringSubmatch(mail(4))
+	if m == nil || m[1] != "/access/key" {
+		t.Fatalf("lien vers la clé absent :\n%s", mail(4))
+	}
+	st, page = form("/access/key", m[2])
+	if k := keyRe.FindStringSubmatch(page); st != 200 || k == nil || k[1] != g.C().Users["paul"].Key {
+		t.Errorf("affichage de la clé : %d\n%s", st, page)
+	}
+	if st, _ := form("/access/key", m[2]); st != 400 {
+		t.Errorf("clé affichée deux fois : %d, 400 attendu", st)
+	}
+	// unknown link
+	if st, _ := form("/access/key", "inventé-0123456789abcdefghij"); st != 400 {
+		t.Errorf("lien inventé : %d", st)
 	}
 }

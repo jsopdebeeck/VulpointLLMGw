@@ -29,6 +29,7 @@ type AlertsCfg struct {
 	OnViolation     bool     `toml:"on_violation"`
 	OnQuota         bool     `toml:"on_quota"`
 	OnError         bool     `toml:"on_error"`
+	OnSecurity      bool     `toml:"on_security"` // address banned after failed sign-ins
 
 	password string
 }
@@ -39,7 +40,8 @@ type Alert struct {
 	User, Profile, Target, Model, Detail string
 }
 
-var alertLabels = map[string]string{"file": "Fichier bloqué", "violation": "Violation (requête bloquée)", "quota": "Quota atteint", "error": "Erreur LLM"}
+var alertLabels = map[string]string{"file": "Fichier bloqué", "violation": "Violation (requête bloquée)", "quota": "Quota atteint", "error": "Erreur LLM",
+	"security": "Sécurité (adresse bloquée)"}
 
 type Alerter struct {
 	g       *Gateway
@@ -68,7 +70,7 @@ func (a *Alerter) FromRec(rec *Rec, kinds string, files []string) {
 		al.Kind, al.Detail = "violation", "données bloquées : "+kinds
 	case rec.Err == "quota" && ac.OnQuota:
 		al.Kind, al.Detail = "quota", "quota atteint ("+kinds+")"
-	case ac.OnError && rec.Blocked == 0 && (rec.Status == 0 || rec.Status >= 500 || (rec.Status == 401 || rec.Status == 403) && strings.Contains(rec.Err, "upstream")):
+	case ac.OnError && rec.Blocked == 0 && rec.Err != "busy" && (rec.Status == 0 || rec.Status >= 500 || (rec.Status == 401 || rec.Status == 403) && strings.Contains(rec.Err, "upstream")):
 		al.Kind, al.Detail = "error", fmt.Sprintf("HTTP %d %s", rec.Status, truncKB(rec.Err, 1))
 	default:
 		return
@@ -87,6 +89,22 @@ func (a *Alerter) FromRec(rec *Rec, kinds string, files []string) {
 			if len(a.pending[r]) < 500 {
 				a.pending[r] = append(a.pending[r], al)
 			}
+		}
+	}
+}
+
+// Security reports an address banned by the web shield to the default recipients.
+func (a *Alerter) Security(addr, detail string) {
+	ac := a.g.C().Alerts
+	if !ac.Enabled || !ac.OnSecurity {
+		return
+	}
+	al := Alert{TS: time.Now(), Kind: "security", User: addr, Detail: detail}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for _, r := range ac.To {
+		if r = strings.TrimSpace(r); r != "" && len(a.pending[r]) < 500 {
+			a.pending[r] = append(a.pending[r], al)
 		}
 	}
 }
@@ -130,7 +148,7 @@ func digest(als []Alert) (string, string) {
 		n[a.Kind]++
 	}
 	var parts []string
-	for _, k := range []string{"violation", "quota", "error"} {
+	for _, k := range []string{"security", "file", "violation", "quota", "error"} {
 		if n[k] > 0 {
 			parts = append(parts, fmt.Sprintf("%d %s", n[k], strings.ToLower(alertLabels[k])))
 		}
@@ -140,6 +158,10 @@ func digest(als []Alert) (string, string) {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Gateway LLM : %d alerte(s) entre %s et %s.\n\n", len(als), als[0].TS.Format("02/01 15:04"), als[len(als)-1].TS.Format("02/01 15:04"))
 	for _, a := range als {
+		if a.Kind == "security" {
+			fmt.Fprintf(&b, "%s  %-28s  %s\n", a.TS.Format("02/01 15:04:05"), alertLabels[a.Kind], a.Detail)
+			continue
+		}
 		fmt.Fprintf(&b, "%s  %-28s  utilisateur %s (profil %s)  →  %s/%s\n    %s\n", a.TS.Format("02/01 15:04:05"), alertLabels[a.Kind],
 			a.User, a.Profile, a.Target, a.Model, a.Detail)
 	}

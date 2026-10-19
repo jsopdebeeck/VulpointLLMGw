@@ -1,4 +1,4 @@
-# llmgw : service systemd. Installé par deploy/deploy.sh dans /etc/systemd/system/.
+# llmgw : service systemd. Installé par setup.sh (archive Linux de build.sh) dans /etc/systemd/system/.
 # Clés des LLM cibles : /opt/llmgw/secrets.env (droits 600), une variable par ligne.
 
 [Unit]
@@ -16,6 +16,8 @@ EnvironmentFile=/opt/llmgw/secrets.env
 Environment=TZ=Europe/Brussels
 Restart=on-failure
 RestartSec=3
+# connexions simultanées (clients + LLM cibles, streaming)
+LimitNOFILE=65536
 
 # durcissement : seul /opt/llmgw est accessible en écriture (config.toml, .bak-*, gateway.db)
 NoNewPrivileges=true

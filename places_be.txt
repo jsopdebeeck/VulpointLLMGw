@@ -1,5 +1,6 @@
 # Localités belges (communes et sections courantes). Liste indicative : complétez via un détecteur « words_file ».
-# Mots ambigus volontairement absents (Boom, Peer, Lint, Spa, Hal, As, Mol…).
+# Mots ambigus volontairement absents (Boom, Peer, Lint, Spa, Hal, As, Mol, Manage, Jambes…).
+# Une localité trouvée dans une requête n'y est reprise ailleurs qu'avec sa majuscule (Forest, pas « the forest »).
 # Bruxelles-Capitale
 Bruxelles
 Brussel
@@ -73,7 +74,6 @@ Péruwelz
 Enghien
 Lessines
 Braine-le-Comte
-Manage
 Morlanwelz
 Seneffe
 Jolimont
@@ -90,7 +90,6 @@ Genval
 Jodoigne
 Tubize
 Namur
-Jambes
 Dinant
 Gembloux
 Andenne
@@ -159,7 +158,6 @@ Dendermonde
 Termonde
 Geel
 Herentals
-Mol
 Tienen
 Tirlemont
 Tongeren

@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 // Context detectors: identifiers introduced by a keyword ("Dossier patient 676888-67")
@@ -111,17 +112,35 @@ func findDates(s string) [][2]int {
 	return out
 }
 
-var birthCues = []string{"ne le", "nee le", "ne(e) le", "ne ", "nee ", "naissance", "dob", "born", "geboren", "geb.", "date of birth", "birth"}
+// birthCues: whole words before a date of birth (not inside "une", "deadline", "online").
+var birthCues = map[string]bool{"naissance": true, "dob": true, "born": true, "birth": true, "birthday": true, "birthdate": true,
+	"geboren": true, "geb": true, "geboortedatum": true}
+
+func notAlnum(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) }
+
+// birthCue: a cue word in the text before a date. "né", "née" need their accent or "le" after
+// them: a bare "ne" is the French negation.
+func birthCue(before string) bool {
+	ws := strings.FieldsFunc(fold(before), notAlnum)
+	for i, w := range ws {
+		if birthCues[w] || (w == "ne" || w == "nee") && i+1 < len(ws) && ws[i+1] == "le" {
+			return true
+		}
+	}
+	for _, w := range strings.FieldsFunc(strings.ToLower(before), notAlnum) {
+		switch w {
+		case "né", "née", "nés", "nées":
+			return true
+		}
+	}
+	return false
+}
 
 func findBirthdates(s string) [][2]int {
 	var out [][2]int
 	for _, m := range findDates(s) {
-		before := fold(s[max(0, m[0]-30):m[0]])
-		for _, c := range birthCues {
-			if strings.Contains(before, c) {
-				out = append(out, m)
-				break
-			}
+		if birthCue(strings.ToValidUTF8(s[max(0, m[0]-30):m[0]], "")) {
+			out = append(out, m)
 		}
 	}
 	return out

@@ -76,7 +76,22 @@ func responseText(v any) string {
 
 func (s *Store) initDebug() error { _, err := s.db.Exec(debugSchema); return err }
 
-func (s *Store) AddDebug(e *DebugEntry, retentionHours int) {
+// QueueDebug hands an exchange to the Debug writer; never blocks the request.
+func (s *Store) QueueDebug(e *DebugEntry) {
+	select {
+	case s.dbg <- e:
+	default:
+		log.Print("debug : file saturée, échange non archivé")
+	}
+}
+
+func (s *Store) debugWriter() {
+	for e := range s.dbg {
+		s.AddDebug(e)
+	}
+}
+
+func (s *Store) AddDebug(e *DebugEntry) {
 	mp, _ := json.Marshal(e.Mapping)
 	ev, _ := json.Marshal(e.Events)
 	if _, err := s.db.Exec(`INSERT INTO debug(ts,user,profile,target,model,api,status,conv,blocked,err,req,resp,mapping,events)
@@ -84,7 +99,6 @@ func (s *Store) AddDebug(e *DebugEntry, retentionHours int) {
 		e.Err, e.Req, e.Resp, string(mp), string(ev)); err != nil {
 		log.Print("debug : ", err)
 	}
-	s.PurgeDebug(retentionHours)
 }
 
 func (s *Store) PurgeDebug(hours int) {

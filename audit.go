@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"net"
 	"net/http"
 	"sort"
 	"strconv"
@@ -81,10 +80,12 @@ func (g *Gateway) actor(r *http.Request) *Actor {
 		}
 		return &Actor{Name: s.Email, Role: a.Role, Debug: a.Role == "admin" || a.Debug}
 	}
-	switch {
-	case s.Role == "admin" || s.Admin:
+	// provider rules, re-evaluated with the current configuration
+	switch gr := g.access(cfg, s); {
+	case gr == nil:
+	case gr.Role == "admin":
 		return &Actor{Name: s.Email, Role: "admin", Debug: true}
-	case s.Role == "support":
+	case gr.Role == "support":
 		return &Actor{Name: s.Email, Role: "support"}
 	}
 	return nil
@@ -98,6 +99,7 @@ func (g *Gateway) guard(allow func(*Actor) bool, h http.HandlerFunc) http.Handle
 		a := g.actor(r)
 		if a == nil {
 			if r.Header.Get("X-Admin-Token") != "" {
+				authFailed(r)
 				g.auditOnce("fail:adm:"+clientIP(r), 5*time.Minute, &Actor{Name: "inconnu"}, "connexion refusée", "Admin (jeton)", "jeton invalide · ip "+clientIP(r))
 			}
 			http.Error(w, "connexion administrateur requise", 401)
@@ -139,13 +141,6 @@ func (g *Gateway) auditOnce(key string, gap time.Duration, a *Actor, action, tar
 	}
 	loginSeen.Store(key, now)
 	g.audit(a, action, target, detail)
-}
-
-func clientIP(r *http.Request) string {
-	if h, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
-		return h
-	}
-	return r.RemoteAddr
 }
 
 // noteSignIn records the use of a gateway key: the chat window (/v1/me, every 30 min at most)
@@ -307,7 +302,8 @@ func configChanges(old, nw *Config) []string {
 		a, b  any
 	}{{"détecteurs", old.Detectors, nw.Detectors}, {"liste « jamais anonymiser »", old.Privacy, nw.Privacy},
 		{"mode DEBUG", old.Debug, nw.Debug}, {"alertes", old.Alerts, nw.Alerts}, {"SSO", old.Auth, nw.Auth},
-		{"comptes d'administration", old.Admins, nw.Admins}, {"serveur", old.Server, nw.Server}} {
+		{"comptes d'administration", old.Admins, nw.Admins}, {"serveur", old.Server, nw.Server},
+		{"protection web", old.Security, nw.Security}, {"demandes d'accès", old.Access, nw.Access}} {
 		if !same(x.a, x.b) {
 			out = append(out, x.label+" modifié(s)")
 		}

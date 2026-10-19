@@ -44,14 +44,20 @@ var (
 	reStreetNL = regexp.MustCompile(`\b[\p{Lu}][\p{L}\-]+(?:straat|laan|steenweg|weg|lei|plein|dreef|kaai|singel|markt|pad)\s+\d{1,4}[a-zA-Z]?(?:\s*(?:bus|b)\s*\d+)?\b`)
 	// "1000 Bruxelles", "B-6041 Gosselies"
 	rePostal = regexp.MustCompile(`\b(B-|BE-)?([1-9]\d{3})\s+([\p{Lu}][\p{L}'’\-]+(?:[ \-][\p{Lu}][\p{L}'’\-]+){0,3})`)
+	// reStreet is only tried where a street type starts
+	streetList = func() *wordList {
+		w := &wordList{anch: regexp.MustCompile(`^` + reStreet.String()), starts: map[string]bool{}, fold: true, asciiB: true}
+		for _, t := range strings.Split(streetTypes, "|") {
+			w.starts[w.key(strings.TrimSuffix(strings.ReplaceAll(t, `\.`, "."), "."))] = true
+		}
+		return w
+	}()
 )
 
 func findAddresses(s string) [][2]int {
 	var out [][2]int
-	for _, re := range []*regexp.Regexp{reStreet, reStreetNL} {
-		for _, m := range re.FindAllStringIndex(s, -1) {
-			out = append(out, [2]int{m[0], m[1]})
-		}
+	for _, m := range append(streetList.find(s), reStreetNL.FindAllStringIndex(s, -1)...) {
+		out = append(out, [2]int{m[0], m[1]})
 	}
 	for _, m := range rePostal.FindAllStringSubmatchIndex(s, -1) {
 		loc := s[m[6]:m[7]]
@@ -82,7 +88,7 @@ func findPlaces(s string) [][2]int {
 				continue
 			}
 			v := s[ts[i].s:ts[i+n-1].e]
-			if isCap(ts[i].w) && placeSet[fold(v)] && (n == 1 || gapOK(s[ts[i].e:ts[i+1].s])) {
+			if isCap(ts[i].w) && placeSet[fold(v)] && (n == 1 || gapOK(ts[i].w, s[ts[i].e:ts[i+1].s])) {
 				out = append(out, [2]int{ts[i].s, ts[i+n-1].e})
 				i += n - 1
 				break

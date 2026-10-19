@@ -149,7 +149,7 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
 <body>
 <div class="page">
   <nav class="toc" aria-label="Sommaire">
-    <a class="toc-brand" href="https://vulpoint.com" target="_blank" rel="noopener"><img src="img/vulpoint-logo.jpg" alt="Vulpoint"><div><b>LLMGW Chat</b><small>by Vulpoint.com · v1.3.0</small></div></a>
+    <a class="toc-brand" href="https://vulpoint.com" target="_blank" rel="noopener"><img src="img/vulpoint-logo.jpg" alt="Vulpoint"><div><b>LLMGW Chat</b><small>by Vulpoint.com · v1.4.0</small></div></a>
     <div class="label">Guide utilisateur</div>
     <ol>
       <li><a href="#principe"><span>1</span>À quoi sert le chat</a></li>
@@ -176,7 +176,7 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
       <div class="eyebrow">Guide utilisateur</div>
       <h1>Utiliser le chat IA de l'organisation</h1>
       <p class="lede">Le chat vous donne accès aux modèles d'IA autorisés par votre organisation. Vos messages passent par une passerelle qui protège les données sensibles avant qu'elles ne quittent le réseau.</p>
-      <div class="meta"><span><b>Version</b> 1.3.0</span><span><b>Adresse</b> /chat sur la passerelle de votre organisation</span><span><b>Langues</b> anglais, français, néerlandais</span></div>
+      <div class="meta"><span><b>Version</b> 1.4.0</span><span><b>Adresse</b> /chat sur la passerelle de votre organisation</span><span><b>Langues</b> anglais, français, néerlandais</span></div>
     </header>
 
     <section id="principe">
@@ -198,6 +198,14 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
         <li><strong>Avec une clé personnelle</strong> (commence par <code>gw-</code>), fournie par l'administrateur. Elle reste dans l'onglet du navigateur et disparaît à sa fermeture.</li>
       </ul>
       <p>La liste en bas de la carte permet de choisir la langue dès cet écran.</p>
+      <h3>Demander un accès</h3>
+      <p>Si l'administrateur l'a activé, le lien <strong>« Demander un accès »</strong> apparaît sous le champ de clé. Indiquez votre nom, votre adresse email professionnelle et, si vous le souhaitez, le motif de votre demande.</p>
+      <ol>
+        <li>Vous recevez un email : ouvrez le lien qu'il contient, puis cliquez sur <strong>« Confirmer »</strong>. Le lien est valable 24 heures et ne sert qu'une fois.</li>
+        <li>Si votre adresse appartient à un domaine reconnu par l'organisation, votre accès est ouvert tout de suite et votre clé s'affiche sur la page. <strong>Copiez-la aussitôt</strong> : elle ne sera plus affichée.</li>
+        <li>Sinon, votre demande est transmise à l'administrateur. S'il l'accepte, vous recevez un email avec un lien pour afficher votre clé, une seule fois. Sans réponse dans les deux semaines, la demande est refusée.</li>
+      </ol>
+      <p>Votre clé ne vous est jamais envoyée par email.</p>
       <figure class="shot"><div class="frame"><img src="img/chat-login.jpg" width="1600" height="894" alt="Écran de connexion du chat : logo, boutons Microsoft et Google, champ de clé, choix de la langue" loading="lazy"></div><figcaption class="bar"><span>Écran de connexion</span><a href="img/chat-login.jpg">Taille réelle</a></figcaption></figure>
       <p class="note warn"><strong>Votre clé est personnelle.</strong> Ne la partagez pas et ne la collez pas dans un autre outil : tout ce qui est fait avec elle vous est attribué. En cas de doute, demandez une nouvelle clé à l'administrateur.</p>
     </section>
@@ -292,6 +300,10 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
           <tr><td class="k">aucun LLM cible disponible</td><td>les fournisseurs de votre profil sont momentanément indisponibles</td><td>réessayer un peu plus tard, puis prévenir le support</td></tr>
           <tr><td class="k">Clé refusée</td><td>clé inconnue ou utilisateur bloqué</td><td>vérifier la clé ou contacter l'administrateur</td></tr>
           <tr><td class="k">aucun profil de chat ne vous est attribué</td><td>votre compte SSO n'est rattaché à aucun profil</td><td>contacter l'administrateur</td></tr>
+          <tr><td class="k">trop de requêtes depuis cette adresse</td><td>la limite de débit de votre adresse est atteinte</td><td>patienter une minute</td></tr>
+          <tr><td class="k">adresse temporairement bloquée</td><td>trop de connexions refusées depuis votre adresse (clé erronée, par exemple)</td><td>attendre la fin du blocage (30 minutes d'abord), vérifier la clé, ou demander à l'administrateur de débloquer l'adresse</td></tr>
+          <tr><td class="k">passerelle surchargée</td><td>trop de requêtes sont en cours de traitement</td><td>réessayer dans un instant</td></tr>
+          <tr><td class="k">Lien invalide ou expiré</td><td>le lien de confirmation ou de clé a déjà servi ou a expiré</td><td>refaire une demande, ou demander un nouveau lien à l'administrateur</td></tr>
         </tbody>
       </table></div>
     </section>
@@ -319,7 +331,7 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
       <p>Non : les accès directs aux fournisseurs sont bloqués par la politique IA de l'organisation. Les outils compatibles (Claude Code, agents, scripts) se raccordent à la passerelle avec une clé d'application ; voir la <a href="index.html#clients">documentation d'administration</a>.</p>
     </section>
 
-    <footer class="doc"><img src="img/vulpoint-logo.jpg" alt=""><span>LLMGW 1.3.0 by <a href="https://vulpoint.com" target="_blank" rel="noopener">Vulpoint.com</a> · <a href="index.html">Documentation complète</a></span></footer>
+    <footer class="doc"><img src="img/vulpoint-logo.jpg" alt=""><span>LLMGW 1.4.0 by <a href="https://vulpoint.com" target="_blank" rel="noopener">Vulpoint.com</a> · <a href="index.html">Documentation complète</a></span></footer>
   </main>
 </div>
 </body>

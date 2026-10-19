@@ -2,7 +2,7 @@
 
 [English version](README.md)
 
-Version **1.3.0** · notes de version dans [RELEASE_NOTES.md](RELEASE_NOTES.md) · documentation intégrée sur `/docs/` (administration) et `/docs/chat.html` (guide utilisateur du chat), sources dans [docs/](docs/).
+Version **1.4.0** · notes de version dans [RELEASE_NOTES.md](RELEASE_NOTES.md) · documentation intégrée sur `/docs/` (administration) et `/docs/chat.html` (guide utilisateur du chat), sources dans [docs/](docs/).
 
 <p align="center"><img src="docs/img/architecture-fr.svg" alt="Architecture de LLMGW : utilisateurs, agents et applications de la zone de confiance ne joignent les LLM que par la passerelle, en bordure de zone ; les accès directs vers Internet sont bloqués" width="100%"></p>
 
@@ -29,7 +29,7 @@ export MISTRAL_API_KEY=… ANTHROPIC_API_KEY=… OPENAI_API_KEY=…
 
 `macapp/build.sh` construit une **LLMGW.app autonome** dans `dist/` (`macapp/build.sh --install` l'installe aussi dans Applications), ainsi que `dist/LLMGW-<version>.dmg` pour l'installer par glisser-déposer dans Applications (Go et les Command Line Tools d'Xcode servent à la construction, rien n'est nécessaire à l'exécution). La passerelle est embarquée dans l'app, en binaire universel (Apple Silicon et Intel) qui n'utilise que des bibliothèques fournies avec macOS. Les données sont dans `~/Library/Application Support/LLMGW` : au premier lancement, l'app y crée une configuration de départ avec un jeton d'administration aléatoire et un modèle `secrets.env` (droits 600). Le menu permet de modifier la configuration et les secrets, de copier le jeton d'administration et de choisir un autre dossier de données (par exemple une installation existante). Double-cliquer : une icône apparaît dans la barre des menus, avec une pastille d'état (verte en marche, orange au démarrage, rouge arrêtée) et un menu pour démarrer, arrêter ou redémarrer la passerelle, ouvrir le dashboard, le chat et la documentation, afficher le journal (`llmgw.log`) et ouvrir l'app à l'ouverture de session. L'app charge `secrets.env`, démarre la passerelle à son ouverture et l'arrête quand on la quitte. Menu en anglais, français ou néerlandais. Sans l'app, `start.command` lance la passerelle dans le Terminal en double-clic et ouvre le dashboard.
 
-Construire : `go build -o llmgw .`. Pour Linux depuis le Mac : `GOOS=linux GOARCH=amd64 go build -o dist/llmgw-linux-amd64 .` (ou directement `deploy/deploy.sh`, voir plus bas).
+Construire : `go build -o llmgw .` ; `./build.sh` produit l'app macOS et les archives Linux (voir Construire plus bas).
 
 Côté client, il suffit de changer l'URL et la clé :
 
@@ -41,30 +41,48 @@ Côté client, il suffit de changer l'URL et la clé :
 Modèle : `mistral-large` (routage automatique selon le profil) ou `mistral/mistral-large` (cible imposée).
 `GET /v1/models` liste les modèles autorisés pour l'utilisateur, `GET /v1/me` son profil, ses quotas et sa consommation.
 
-## Déployer sur un VPS
-
-Un VPS Linux (Debian 12 ou Ubuntu 24.04, systemd) suffit : 1 vCPU et 1 à 2 Go de RAM. Le gateway voit passer les données en clair avant l'anonymisation : choisir un hébergeur UE sous droit UE (OVHcloud, Scaleway, Hetzner, Infomaniak…) et signer un contrat de sous-traitance (art. 28 RGPD). Le PaaS avec volume est possible ; le serverless ne convient pas (pas de disque persistant, ni de tâches de fond, ni de streaming long garanti).
-
-Seul le binaire part sur le serveur, compilé depuis le Mac. Go n'est pas nécessaire côté serveur. `deploy/deploy.sh` fait tout en une commande :
+## Construire
 
 ```bash
-deploy/deploy.sh --config config.toml --domain gateway.mondomaine.be --admin-ip 203.0.113.7 root@mon-vps
+./build.sh                            # tests, puis app macOS + DMG et archives Linux dans dist/
+./build.sh --linux-only --skip-tests  # archives Linux seulement
+./build.sh --mac-only                 # LLMGW.app et DMG seulement
 ```
 
-1. `go vet` et `go test`, puis compilation pour l'architecture du serveur (amd64 ou arm64, détectée).
-2. Copie, puis sur le serveur : utilisateur système `llmgw`, dossier `/opt/llmgw` (700), service `deploy/llmgw.service` (systemd durci, `TZ=Europe/Brussels`).
-3. Le nouveau binaire valide la configuration (`-check`) **avant** de remplacer l'ancien. S'il ne démarre pas, le script revient à la version précédente (`llmgw.prev`).
-4. Avec `--domain`, Caddy est installé et configuré (`deploy/Caddyfile`) : HTTPS Let's Encrypt, streaming SSE sans tampon, clés retirées des journaux, `/dashboard` et `/admin` réservés aux IP `--admin-ip`. Sans `--admin-ip`, on y accède seulement par tunnel SSH : `ssh -L 8080:127.0.0.1:8080 mon-vps`, puis `http://127.0.0.1:8080/dashboard`.
+`dist/` contient alors `LLMGW.app` et `LLMGW-<version>.dmg` (Apple Silicon et Intel), `llmgw-<version>-linux-amd64.tar.gz` et `-arm64.tar.gz` (binaire statique, `setup.sh`, service systemd, Caddyfile, `LISEZMOI.txt`), et `SHA256SUMS`.
 
-**Premier déploiement.** `--config` est obligatoire. Le script crée `/opt/llmgw/secrets.env` vide (root, 600) : y mettre les clés (`MISTRAL_API_KEY=…`, une par ligne), puis `systemctl restart llmgw`. Les fichiers `words_file` relatifs doivent être copiés à côté de `config.toml`. Avant d'ouvrir le serveur : un `admin_token` long et aléatoire (vide = administration ouverte ; le script prévient), `listen = "127.0.0.1:8080"`, un pare-feu limité à 22, 80 et 443 (`ufw allow OpenSSH && ufw allow 80,443/tcp && ufw enable`) et SSH par clé seulement. Le DNS du domaine doit pointer vers le VPS pour que Let's Encrypt délivre le certificat.
+## Déployer sur un VPS
 
-**Mises à jour.** `deploy/deploy.sh root@mon-vps` (sans `--config`) remplace le binaire et garde la configuration du serveur, modifiée depuis le dashboard. Avec `--config`, l'ancienne est gardée en `config.toml.bak-deploy-*`. Un compte non root avec `sudo` fonctionne aussi.
+Un VPS Linux (Ubuntu 22.04 / 24.04 ou Debian 12, systemd) suffit : 1 vCPU et 1 à 2 Go de RAM (2 vCPU pour un trafic d'agents soutenu, voir Performances). La passerelle voit les données en clair avant l'anonymisation : choisir un hébergeur UE sous droit UE (OVHcloud, Scaleway, Hetzner, Infomaniak…) et signer un contrat de sous-traitance (art. 28 RGPD). Le serverless ne convient pas : ni disque persistant, ni tâches de fond, ni streaming long garanti.
 
-**Sauvegardes.** Sauvegarder `config.toml` et la base : `sqlite3 /opt/llmgw/gateway.db ".backup /chemin/gateway-$(date +%F).db"`, et non une simple copie du fichier pendant que le service tourne. Ne pas placer la base dans un dossier synchronisé (Dropbox…) ou réseau : SQLite en mode WAL s'y corrompt.
+**Sur un serveur neuf**, `setup.sh` (dans l'archive Linux) installe ou met à jour tout ; il se relance sans risque :
 
-**Exploitation.** `systemctl status llmgw`, `journalctl -u llmgw -f`. Si le paquet `caddy` manque (Ubuntu 22.04), l'installer depuis le dépôt officiel de Caddy, puis relancer le script.
+```bash
+scp dist/llmgw-<version>-linux-amd64.tar.gz admin@mon-vps:
+ssh admin@mon-vps
+tar xzf llmgw-<version>-linux-amd64.tar.gz && cd llmgw-<version>
+sudo ./setup.sh --domain gateway.exemple.be --email it@exemple.be --admin-ip 203.0.113.7
+```
 
-**Windows.** Le binaire compile (`GOOS=windows`), mais trois limites restent : chemins absolus de `words_file` mal gérés, pas de service Windows natif (passer par NSSM ou WinSW) et droits `0600` sans effet. Linux reste la cible recommandée.
+- Paquets système, mises à jour de sécurité automatiques, fail2ban pour SSH, pare-feu ufw (SSH d'abord, puis 80 et 443).
+- Utilisateur système `llmgw`, `/opt/llmgw` (700), service systemd durci, `secrets.env` (600) pour les clés des fournisseurs.
+- Première installation : `config.toml` généré avec un jeton d'administration aléatoire (affiché une fois, gardé dans `/opt/llmgw/admin_token.txt`), des clés d'exemple aléatoires, l'écoute en local, les proxys de confiance et les adresses d'administration dans `[security]`.
+- Avec `--domain` : Caddy et son certificat Let's Encrypt ; le dashboard n'est joignable que depuis les adresses `--admin-ip` (sinon par tunnel SSH : `ssh -L 8080:127.0.0.1:8080 mon-vps`).
+- Le nouveau binaire valide la configuration avant de remplacer l'ancien ; s'il ne démarre pas, la version précédente est rétablie.
+- Sauvegarde quotidienne de la base et de la configuration dans `/var/backups/llmgw` (14 jours).
+
+**Depuis le Mac**, `deploy/deploy.sh` fait tout en une commande (compilation, copie, `setup.sh`) :
+
+```bash
+deploy/deploy.sh --domain gateway.exemple.be --email it@exemple.be --admin-ip 203.0.113.7 admin@mon-vps
+deploy/deploy.sh admin@mon-vps       # mise à jour : configuration, base et Caddy conservés
+```
+
+Mettre ensuite les clés des fournisseurs dans `/opt/llmgw/secrets.env` (`MISTRAL_API_KEY=…`), puis `systemctl restart llmgw`. `setup.sh` ne touche pas à SSH : désactivez vous-même la connexion par mot de passe une fois votre clé en place. `setup.sh` n'a été testé qu'en environnement simulé : l'essayer d'abord sur un VPS jetable.
+
+**Sauvegardes.** Utiliser `sqlite3 gateway.db ".backup …"`, jamais une simple copie du fichier pendant que le service tourne. Ne pas placer la base dans un dossier synchronisé (Dropbox…) ou réseau : SQLite en mode WAL s'y corrompt.
+
+**Windows.** Le binaire compile (`GOOS=windows`), mais les chemins absolus de `words_file` sont mal gérés, il n'y a pas de service Windows natif (passer par NSSM ou WinSW) et les droits `0600` sont sans effet. Linux reste la cible recommandée.
 
 ## Authentification SSO (Entra ID, Google)
 
@@ -117,10 +135,35 @@ Un nom repéré une fois (« Mme Claire Dubois ») est aussi remplacé ailleurs 
 
 **Configuration.** `config.toml` est rechargé à chaud : une configuration invalide est refusée et l'ancienne reste active.
 
+**Protection web (`[security]`, page Sécurité web).** Pour une passerelle exposée sur Internet ; active par défaut. Limites par adresse (600 requêtes/min, 32 simultanées ; IPv6 par /64), blocage temporaire après 10 connexions refusées en 10 min (clé ou jeton invalide, cookie falsifié, lien inventé : 30 min, doublées à chaque récidive, 24 h au plus ; journalisé et signalé par email), liste d'adresses pour l'administration, adresse réelle du client derrière les proxys de confiance (un `X-Forwarded-For` envoyé directement par un client est ignoré), en-têtes de sécurité (CSP, HSTS en HTTPS…), HTTPS intégré en option (`tls_cert`, `tls_key`), travail d'anonymisation plafonné à deux fois le nombre de cœurs. Les appels locaux (app Mac, tunnel SSH) ne sont jamais limités. Sessions web : rôle recalculé à chaque requête, déconnexion qui révoque la session, bouton « Fermer toutes les sessions ». Une clé enregistrée n'est conservée que pour l'adresse à laquelle elle était destinée.
+
+**Demandes d'accès (`[access]`, page Demandes d'accès).** « Demander un accès » sur l'écran de connexion du chat : nom, email, motif. La personne confirme son adresse par un lien à usage unique envoyé par email (une page avec un bouton, car les filtres de messagerie ouvrent les liens). Domaine de confiance : accès accordé tout de suite avec le profil par défaut, clé gateway affichée une fois. Autre domaine : décision dans le dashboard (Admin ou Support), refus après 14 jours sans décision ; l'approbation envoie un lien à usage unique vers la clé. La clé n'est jamais envoyée par email. Prérequis : le serveur SMTP de `[alerts]` et l'adresse publique `[auth] base_url`.
+
+## Performances
+
+Mesures sur Apple M5 (10 cœurs), binaire arm64 natif, corpus de prose médicale en français avec une phrase de données personnelles par Ko. L'anonymisation est la seule étape coûteuse en CPU : la passerelle ajoute bien moins d'une milliseconde pour le routage, plus le temps d'anonymisation ci-dessous ; la latence propre du LLM (plusieurs secondes) domine.
+
+| Mesure (anonymisation, profil standard) | 1.3.0 | 1.4.0 |
+|---|---|---|
+| 1 Ko de texte | 1,9 ms | 0,36 ms |
+| 10 Ko | 21 ms | 4,4 ms |
+| 100 Ko, une requête (détecteurs en parallèle) | 250 ms | 15 ms |
+| historique de 100 Ko renvoyé par un agent, tour suivant (cache) | 200 ms | 4 ms |
+| 110 Ko avec 2 000 noms dans la mémoire des noms | 1,8 s | 50 ms |
+
+| Débit de bout en bout, texte nouveau à chaque requête (pire cas) | 10 cœurs | 2 cœurs |
+|---|---|---|
+| requêtes de 2 Ko | ~5 200 req/s (1.3.0 : ~1 100) | ~1 700 req/s |
+| requêtes de 50 Ko | ~190 req/s (1.3.0 : ~38) | ~67 req/s |
+| requêtes de 50 Ko dont le texte a déjà été vu (historique d'agent) | ~1 700 req/s | ~620 req/s |
+
+Un cœur de VPS d'entrée de gamme est plus lent qu'un cœur M5 : comptez la moitié de ces chiffres. Même ainsi, 2 vCPU absorbent plusieurs Mo de texte nouveau par seconde, bien plus que ce que les fournisseurs de LLM délivrent : la passerelle n'est pas le goulet d'étranglement. Le cache entre requêtes occupe jusqu'à ~64 Mo de mémoire.
+
 ## Limites actuelles
 
 - Noms et entreprises : détectés s'ils figurent dans une liste ou suivent un titre (M., Mme, Dr…). Sans liste, il faudrait un modèle NER (Presidio, spaCy…) branché en service.
 - Logos et texte dans les images : pas d'analyse d'image. On choisit par profil de laisser passer, remplacer par un carré blanc ou bloquer. Un modèle sans prise en charge des images peut refuser une requête qui contient le carré blanc.
+- Un nom appris à un tour donné est aussi remplacé dans les messages précédents, qui changent donc au tour suivant. Les noms d'une fiche sans libellé reconnu (« Nom : Vandamme »), les prénoms qui sont aussi des mots courants (Max, Jan, Hugo) et l'Unicode décomposé (NFD) peuvent échapper à la détection.
 - Le LLM doit recopier les jetons `«…»`. La consigne `placeholder_hint` le lui demande. Un jeton reformulé par le modèle (traduit, sans guillemets) n'est pas restauré.
 - Pas de traduction entre formats : un client OpenAI n'est routé que vers des cibles `api = "openai"`, et un client Anthropic que vers des cibles `api = "anthropic"`.
 
@@ -145,9 +188,13 @@ Un nom repéré une fois (« Mme Claire Dubois ») est aussi remplacé ailleurs 
 | `docs/` | documentation intégrée : administration, guide utilisateur du chat, captures |
 | `RELEASE_NOTES.md` | notes de version |
 | `gateway_test.go` | tests de bout en bout avec faux LLM : `go test ./...` |
+| `anon_test.go` | tests de non-régression et mesures de l'anonymisation (`go test -bench Anon`) |
 | `macapp/LLMGW.swift`, `macapp/build.sh` | app macOS autonome de la barre des menus (passerelle embarquée) et son script de construction (app + DMG) |
 | `start.command` | démarrage en double-clic dans le Terminal (macOS) |
-| `deploy/deploy.sh` | compilation, copie et redémarrage sur un VPS (`--help`) |
-| `deploy/remote-install.sh` | partie serveur de `deploy.sh` : validation, installation, retour arrière |
+| `shield.go` | protection web : adresse du client, limites, blocages, en-têtes de sécurité |
+| `access.go` | demandes d'accès : liens de confirmation, approbation, récupération de la clé |
+| `build.sh` | app macOS + DMG et archives Linux dans `dist/` |
+| `deploy/setup.sh`, `deploy/LISEZMOI.txt` | installation sur un serveur Ubuntu / Debian neuf (dans l'archive Linux) |
+| `deploy/deploy.sh` | compilation, copie et `setup.sh` sur un VPS en une commande (`--help`) |
 | `deploy/llmgw.service` | service systemd durci |
 | `deploy/Caddyfile` | HTTPS, streaming SSE et accès admin restreint |

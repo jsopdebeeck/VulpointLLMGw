@@ -23,6 +23,8 @@ type Config struct {
 	Alerts    AlertsCfg           `toml:"alerts"`
 	Auth      AuthCfg             `toml:"auth"`
 	Admins    []*AdminAccount     `toml:"admins,omitempty"` // dashboard accounts (Admin / Support)
+	Security  SecurityCfg         `toml:"security"`
+	Access    AccessCfg           `toml:"access"`
 	Detectors []*DetectorCfg      `toml:"detectors"`
 
 	allow  map[string]bool   // folded terms never anonymized
@@ -58,15 +60,24 @@ type Target struct {
 	Disabled            bool   `toml:"disabled,omitempty"`
 	Quota               *Quota `toml:"quota,omitempty"` // shared by all users of this target
 
-	key  string
-	pats []*regexp.Regexp
+	key     string
+	pats    []*regexp.Regexp
+	aliasRe map[string]*regexp.Regexp // compiled once per configuration
+}
+
+func globRe(pat string) *regexp.Regexp {
+	return regexp.MustCompile("^" + strings.ReplaceAll(regexp.QuoteMeta(pat), `\*`, ".*") + "$")
 }
 
 // Alias returns the model to send for a requested name matching an alias pattern.
 func (t *Target) Alias(model string) (string, bool) {
 	best := ""
 	for pat := range t.Aliases { // longest matching pattern wins
-		if ok, _ := regexp.MatchString("^"+strings.ReplaceAll(regexp.QuoteMeta(pat), `\*`, ".*")+"$", model); ok && len(pat) > len(best) {
+		re := t.aliasRe[pat]
+		if re == nil {
+			re = globRe(pat)
+		}
+		if re.MatchString(model) && len(pat) > len(best) {
 			best = pat
 		}
 	}
@@ -194,7 +205,7 @@ func ParseConfig(data []byte, base string) (*Config, error) {
 	if s.UpstreamTimeout <= 0 {
 		s.UpstreamTimeout = 300
 	}
-	for key, v := range map[string]*bool{"on_violation": &c.Alerts.OnViolation, "on_quota": &c.Alerts.OnQuota, "on_error": &c.Alerts.OnError} {
+	for key, v := range map[string]*bool{"on_violation": &c.Alerts.OnViolation, "on_quota": &c.Alerts.OnQuota, "on_error": &c.Alerts.OnError, "on_security": &c.Alerts.OnSecurity} {
 		if !md.IsDefined("alerts", key) { // triggers default to on
 			*v = true
 		}
@@ -231,7 +242,11 @@ func ParseConfig(data []byte, base string) (*Config, error) {
 			return nil, fmt.Errorf("target %q : %w", n, err)
 		}
 		for _, m := range t.Models {
-			t.pats = append(t.pats, regexp.MustCompile("^"+strings.ReplaceAll(regexp.QuoteMeta(m), `\*`, ".*")+"$"))
+			t.pats = append(t.pats, globRe(m))
+		}
+		t.aliasRe = map[string]*regexp.Regexp{}
+		for pat := range t.Aliases {
+			t.aliasRe[pat] = globRe(pat)
 		}
 	}
 
@@ -329,6 +344,12 @@ func ParseConfig(data []byte, base string) (*Config, error) {
 		c.keys[k] = n
 	}
 	if err := c.checkAuth(); err != nil {
+		return nil, err
+	}
+	if err := c.Security.check(base); err != nil {
+		return nil, err
+	}
+	if err := c.checkAccess(); err != nil {
 		return nil, err
 	}
 	if err := c.checkAdmins(); err != nil {

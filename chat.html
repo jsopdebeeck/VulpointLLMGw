@@ -63,6 +63,8 @@ footer { border-top: 1px solid var(--border); padding: 10px 16px 14px; backgroun
 .sso { display: grid; gap: 8px; margin: 14px 0 6px; }
 .sso a { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 9px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); text-decoration: none; font-weight: 600; }
 .sso a:hover, .sso a:focus-visible { border-color: var(--accent); outline: none; }
+#reqf { display: grid; gap: 8px; margin-top: 8px; }
+#reqf textarea { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; min-height: 60px; resize: vertical; }
 .sso .ic { width: 18px; height: 18px; border-radius: 4px; display: inline-grid; place-items: center; font-size: 11px; font-weight: 700; color: #fff; background: var(--accent); }
 .sep { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12px; margin: 14px 0 4px; }
 .sep::before, .sep::after { content: ""; flex: 1; height: 1px; background: var(--border); }
@@ -108,6 +110,16 @@ footer { border-top: 1px solid var(--border); padding: 10px 16px 14px; backgroun
     <form id="loginf" class="row"><input id="key" type="password" style="flex:1" autocomplete="off" placeholder="gw-…"><button class="btn primary">Entrer</button></form>
   </div>
   <p id="loginerr" class="err"></p>
+  <div id="reqbox" hidden>
+    <p class="hint">Pas encore d'accès ? <a href="#" id="reqopen">Demander un accès</a></p>
+    <form id="reqf" hidden>
+      <input id="rqname" maxlength="80" required autocomplete="name" placeholder="Nom et prénom">
+      <input id="rqmail" type="email" maxlength="120" required autocomplete="email" placeholder="Adresse email professionnelle">
+      <textarea id="rqwhy" maxlength="500" placeholder="Motif de la demande (facultatif)"></textarea>
+      <button class="btn primary">Envoyer la demande</button>
+    </form>
+    <p id="reqmsg" class="hint"></p>
+  </div>
   <p style="text-align:right;margin:10px 0 0"><select class="langsel" aria-label="Langue"></select></p>
 </div>
 
@@ -169,8 +181,21 @@ async function showLoginPage(msg) {
     $("#sso").hidden = !a.providers.length;
     $("#keylogin").hidden = !a.keys;
     if (a.providers.length && a.keys) $("#sso").insertAdjacentHTML("beforeend", `<div class="sep">ou avec une clé</div>`);
+    $("#reqbox").hidden = !a.access;
   } catch {}
 }
+$("#reqopen").onclick = e => { e.preventDefault(); $("#reqf").hidden = false; $("#rqname").focus(); };
+$("#reqf").onsubmit = async e => {
+  e.preventDefault();
+  const b = $("#reqf button"); b.disabled = true;
+  try {
+    const r = await fetch("/access/request", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ Name: $("#rqname").value, Email: $("#rqmail").value, Reason: $("#rqwhy").value, Lang: I18N.lang }) });
+    if (!r.ok) throw new Error((await r.text()).trim());
+    $("#reqf").hidden = true;
+    $("#reqmsg").textContent = "Demande enregistrée. Si l'adresse est valide, vous allez recevoir un email : ouvrez le lien qu'il contient pour confirmer votre adresse.";
+  } catch (err) { $("#reqmsg").textContent = err.message; } finally { b.disabled = false; }
+};
 const MAX_DOC = 300000;
 
 // ---------- auth ----------
@@ -281,8 +306,8 @@ function metaHTML(m) {
   const parts = m.kinds ? m.kinds.split(",").map(k => k.split(":")) : [];
   const kinds = parts.map(([k, n]) => `${k} ×${n}`).join(", "), ent = parts.reduce((a, [, n]) => a + +n, 0);
   return `<div class="meta">${m.target ? `<span>→ ${esc(m.target)}</span>` : ""}
-    ${m.conv > 0 ? `<span class="badge shield" title="Ces valeurs ont été remplacées par des jetons avant envoi, puis restaurées dans la réponse">${ent || m.conv} donnée(s) pseudonymisée(s) : ${esc(kinds)}${m.conv > ent ? ` · ${m.conv} occurrences dans la conversation` : ""}</span>` : m.target ? `<span class="badge none">aucune donnée sensible détectée</span>` : ""}
-    ${m.ms ? `<span>${(m.ms / 1000).toFixed(1)} s</span>` : ""}${m.tok ? `<span>${m.tok.in} → ${m.tok.out} tokens</span>` : ""}</div>`;
+    ${m.conv > 0 ? `<span class="badge shield" title="Ces valeurs ont été remplacées par des jetons avant envoi, puis restaurées dans la réponse">${ent || +m.conv || 0} donnée(s) pseudonymisée(s) : ${esc(kinds)}${m.conv > ent ? ` · ${+m.conv || 0} occurrences dans la conversation` : ""}</span>` : m.target ? `<span class="badge none">aucune donnée sensible détectée</span>` : ""}
+    ${m.ms ? `<span>${(m.ms / 1000).toFixed(1)} s</span>` : ""}${m.tok ? `<span>${+m.tok.in || 0} → ${+m.tok.out || 0} tokens</span>` : ""}</div>`;
 }
 function msgHTML(m, i) {
   if (m.role === "user") {

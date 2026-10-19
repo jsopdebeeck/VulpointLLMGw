@@ -20,6 +20,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -53,6 +54,9 @@ type ProviderCfg struct {
 	SupportGroups   []string       `toml:"support_groups,omitempty"`
 	SupportRoles    []string       `toml:"support_roles,omitempty"`
 	Mappings        []*AuthMapping `toml:"mappings,omitempty"` // first match wins
+	// TrustUnverifiedEmail (oidc): accept an email the provider does not mark as verified.
+	// Off by default: with open sign-up, anyone could claim an administrator's address.
+	TrustUnverifiedEmail bool `toml:"trust_unverified_email,omitempty"`
 
 	secret string
 	issuer string
@@ -278,11 +282,14 @@ func verifyIDToken(c *oidcClient, p *ProviderCfg, tok, nonce string) (map[string
 
 // ---------- signed cookies ----------
 
+// webSession: who signed in, not what they may do. Role and profile are recomputed from the
+// current configuration at every request, so removing a rule or a user applies at once.
 type webSession struct {
-	User, Email, Name, Provider, Profile string
-	Admin                                bool   // kept for sessions opened before roles existed
-	Role                                 string // admin | support | ""
-	Exp                                  int64
+	User, Email, Name, Provider string
+	PID                         string   // provider id
+	Groups, Roles               []string // the identity's groups and app roles used by the provider's rules
+	SID                         string   // revoked at sign-out
+	Exp                         int64
 }
 
 type loginState struct {
@@ -310,20 +317,27 @@ func metaKey(db *sql.DB, name string) ([]byte, error) {
 	return k, err
 }
 
+func (g *Gateway) key() []byte {
+	g.keyMu.RLock()
+	defer g.keyMu.RUnlock()
+	return g.sessKey
+}
+
 func (g *Gateway) seal(v any) string {
 	b, _ := json.Marshal(v)
 	p := base64.RawURLEncoding.EncodeToString(b)
-	m := hmac.New(sha256.New, g.sessKey)
+	m := hmac.New(sha256.New, g.key())
 	m.Write([]byte(p))
 	return p + "." + base64.RawURLEncoding.EncodeToString(m.Sum(nil))
 }
 
 func (g *Gateway) open(s string, v any) bool {
 	i := strings.LastIndexByte(s, '.')
-	if i < 0 || len(g.sessKey) == 0 {
+	key := g.key()
+	if i < 0 || len(key) == 0 {
 		return false
 	}
-	m := hmac.New(sha256.New, g.sessKey)
+	m := hmac.New(sha256.New, key)
 	m.Write([]byte(s[:i]))
 	sig, err := base64.RawURLEncoding.DecodeString(s[i+1:])
 	if err != nil || !hmac.Equal(sig, m.Sum(nil)) {
@@ -345,25 +359,43 @@ func (g *Gateway) session(r *http.Request) *webSession {
 		return nil
 	}
 	var s webSession
-	if !g.open(c.Value, &s) || s.Exp < time.Now().Unix() {
+	if !g.open(c.Value, &s) {
+		authFailed(r) // forged or signed with a revoked key
+		return nil
+	}
+	if s.Exp < time.Now().Unix() || g.isRevoked(s.SID) {
 		return nil
 	}
 	return &s
 }
 
+// access: the session's current rights (see ssoAccess); nil when it no longer gives any.
+func (g *Gateway) access(cfg *Config, s *webSession) *ssoGrant {
+	p := cfg.provider(s.PID)
+	if p == nil {
+		return nil
+	}
+	gr, err := cfg.ssoAccess(p, s.Email, s.Groups, s.Roles)
+	if err != nil {
+		return nil
+	}
+	return gr
+}
+
 // sessionUser maps a web session to a gateway user: the declared user with this email
 // (current profile, quotas, disabled flag) or a session-only user with the profile chosen at login.
 func (g *Gateway) sessionUser(cfg *Config, s *webSession) (string, *User) {
-	if u := cfg.Users[s.User]; u != nil && strings.EqualFold(u.Email, s.Email) {
-		if u.Disabled {
-			return s.User, nil
-		}
-		return s.User, u
-	}
-	if s.Profile == "" || cfg.Profiles[s.Profile] == nil {
+	gr := g.access(cfg, s)
+	if gr == nil {
 		return s.User, nil
 	}
-	return s.User, &User{Profile: s.Profile, Kind: "user", Email: s.Email, Description: "SSO " + s.Provider}
+	if u := cfg.Users[gr.User]; u != nil {
+		return gr.User, u
+	}
+	if gr.Profile == "" || cfg.Profiles[gr.Profile] == nil {
+		return gr.User, nil
+	}
+	return gr.User, &User{Profile: gr.Profile, Kind: "user", Email: s.Email, Description: "SSO " + s.Provider}
 }
 
 // ---------- identity -> gateway user, profile and admin right ----------
@@ -397,22 +429,43 @@ func emailMatches(pattern, email string) bool {
 	return pattern == email
 }
 
-func (cfg *Config) resolveSSO(p *ProviderCfg, claims map[string]any) (*webSession, error) {
+// ssoEmail: the identity's address, only when the provider vouches for it.
+// Entra: the UPN, set by the tenant's administrators (the email claim can be edited by users).
+// Google: email with email_verified. Other OIDC: email with email_verified, unless trust_unverified_email.
+func ssoEmail(p *ProviderCfg, claims map[string]any) (string, error) {
+	keys := []string{"email"}
+	if p.Type == "entra" {
+		keys = []string{"upn", "preferred_username", "email"}
+	}
 	email := ""
-	for _, k := range []string{"email", "preferred_username", "upn"} {
+	for _, k := range keys {
 		if v, _ := claims[k].(string); v != "" && strings.Contains(v, "@") {
-			email = strings.ToLower(v)
+			email = strings.ToLower(strings.TrimSpace(v))
 			break
 		}
 	}
 	if email == "" {
-		return nil, errors.New("le fournisseur n'a pas transmis d'adresse email")
+		return "", errors.New("le fournisseur n'a pas transmis d'adresse email")
 	}
-	if p.Type == "google" {
-		if v, ok := claims["email_verified"].(bool); ok && !v {
-			return nil, errors.New("adresse email Google non vérifiée")
+	if p.Type != "entra" && !p.TrustUnverifiedEmail {
+		if v, _ := claims["email_verified"].(bool); !v {
+			if sv, _ := claims["email_verified"].(string); sv != "true" {
+				return "", errors.New("adresse email non vérifiée par le fournisseur")
+			}
 		}
 	}
+	return email, nil
+}
+
+// ssoGrant: what an identity may do under the current configuration.
+type ssoGrant struct {
+	User, Profile string
+	Role          string // admin | support | ""
+}
+
+// ssoAccess computes the dashboard role and the gateway user / profile of an identity.
+// It runs at sign-in and again at every request (rules and accounts may have changed).
+func (cfg *Config) ssoAccess(p *ProviderCfg, email string, groups, roles []string) (*ssoGrant, error) {
 	if len(p.AllowedDomains) > 0 {
 		ok := false
 		for _, d := range p.AllowedDomains {
@@ -422,9 +475,6 @@ func (cfg *Config) resolveSSO(p *ProviderCfg, claims map[string]any) (*webSessio
 			return nil, fmt.Errorf("le domaine de %s n'est pas autorisé", email)
 		}
 	}
-	name, _ := claims["name"].(string)
-	groups, roles := strList(claims["groups"]), strList(claims["roles"])
-	// dashboard role: the account list first, then the provider's admin / support rules
 	matches := func(emails, grps, rls []string) bool {
 		ok := contains(emails, email)
 		for _, gr := range groups {
@@ -435,39 +485,80 @@ func (cfg *Config) resolveSSO(p *ProviderCfg, claims map[string]any) (*webSessio
 		}
 		return ok
 	}
-	role := ""
+	g := &ssoGrant{User: email}
+	// dashboard role: the account list first, then the provider's admin / support rules
 	if a := cfg.adminAccount(email); a != nil {
 		if !a.Disabled {
-			role = a.Role
+			g.Role = a.Role
 		}
 	} else if matches(p.AdminEmails, p.AdminGroups, p.AdminRoles) {
-		role = "admin"
+		g.Role = "admin"
 	} else if matches(p.SupportEmails, p.SupportGroups, p.SupportRoles) {
-		role = "support"
+		g.Role = "support"
 	}
-	admin := role != ""
-	s := &webSession{User: email, Email: email, Name: name, Provider: p.display(), Admin: role == "admin", Role: role}
 	for n, u := range cfg.Users { // declared user with this email: its own profile and quotas
 		if strings.EqualFold(u.Email, email) {
 			if u.Disabled {
 				return nil, fmt.Errorf("l'accès de %s est désactivé", email)
 			}
-			s.User, s.Profile = n, u.Profile
-			return s, nil
+			g.User, g.Profile = n, u.Profile
+			return g, nil
 		}
 	}
 	for _, m := range p.Mappings {
 		if (m.Group != "" && contains(groups, m.Group)) || (m.Role != "" && contains(roles, m.Role)) ||
 			(m.Email != "" && emailMatches(m.Email, email)) {
-			s.Profile = m.Profile
-			return s, nil
+			g.Profile = m.Profile
+			return g, nil
 		}
 	}
-	s.Profile = p.DefaultProfile
-	if s.Profile == "" && !admin {
+	g.Profile = p.DefaultProfile
+	if g.Profile == "" && g.Role == "" {
 		return nil, fmt.Errorf("aucun profil n'est attribué à %s (groupes, rôles et domaine sans correspondance)", email)
 	}
-	return s, nil
+	return g, nil
+}
+
+// ruleRefs: the groups and roles named by the provider's rules; only those are kept in
+// the session cookie (Entra can send hundreds of groups).
+func (p *ProviderCfg) ruleRefs() (groups, roles []string) {
+	groups = append(append([]string{}, p.AdminGroups...), p.SupportGroups...)
+	roles = append(append([]string{}, p.AdminRoles...), p.SupportRoles...)
+	for _, m := range p.Mappings {
+		if m.Group != "" {
+			groups = append(groups, m.Group)
+		}
+		if m.Role != "" {
+			roles = append(roles, m.Role)
+		}
+	}
+	return groups, roles
+}
+
+func keepListed(have, listed []string) []string {
+	var out []string
+	for _, h := range have {
+		if contains(listed, h) && !contains(out, h) {
+			out = append(out, h)
+		}
+	}
+	return out
+}
+
+func (cfg *Config) resolveSSO(p *ProviderCfg, claims map[string]any) (*webSession, *ssoGrant, error) {
+	email, err := ssoEmail(p, claims)
+	if err != nil {
+		return nil, nil, err
+	}
+	lg, lr := p.ruleRefs()
+	groups, roles := keepListed(strList(claims["groups"]), lg), keepListed(strList(claims["roles"]), lr)
+	gr, err := cfg.ssoAccess(p, email, groups, roles)
+	if err != nil {
+		return nil, nil, err
+	}
+	name, _ := claims["name"].(string)
+	return &webSession{User: gr.User, Email: email, Name: name, Provider: p.display(), PID: p.ID,
+		Groups: groups, Roles: roles, SID: randToken()}, gr, nil
 }
 
 // ---------- HTTP endpoints ----------
@@ -478,8 +569,12 @@ func randToken() string {
 	return base64.RawURLEncoding.EncodeToString(b)
 }
 
+// safeNext: where to go after the sign-in, the portal or the dashboard of this gateway only.
+// ("/\t/evil.com" would become "//evil.com" once the browser strips the tab.)
+var nextRe = regexp.MustCompile(`^/(?:chat|dashboard)(?:[/?#][A-Za-z0-9/_.\-=&#?]*)?$`)
+
 func safeNext(next string) string {
-	if next == "" || !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") || strings.Contains(next, "\\") {
+	if !nextRe.MatchString(next) || strings.Contains(next, "//") || strings.Contains(next, "..") {
 		return "/chat"
 	}
 	return path.Clean(next)
@@ -492,7 +587,7 @@ func (g *Gateway) handleAuthProviders(w http.ResponseWriter, r *http.Request) {
 	for _, p := range cfg.Auth.Providers {
 		out = append(out, pv{p.ID, p.display(), p.Type})
 	}
-	writeJSON(w, map[string]any{"providers": out, "keys": !cfg.Auth.DisableKeys})
+	writeJSON(w, map[string]any{"providers": out, "keys": !cfg.Auth.DisableKeys, "access": cfg.Access.Enabled})
 }
 
 func (g *Gateway) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
@@ -576,7 +671,7 @@ func (g *Gateway) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 		authFail(w, 403, "Jeton d'identité refusé : "+err.Error())
 		return
 	}
-	s, err := cfg.resolveSSO(p, claims)
+	s, gr, err := cfg.resolveSSO(p, claims)
 	if err != nil {
 		log.Printf("sso %s : refusé : %v", p.ID, err)
 		who, _ := claims["email"].(string)
@@ -589,8 +684,8 @@ func (g *Gateway) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	s.Exp = time.Now().Add(time.Duration(cfg.Auth.SessionHours) * time.Hour).Unix()
 	g.setCookie(w, sessionCookie, g.seal(s), "/", cfg.Auth.SessionHours*3600)
-	log.Printf("sso %s : %s connecté (profil %q, rôle %q)", p.ID, s.User, s.Profile, s.Role)
-	g.audit(&Actor{Name: s.Email, Role: s.Role}, "connexion", p.display()+" · "+portal(st.Next), fmt.Sprintf("profil %q, rôle %q · ip %s", s.Profile, s.Role, clientIP(r)))
+	log.Printf("sso %s : %s connecté (profil %q, rôle %q)", p.ID, gr.User, gr.Profile, gr.Role)
+	g.audit(&Actor{Name: s.Email, Role: gr.Role}, "connexion", p.display()+" · "+portal(st.Next), fmt.Sprintf("profil %q, rôle %q · ip %s", gr.Profile, gr.Role, clientIP(r)))
 	http.Redirect(w, r, st.Next, http.StatusFound)
 }
 
@@ -598,16 +693,88 @@ func subtleNotEqual(a, b string) bool { return a == "" || !hmac.Equal([]byte(a),
 
 func (g *Gateway) handleAuthSession(w http.ResponseWriter, r *http.Request) {
 	s := g.session(r)
-	if s == nil {
+	var gr *ssoGrant
+	if s != nil {
+		gr = g.access(g.C(), s)
+	}
+	if gr == nil {
 		http.Error(w, "pas de session", 401)
 		return
 	}
-	writeJSON(w, map[string]any{"user": s.User, "email": s.Email, "name": s.Name, "provider": s.Provider,
-		"profile": s.Profile, "admin": s.Admin || s.Role == "admin", "role": s.Role, "expires": s.Exp})
+	writeJSON(w, map[string]any{"user": gr.User, "email": s.Email, "name": s.Name, "provider": s.Provider,
+		"profile": gr.Profile, "admin": gr.Role == "admin", "role": gr.Role, "expires": s.Exp})
 }
 
 func (g *Gateway) handleAuthLogout(w http.ResponseWriter, r *http.Request) {
+	if s := g.session(r); s != nil {
+		g.revoke(s.SID, s.Exp) // a copy of the cookie stops working too
+	}
 	g.setCookie(w, sessionCookie, "", "/", -1)
+	writeJSON(w, map[string]any{"ok": true})
+}
+
+// ---------- revocation ----------
+
+const revokedSchema = `CREATE TABLE IF NOT EXISTS revoked(sid TEXT PRIMARY KEY, exp INTEGER)`
+
+func (g *Gateway) loadRevoked() error {
+	if _, err := g.store.db.Exec(revokedSchema); err != nil {
+		return err
+	}
+	rs, err := g.store.db.Query(`SELECT sid, exp FROM revoked WHERE exp >= ?`, time.Now().Unix())
+	if err != nil {
+		return err
+	}
+	defer rs.Close()
+	for rs.Next() {
+		var sid string
+		var exp int64
+		if rs.Scan(&sid, &exp) == nil {
+			g.revoked.Store(sid, exp)
+		}
+	}
+	return rs.Err()
+}
+
+func (g *Gateway) revoke(sid string, exp int64) {
+	if sid == "" {
+		return
+	}
+	g.revoked.Store(sid, exp)
+	if g.store != nil {
+		g.store.db.Exec(`INSERT OR REPLACE INTO revoked VALUES(?, ?)`, sid, exp)
+	}
+}
+
+func (g *Gateway) isRevoked(sid string) bool {
+	_, ok := g.revoked.Load(sid)
+	return sid != "" && ok
+}
+
+func (g *Gateway) purgeRevoked() {
+	now := time.Now().Unix()
+	g.revoked.Range(func(k, v any) bool {
+		if v.(int64) < now {
+			g.revoked.Delete(k)
+		}
+		return true
+	})
+	g.store.db.Exec(`DELETE FROM revoked WHERE exp < ?`, now)
+}
+
+// handleRevokeAll signs every web session out (new signing key): after a suspected cookie theft.
+func (g *Gateway) handleRevokeAll(w http.ResponseWriter, r *http.Request) {
+	k := make([]byte, 32)
+	rand.Read(k)
+	if _, err := g.store.db.Exec(`INSERT OR REPLACE INTO meta VALUES('session_key', ?)`, k); err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	a := g.actor(r)
+	g.keyMu.Lock()
+	g.sessKey = k
+	g.keyMu.Unlock()
+	g.audit(a, "toutes les sessions web fermées", "SSO", "nouvelle clé de signature des sessions")
 	writeJSON(w, map[string]any{"ok": true})
 }
 

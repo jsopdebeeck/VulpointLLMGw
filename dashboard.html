@@ -214,6 +214,7 @@ tr.click { cursor: pointer; } tr.click:hover td { background: var(--grid); } tr.
       <button data-tab="report"><span class="ic">▤</span>Reporting</button>
       <div class="grp">Accès</div>
       <button data-tab="users"><span class="ic">◍</span>Utilisateurs<span class="cnt" id="cnt-users"></span></button>
+      <button data-tab="access"><span class="ic">✉</span>Demandes d'accès<span class="cnt" id="cnt-access"></span></button>
       <button data-tab="profiles"><span class="ic">▣</span>Profils<span class="cnt" id="cnt-profiles"></span></button>
       <div class="grp">Modèles</div>
       <button data-tab="targets"><span class="ic">⇢</span>LLM cibles<span class="cnt" id="cnt-targets"></span></button>
@@ -224,6 +225,7 @@ tr.click { cursor: pointer; } tr.click:hover td { background: var(--grid); } tr.
       <button data-tab="debug"><span class="ic">⌕</span>Debug</button>
       <div class="grp">Paramètres</div>
       <button data-tab="settings"><span class="ic">⚙</span>Alertes et SSO</button>
+      <button data-tab="security"><span class="ic">⛨</span>Sécurité web</button>
       <button data-tab="accounts"><span class="ic">⚿</span>Comptes d'administration</button>
       <button data-tab="audit"><span class="ic">≡</span>Journal d'audit</button>
     </nav>
@@ -541,6 +543,25 @@ const ACTIONS = {
   },
   "acc-del"(d) { const a = S.cfg.Admins[+d.i]; if (confirm(`Supprimer le compte ${a.Email} ?`)) S.cfg.Admins.splice(+d.i, 1); },
   async "audit-refresh"() { await loadAudit(); },
+  async unban(d) { try { await api("/admin/api/security/ban?address=" + encodeURIComponent(d.a), { method: "DELETE" }); toast("Adresse débloquée : " + d.a); await loadSecurity(); } catch (e) { if (e.message !== "401") toast(e.message, true); } },
+  async "sec-refresh"() { await loadSecurity(); },
+  async "acc-approve"(d) {
+    if (isDirty()) return toast("Enregistrez ou annulez d'abord vos modifications en cours.", true);
+    const p = $("#accprof-" + d.id)?.value || "";
+    try { const r = await api(`/admin/api/access/${d.id}/approve`, { method: "POST", body: JSON.stringify({ Profile: p }) }); toast(`Accès accordé : utilisateur ${r.user}. Un lien vers sa clé lui est envoyé par email.`); await loadConfig(); await loadAccess(); } catch (e) { if (e.message !== "401") toast(e.message, true); }
+  },
+  async "acc-deny"(d) {
+    if (!confirm(`Refuser la demande de ${d.email} ?`)) return;
+    try { await api(`/admin/api/access/${d.id}/deny`, { method: "POST" }); await loadAccess(); } catch (e) { if (e.message !== "401") toast(e.message, true); }
+  },
+  async "acc-resend"(d) {
+    try { await api(`/admin/api/access/${d.id}/resend`, { method: "POST" }); toast("Nouveau lien envoyé à " + d.email); await loadAccess(); } catch (e) { if (e.message !== "401") toast(e.message, true); }
+  },
+  "acc-filter"(d) { S.accFilter = d.f; },
+  async "revoke-all"() {
+    if (!confirm("Fermer toutes les sessions web (SSO) ? Chacun devra se reconnecter, vous compris si vous êtes connecté en SSO.")) return;
+    try { await api("/admin/api/sessions/revoke-all", { method: "POST" }); toast("Toutes les sessions web sont fermées."); } catch (e) { if (e.message !== "401") toast(e.message, true); }
+  },
   async "filelog-refresh"() { await loadFileLog(); },
   "ext-add"() { const v = ($("#newext")?.value || "").split(",").map(normExt).filter(x => /^[a-z0-9]{1,10}$/.test(x)); if (!v.length) return toast("Extension invalide", true); S.extraExt = [...new Set([...(S.extraExt || []), ...v])]; },
   "priv-tab"(d) { S.privTab = d.k; store.set("gwpriv", d.k); },
@@ -706,13 +727,83 @@ function viewAuth() {
       <p class="sub" style="margin-top:8px">Un utilisateur déclaré ci-dessus avec la même adresse email garde son profil et ses quotas. Session : ${a.SessionHours || 12} h. Connexion par clé sur le portail : ${a.DisableKeys ? "désactivée" : "active"}.</p>`
       : `<p class="sub">Aucun fournisseur configuré. Exemple dans config.example.toml, section [auth].</p>`}</section>`;
 }
+// ---------- tab: access requests ----------
+async function loadAccess() {
+  try { S.acc = await api("/admin/api/access"); $("#cnt-access").textContent = S.acc.pending || ""; render(); } catch (e) { if (e.message !== "401") toast(e.message, true); }
+}
+function viewAccess() {
+  const d = S.acc || { requests: [] }, a = S.cfg.Access || (S.cfg.Access = {}), b = "Access|", admin = (S.me?.role || "admin") === "admin";
+  const st = { unverified: ["badge", "email non confirmé"], pending: ["badge warn", "en attente"], approved: ["badge ok", "approuvée"], denied: ["badge bad", "refusée"], expired: ["badge", "expirée"] };
+  const f = S.accFilter || "pending", tabs = [["pending", "En attente"], ["unverified", "Non confirmées"], ["done", "Traitées"], ["all", "Toutes"]];
+  const R = d.requests.filter(r => f === "all" || (f === "done" ? ["approved", "denied", "expired"].includes(r.Status) : r.Status === f));
+  const profs = sortedNames(S.cfg.Profiles);
+  const when = ts => ts ? new Date(ts * 1000).toLocaleString(I18N.loc, { dateStyle: "short", timeStyle: "short" }) : "—";
+  const rows = R.map(r => `<tr><td>${when(r.TS)}</td><td translate="no"><b>${esc(r.Name)}</b><div class="sub mono" style="margin:0">${esc(r.Email)}</div></td>
+      <td>${r.Trusted ? '<span class="badge ok">de confiance</span>' : '<span class="badge">externe</span>'}</td>
+      <td class="wrap" translate="no" style="min-width:200px">${esc(r.Reason) || '<span class="sub">—</span>'}</td>
+      <td><span class="${st[r.Status]?.[0] || "badge"}">${st[r.Status]?.[1] || esc(r.Status)}</span>${r.User ? `<div class="sub" style="margin:0">→ <span translate="no">${esc(r.User)}</span> · ${esc(r.Profile)}</div>` : ""}${r.DecidedBy ? `<div class="sub" style="margin:0">${esc(r.DecidedBy)} · ${when(r.DecidedTS)}</div>` : ""}</td>
+      <td style="white-space:nowrap">${r.Status === "pending" ? `<select id="accprof-${r.ID}">${profs.map(p => `<option ${p === (a.DefaultProfile || "") ? "selected" : ""}>${esc(p)}</option>`).join("")}</select>
+          <button class="btn primary" data-act="acc-approve" data-id="${r.ID}">Approuver</button> <button class="btn" data-act="acc-deny" data-id="${r.ID}" data-email="${esc(r.Email)}">Refuser</button>`
+        : r.Status === "unverified" ? `<button class="btn" data-act="acc-deny" data-id="${r.ID}" data-email="${esc(r.Email)}">Refuser</button>`
+        : r.Status === "approved" ? `<button class="btn" data-act="acc-resend" data-id="${r.ID}" data-email="${esc(r.Email)}" title="Nouveau lien à usage unique vers la clé">Renvoyer le lien</button>` : ""}</td></tr>`).join("");
+  const settings = `<section class="card"><div class="chead"><div><h2>Réglages</h2><div class="sub">Une personne demande un accès depuis l'écran de connexion du chat et confirme son adresse par un lien envoyé par email. Adresse d'un domaine de confiance : accès accordé tout de suite, avec le profil par défaut. Autre domaine : la demande attend une décision ici, et elle est refusée si personne ne la traite à temps. La clé n'est jamais envoyée par email : elle s'affiche une seule fois, sur une page ouverte par un lien à usage unique.</div></div><span class="spacer"></span>
+      ${S.meta.config.Access?.Enabled ? '<span class="badge ok">actives</span>' : '<span class="badge">inactives</span>'}</div>
+    ${!d.smtp ? '<p class="help">Les demandes d\'accès envoient des emails : configurez d\'abord le serveur SMTP (Alertes et SSO).</p>' : ""}
+    ${/127\.0\.0\.1|localhost/.test(d.baseURL || "") ? `<p class="help"><span>Les liens des emails pointeront vers</span> <span class="mono" translate="no">${esc(d.baseURL)}</span> <span>: adresse injoignable depuis l'extérieur. Renseignez l'adresse publique (section [auth] base_url de config.toml).</span></p>` : ""}
+    <div class="grid2"><div class="fields">
+      <label>Activer</label><label><input type="checkbox" data-bind="${b}Enabled" ${a.Enabled ? "checked" : ""} ${admin ? "" : "disabled"}> accepter les demandes d'accès</label>
+      <label>Domaines de confiance</label><input class="w100 mono" data-type="list" data-bind="${b}TrustedDomains" value="${esc((a.TrustedDomains || []).join(", "))}" placeholder="exemple.be, hopital.be" ${admin ? "" : "disabled"}>
+      <label>Profil par défaut</label><select data-bind="${b}DefaultProfile" ${admin ? "" : "disabled"}>${opts(Object.fromEntries(profs.map(p => [p, p])), a.DefaultProfile, '<option value="">—</option>')}</select>
+    </div><div class="fields">
+      <label>Prévenir</label><input class="w100" data-type="list" data-bind="${b}Notify" value="${esc((a.Notify || []).join(", "))}" placeholder="destinataires des alertes par défaut" ${admin ? "" : "disabled"}>
+      <label>Validité des liens</label><div><input class="num" style="width:80px" data-type="num" data-bind="${b}LinkHours" value="${a.LinkHours || ""}" placeholder="24" ${admin ? "" : "disabled"}> heures</div>
+      <label>Refus automatique</label><div><input class="num" style="width:80px" data-type="num" data-bind="${b}ExpireDays" value="${a.ExpireDays || ""}" placeholder="14" ${admin ? "" : "disabled"}> jours sans décision</div>
+    </div></div></section>`;
+  return `<section class="card"><div class="chead"><div><h2>Demandes</h2><div class="sub">${d.pending || 0} en attente de décision. Approuver crée l'utilisateur avec le profil choisi et lui envoie un lien vers sa clé.</div></div><span class="spacer"></span>
+      ${tabs.map(([k, l]) => `<button class="btn ${k === f ? "primary" : ""}" data-act="acc-filter" data-f="${k}">${l}</button>`).join(" ")}</div>
+      <div class="tw"><table><thead><tr><th>Date</th><th>Demandeur</th><th>Domaine</th><th>Motif</th><th>État</th><th></th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="6" class="sub">Aucune demande.</td></tr>'}</tbody></table></div></section>` + settings;
+}
+
+// ---------- tab: web security ----------
+async function loadSecurity() { try { S.sec = await api("/admin/api/security"); render(); } catch (e) { if (e.message !== "401") toast(e.message, true); } }
+function viewSecurity() {
+  const s = S.cfg.Security || (S.cfg.Security = {}), b = "Security|", d = S.sec || { bans: [] }, saved = S.meta.config.Security || {};
+  const num = (f, ph, unit) => `<div><input class="num" style="width:90px" data-type="num" data-bind="${b}${f}" value="${s[f] || ""}" placeholder="${ph}"> ${unit}</div>`;
+  const list = (f, ph) => `<input class="w100 mono" data-type="list" data-bind="${b}${f}" value="${esc((s[f] || []).join(", "))}" placeholder="${ph}">`;
+  const bans = d.bans.map(x => `<tr><td class="mono" translate="no">${esc(x.Address)}</td><td>${new Date(x.Until * 1000).toLocaleString(I18N.loc, { dateStyle: "short", timeStyle: "short" })}</td>
+      <td class="n">${+x.Bans || 0}</td><td>${esc(x.Reason)}</td><td><button class="btn" data-act="unban" data-a="${esc(x.Address)}">Débloquer</button></td></tr>`).join("");
+  return `<section class="card"><div class="chead"><div><h2>Protection web</h2><div class="sub">Pour une passerelle exposée sur Internet (VPS) : limite de débit et de connexions simultanées par adresse, blocage temporaire après des connexions refusées (clé, jeton, cookie falsifié), en-têtes de sécurité, adresses autorisées pour l'administration. Les appels locaux (app Mac, tunnel SSH) ne sont jamais limités.</div></div><span class="spacer"></span>
+      ${saved.Disabled ? '<span class="badge warn">limites désactivées</span>' : '<span class="badge ok">active</span>'}</div>
+    <p class="sub">Votre adresse vue par la passerelle : <b class="mono" translate="no">${esc(d.you || "—")}</b><span>${d.proxied ? "(derrière un proxy de confiance)" : "(connexion directe)"}</span>${d.tls ? "<span>· HTTPS intégré</span>" : ""}</p>
+    <div class="grid2"><div class="fields">
+      <label>Limites</label><label><input type="checkbox" data-bind="${b}Disabled" ${s.Disabled ? "checked" : ""}> désactiver la limite de débit et les blocages</label>
+      <label>Débit par adresse</label>${num("RatePerMin", "600", "requêtes par minute")}
+      <label>Simultanées par adresse</label>${num("MaxConcurrent", "32", "requêtes en cours")}
+      <label>Blocage après</label>${num("BanAfter", "10", "connexions refusées")}
+      <label>Fenêtre</label>${num("BanWindowMin", "10", "minutes")}
+      <label>Durée du blocage</label>${num("BanMinutes", "30", "minutes, doublée à chaque récidive (24 h au plus)")}
+    </div><div class="fields">
+      <label>Administration depuis</label>${list("AdminAllow", "toutes les adresses ; ex. 203.0.113.7, 10.0.0.0/8")}
+      <label>Proxys de confiance</label>${list("TrustedProxies", "127.0.0.1/32, ::1/128 (Caddy, nginx sur ce serveur)")}
+      <label>Réseaux exemptés</label>${list("Exempt", "aucun ; ex. 10.0.0.0/8 (réseau interne)")}
+      <label>HTTPS intégré : certificat</label><input class="w100 mono" data-bind="${b}TLSCert" value="${esc(s.TLSCert)}" placeholder="vide = HTTP (derrière Caddy) ; /etc/llmgw/fullchain.pem">
+      <label>HTTPS intégré : clé</label><input class="w100 mono" data-bind="${b}TLSKey" value="${esc(s.TLSKey)}" placeholder="/etc/llmgw/privkey.pem">
+    </div></div>
+    <p class="help">La liste « Administration depuis » s'applique au dashboard et à l'API d'administration. Vérifiez que votre adresse y figure avant d'enregistrer. Le HTTPS intégré et l'adresse d'écoute sont pris en compte au prochain redémarrage.</p></section>
+    <section class="card"><div class="chead"><div><h2>Adresses bloquées</h2><div class="sub">Bloquées après trop de connexions refusées. Chaque blocage est inscrit au journal d'audit et, si les alertes sont actives, signalé par email.</div></div><span class="spacer"></span>
+      <button class="btn" data-act="sec-refresh">Rafraîchir</button></div>
+      <div class="tw"><table><thead><tr><th>Adresse</th><th>Jusqu'à</th><th class="n">Blocages</th><th>Motif</th><th></th></tr></thead><tbody>${bans || '<tr><td colspan="5" class="sub">Aucune adresse bloquée.</td></tr>'}</tbody></table></div></section>
+    <section class="card"><div class="chead"><div><h2>Sessions web</h2><div class="sub">Une déconnexion révoque la session, même si son cookie a été copié. En cas de doute (poste perdu, cookie volé), fermez toutes les sessions : une nouvelle clé de signature est créée.</div></div><span class="spacer"></span>
+      <button class="btn" data-act="revoke-all">Fermer toutes les sessions</button></div></section>`;
+}
 function viewAlerts() {
   const a = S.cfg.Alerts, b = "Alerts|", saved = S.meta.config.Alerts || {};
   return `<section class="card"><div class="chead"><div><h2>Alertes par email</h2><div class="sub">Un récapitulatif toutes les N minutes, envoyé aux emails « Alerter » du profil concerné et aux destinataires par défaut ci-dessous. Aucune valeur sensible dans les messages.</div></div><span class="spacer"></span>
       ${saved.Enabled ? '<span class="badge ok">actives</span>' : '<span class="badge">inactives</span>'}<button class="btn" data-act="alert-test" ${saved.Enabled || saved.SMTPHost ? "" : 'disabled title="Enregistrer d\'abord"'}>Envoyer un test</button></div>
     <div class="grid2"><div class="fields">
       <label>Activer</label><label><input type="checkbox" data-bind="${b}Enabled" ${a.Enabled ? "checked" : ""}> envoyer des alertes</label>
-      <label>Déclencheurs</label><div><label><input type="checkbox" data-bind="${b}OnViolation" ${a.OnViolation ? "checked" : ""}> violation</label> &nbsp; <label><input type="checkbox" data-bind="${b}OnQuota" ${a.OnQuota ? "checked" : ""}> quota</label> &nbsp; <label><input type="checkbox" data-bind="${b}OnError" ${a.OnError ? "checked" : ""}> erreur LLM</label></div>
+      <label>Déclencheurs</label><div><label><input type="checkbox" data-bind="${b}OnViolation" ${a.OnViolation ? "checked" : ""}> violation</label> &nbsp; <label><input type="checkbox" data-bind="${b}OnQuota" ${a.OnQuota ? "checked" : ""}> quota</label> &nbsp; <label><input type="checkbox" data-bind="${b}OnError" ${a.OnError ? "checked" : ""}> erreur LLM</label> &nbsp; <label><input type="checkbox" data-bind="${b}OnSecurity" ${a.OnSecurity ? "checked" : ""}> adresse bloquée</label></div>
       <label>Destinataires par défaut</label><input class="w100" data-type="list" data-bind="${b}To" value="${esc((a.To || []).join(", "))}" placeholder="rssi@exemple.be, admin@exemple.be">
       <label>Fréquence</label><div><input class="num" style="width:80px" data-type="num" data-bind="${b}IntervalMinutes" value="${a.IntervalMinutes || 15}"> minutes (récapitulatif)</div>
     </div><div class="fields">
@@ -766,7 +857,7 @@ function viewTargets() {
         <label>Clé : variable d'env.</label><input class="w100 mono" data-bind="${b}APIKeyEnv" value="${esc(t.APIKeyEnv)}" placeholder="ex. MISTRAL_API_KEY (recommandé)">
         <label>Clé : valeur directe</label><input class="w100 mono" type="password" autocomplete="new-password" data-type="secret" ${t.APIKey === KEEP ? "data-had=1" : ""} data-bind="${b}APIKey" value="${t.APIKey === KEEP ? "" : esc(t.APIKey)}" placeholder="${t.APIKey === KEEP ? "enregistrée (vide = conserver)" : "écrite dans config.toml"}">
         <label>État</label><div>${keyState}</div>
-        <label>En-têtes HTTP<br><span class="sub">une ligne « nom: valeur »</span></label><textarea class="w100 mono" style="min-height:44px" data-type="kv" data-bind="${b}Headers">${esc(Object.entries(t.Headers || {}).map(([k, v]) => k + ": " + v).join("\n"))}</textarea>
+        <label>En-têtes HTTP<br><span class="sub">une ligne « nom: valeur » ; __keep__ = valeur enregistrée, conservée</span></label><textarea class="w100 mono" style="min-height:44px" data-type="kv" data-bind="${b}Headers">${esc(Object.entries(t.Headers || {}).map(([k, v]) => k + ": " + v).join("\n"))}</textarea>
         <label>Options</label><div><label><input type="checkbox" data-bind="${b}StreamUsage" ${t.StreamUsage ? "checked" : ""}> tokens en streaming</label> &nbsp; <label title="Pour les LLM qui ne gèrent que le mode JSON simple (DeepSeek…)"><input type="checkbox" data-bind="${b}DowngradeJSONSchema" ${t.DowngradeJSONSchema ? "checked" : ""}> json_schema → json_object</label> &nbsp; <label><input type="checkbox" data-bind="${b}Disabled" ${t.Disabled ? "checked" : ""} data-rerender> désactivée</label></div>
         <label>Utilisée par</label><div>${profs.map(esc).join(", ") || '<span class="sub">aucun profil</span>'}</div>
         <label>Connexion</label><div>${test || '<span class="sub">« Tester » interroge /models avec la clé enregistrée</span>'}</div>
@@ -1059,6 +1150,11 @@ function viewOverview() {
   const tokenSet = saved.Server?.AdminToken === KEEP, sso = saved.Auth?.Providers || [];
   add(tokenSet || sso.length ? "" : "c", tokenSet || sso.length ? "Administration protégée" : "Administration ouverte",
     [tokenSet && "jeton d'administration", sso.length && "SSO " + sso.map(p => esc(p.Label || p.ID)).join(", ")].filter(Boolean).join(" et ") || "Ni jeton ni SSO : quiconque atteint la passerelle peut la configurer.", "settings", "Paramètres");
+  // access requests waiting for a decision
+  if (S.acc?.pending) add("w", `${S.acc.pending} demande(s) d'accès en attente`, "Adresse confirmée, décision à prendre ; sans décision, refus automatique.", "access", "Demandes d'accès");
+  // web protection
+  add(saved.Security?.Disabled ? "w" : "", saved.Security?.Disabled ? "Protection web désactivée" : "Protection web active",
+    saved.Security?.Disabled ? "Ni limite de débit ni blocage des adresses : à réserver à un réseau interne." : `${saved.Security?.RatePerMin || 600} requêtes/min par adresse, blocage après ${saved.Security?.BanAfter || 10} connexions refusées.`, "security", "Sécurité web");
   // debug
   add(saved.Debug?.Enabled ? "w" : "", saved.Debug?.Enabled ? "Mode DEBUG actif" : "Mode DEBUG inactif",
     saved.Debug?.Enabled ? `Échanges archivés en clair pendant ${saved.Debug.RetentionHours || 24} h. À désactiver après le diagnostic.` : "Aucune archive en clair.", "debug", "Debug");
@@ -1120,9 +1216,10 @@ function viewAccounts() {
       <div class="card"><h2>Droits par rôle</h2><div class="tw" style="margin-top:8px"><table><thead><tr><th>Écran</th><th>Admin</th><th>Support</th></tr></thead><tbody>
         <tr><td>Vue d'ensemble, Reporting</td><td>✓</td><td>✓ consultation</td></tr>
         <tr><td>Utilisateurs</td><td>✓</td><td>✓ créer, bloquer, clés, profil</td></tr>
+        <tr><td>Demandes d'accès</td><td>✓</td><td>✓ approuver, refuser</td></tr>
         <tr><td>Profils, Quotas</td><td>✓</td><td>consultation</td></tr>
         <tr><td>Debug (données en clair)</td><td>✓</td><td>si autorisé, chaque consultation journalisée</td></tr>
-        <tr><td>LLM cibles, Filtrage, Alertes et SSO, Comptes, Audit</td><td>✓</td><td>✗</td></tr></tbody></table></div></div>
+        <tr><td>LLM cibles, Filtrage, Alertes et SSO, Sécurité web, Comptes, Audit</td><td>✓</td><td>✗</td></tr></tbody></table></div></div>
       <div class="card"><h2>Autres accès</h2>
         <p class="sub" style="margin-top:6px">Règles des fournisseurs SSO (section [auth]), utilisées pour les adresses absentes de la liste :</p>${prov || '<p class="sub">Aucune.</p>'}
         <p class="sub">Jeton d'administration (<code>admin_token</code>) : accès de secours avec le rôle Admin. ${S.meta.config.Server?.AdminToken === KEEP ? "Défini." : "<b>Non défini.</b>"}</p></div>
@@ -1139,11 +1236,12 @@ function viewAudit() {
 }
 document.addEventListener("input", e => { if (e.target.id === "auditfilter") { S.auditFilter = e.target.value; const p = e.target.selectionStart; render(); const f = $("#auditfilter"); f.focus(); f.setSelectionRange(p, p); } });
 
-const VIEWS = { overview: viewOverview, users: viewUsers, profiles: viewProfiles, targets: viewTargets, privacy: viewPrivacy, quotas: viewQuotas, report: viewReport, debug: viewDebug, settings: viewSettings, accounts: viewAccounts, audit: viewAudit, filelog: viewFileLog };
+const VIEWS = { overview: viewOverview, users: viewUsers, profiles: viewProfiles, targets: viewTargets, privacy: viewPrivacy, quotas: viewQuotas, report: viewReport, debug: viewDebug, settings: viewSettings, security: viewSecurity, access: viewAccess, accounts: viewAccounts, audit: viewAudit, filelog: viewFileLog };
 const PAGES = {
   overview: ["Vue d'ensemble", "État de la passerelle et points d'attention sur les dernières 48 heures."],
   report: ["Reporting", "Volumes, temps de réponse, conversions et violations, par utilisateur et par LLM."],
   users: ["Utilisateurs", "Personnes et applications autorisées, leur clé gateway et leur profil."],
+  access: ["Demandes d'accès", "Demandes faites depuis le portail : adresse confirmée par email, approbation automatique pour les domaines de confiance, décision ici pour les autres."],
   profiles: ["Profils", "Règles appliquées : LLM autorisés, prompt de comportement, images, alertes et quota."],
   targets: ["LLM cibles", "Fournisseurs vers lesquels la passerelle route les requêtes, avec leurs clés et leurs modèles."],
   quotas: ["Quotas", "Limites par profil, par utilisateur et par LLM, avec la consommation en direct."],
@@ -1151,6 +1249,7 @@ const PAGES = {
   debug: ["Debug", "Archive temporaire des échanges complets, pour le dépannage."],
   filelog: ["Journal des fichiers", "Fichiers et images transmis, remplacés ou bloqués, par utilisateur : nom, taille, empreinte et action."],
   settings: ["Alertes et SSO", "Alertes par email et connexion avec Microsoft Entra ID ou Google."],
+  security: ["Sécurité web", "Protection de la passerelle exposée sur Internet : limites par adresse, blocages, administration, HTTPS."],
   accounts: ["Comptes d'administration", "Qui peut ouvrir ce dashboard, et avec quels droits : Admin (tout) ou Support (utilisateurs, statistiques, Debug sur autorisation)."],
   audit: ["Journal d'audit", "Qui a fait quoi, et quand : connexions, modifications, consultations de l'archive Debug."],
 };
@@ -1158,7 +1257,7 @@ const PAGES = {
 function allowed(tab) {
   const r = S.me?.role || "admin";
   if (r === "admin") return true;
-  return ["overview", "report", "users", "profiles", "quotas", "filelog"].includes(tab) || (tab === "debug" && S.me?.debug);
+  return ["overview", "report", "users", "access", "profiles", "quotas", "filelog"].includes(tab) || (tab === "debug" && S.me?.debug);
 }
 function applyRole() {
   document.querySelectorAll("#tabs button").forEach(b => b.hidden = !allowed(b.dataset.tab));
@@ -1194,6 +1293,8 @@ async function go(tab) {
   if (tab === "report") await loadStats();
   if (tab === "audit" || tab === "accounts") { await loadAudit(); render(); }
   if (tab === "filelog") { await loadFileLog(); render(); }
+  if (tab === "security") await loadSecurity();
+  if (tab === "access") await loadAccess();
   if (tab === "targets") testTargets(false);
   if (tab === "overview") { await Promise.all([loadOverview(), loadUsage()]); render(); }
   if (tab === "debug") { await loadDebug(); render(); }
@@ -1215,6 +1316,7 @@ async function boot() {
     S.me = await api("/admin/api/me");
     $("#login").hidden = true; $("#app").hidden = false;
     await loadUsage(); await go(S.tab); stamp(); showWho();
+    if (S.tab !== "access") api("/admin/api/access").then(a => { S.acc = a; $("#cnt-access").textContent = a.pending || ""; }).catch(() => {});
   } catch (e) { if (e.message !== "401") toast("Erreur : " + e.message, true); }
 }
 boot();

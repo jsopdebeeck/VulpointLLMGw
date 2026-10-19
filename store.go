@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -25,6 +26,7 @@ type Rec struct {
 type Store struct {
 	db   *sql.DB
 	ch   chan *Rec
+	dbg  chan *DebugEntry
 	done chan struct{}
 }
 
@@ -45,14 +47,20 @@ CREATE TABLE IF NOT EXISTS daily_det(day TEXT, user TEXT, target TEXT, kind TEXT
 const errExpr = `((status>=400 OR status=0) AND blocked=0)`
 
 func OpenStore(path string) (*Store, error) {
-	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)")
+	// secure_delete: purged Debug entries (values in clear) are overwritten, not just unlinked
+	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=secure_delete(ON)")
 	if err != nil {
 		return nil, err
 	}
 	if _, err := db.Exec(schema); err != nil {
 		return nil, err
 	}
-	s := &Store{db: db, ch: make(chan *Rec, 10000), done: make(chan struct{})}
+	// the database holds the session signing key and the Debug archive: owner only
+	// (SQLite gives the -wal and -shm files the permissions of the database)
+	if err := os.Chmod(path, 0o600); err != nil {
+		log.Printf("base : droits 600 impossibles sur %s : %v", path, err)
+	}
+	s := &Store{db: db, ch: make(chan *Rec, 10000), dbg: make(chan *DebugEntry, 200), done: make(chan struct{})}
 	if err := s.initDebug(); err != nil {
 		return nil, err
 	}
@@ -62,7 +70,14 @@ func OpenStore(path string) (*Store, error) {
 	if err := s.initFileLog(); err != nil {
 		return nil, err
 	}
+	if _, err := db.Exec(revokedSchema); err != nil {
+		return nil, err
+	}
+	if _, err := db.Exec(accessSchema); err != nil {
+		return nil, err
+	}
 	go s.writer()
+	go s.debugWriter()
 	return s, nil
 }
 
@@ -76,6 +91,7 @@ func (s *Store) Add(r *Rec) {
 
 func (s *Store) Close() {
 	close(s.ch)
+	close(s.dbg)
 	<-s.done
 	s.db.Close()
 }
@@ -105,14 +121,25 @@ func (s *Store) writer() {
 	}
 }
 
+// flush writes a batch, retried when the database is busy (rollup, vacuum…).
 func (s *Store) flush(batch []*Rec) {
 	if len(batch) == 0 {
 		return
 	}
+	var err error
+	for i := 0; i < 4; i++ {
+		if err = s.flushOnce(batch); err == nil {
+			return
+		}
+		time.Sleep(time.Duration(250<<i) * time.Millisecond)
+	}
+	log.Printf("métriques : %d enregistrement(s) perdu(s) : %v", len(batch), err)
+}
+
+func (s *Store) flushOnce(batch []*Rec) error {
 	tx, err := s.db.Begin()
 	if err != nil {
-		log.Print("métriques : ", err)
-		return
+		return err
 	}
 	defer tx.Rollback()
 	for _, r := range batch {
@@ -121,18 +148,17 @@ func (s *Store) flush(batch []*Rec) {
 			in_ms,gw_ms,up_ms,ttfb_ms,total_ms,anon,blocked,err) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 			ts, r.User, r.Profile, r.Target, r.Model, r.API, r.Status, r.Stream, r.BytesIn, r.BytesOut, r.TokIn, r.TokOut,
 			r.InMs, r.GwMs, r.UpMs, r.TtfbMs, r.TotalMs, r.Anon, r.Blocked, r.Err); err != nil {
-			log.Print("métriques : ", err)
-			return
+			return err
 		}
 		for kind, acts := range r.Dets {
 			for act, n := range acts {
-				tx.Exec(`INSERT INTO detections VALUES(?,?,?,?,?,?)`, ts, r.User, r.Target, kind, act, n)
+				if _, err := tx.Exec(`INSERT INTO detections VALUES(?,?,?,?,?,?)`, ts, r.User, r.Target, kind, act, n); err != nil {
+					return err
+				}
 			}
 		}
 	}
-	if err := tx.Commit(); err != nil {
-		log.Print("métriques : ", err)
-	}
+	return tx.Commit()
 }
 
 // Rollup generalizes raw rows older than rawDays into daily aggregates

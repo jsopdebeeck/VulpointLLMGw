@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"embed"
 	"encoding/json"
 	"errors"
@@ -33,7 +34,7 @@ var i18nJS []byte
 var docsFS embed.FS
 
 // Version of LLMGW; every release is described in RELEASE_NOTES.md.
-const Version = "1.3.0"
+const Version = "1.4.0"
 
 var sessKey []byte
 
@@ -83,21 +84,22 @@ func main() {
 	if err := meter.Preload(store); err != nil {
 		log.Printf("quotas : préchargement impossible : %v", err)
 	}
-	g := &Gateway{store: store, meter: meter, sessKey: sessKey, client: &http.Client{Transport: &http.Transport{
-		Proxy:                 http.ProxyFromEnvironment,
-		ResponseHeaderTimeout: time.Duration(cfg.Server.UpstreamTimeout) * time.Second,
-		MaxIdleConnsPerHost:   32,
-		IdleConnTimeout:       90 * time.Second,
-		ForceAttemptHTTP2:     true,
-	}}}
+	tr := http.DefaultTransport.(*http.Transport).Clone() // dial 30 s, TLS handshake 10 s
+	tr.ResponseHeaderTimeout = time.Duration(cfg.Server.UpstreamTimeout) * time.Second
+	tr.MaxIdleConnsPerHost = 64
+	g := &Gateway{store: store, meter: meter, sessKey: sessKey, shield: NewShield(), client: &http.Client{Transport: tr}}
 	g.cfg.Store(cfg)
 	g.alerts = NewAlerter(g)
+	if err := g.loadRevoked(); err != nil {
+		log.Fatalf("sessions révoquées : %v", err)
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	go g.watch(ctx, *cfgPath)
 	go g.maintenance(ctx)
 	go g.alerts.Run(ctx.Done())
+	go g.shield.run(ctx)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/chat/completions", g.handleLLM("openai"))
@@ -110,6 +112,11 @@ func main() {
 	mux.HandleFunc("GET /auth/callback/{id}", g.handleAuthCallback)
 	mux.HandleFunc("GET /auth/session", g.handleAuthSession)
 	mux.HandleFunc("POST /auth/logout", g.handleAuthLogout)
+	mux.HandleFunc("POST /access/request", g.handleAccessRequest)
+	mux.HandleFunc("GET /access/verify", g.handleAccessVerifyPage)
+	mux.HandleFunc("POST /access/verify", g.handleAccessVerify)
+	mux.HandleFunc("GET /access/key", g.handleAccessKeyPage)
+	mux.HandleFunc("POST /access/key", g.handleAccessKey)
 	mux.HandleFunc("GET /chat", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-store")
@@ -181,6 +188,11 @@ func main() {
 		writeJSON(w, map[string]any{"count": learner.Count()})
 	}))
 	mux.HandleFunc("POST /admin/api/test", g.admin(g.handleTest))
+	mux.HandleFunc("GET /admin/api/security", g.admin(g.handleSecurity))
+	mux.HandleFunc("GET /admin/api/access", g.staff(g.handleAccessList))
+	mux.HandleFunc("POST /admin/api/access/{id}/{act}", g.staff(g.handleAccessDecide))
+	mux.HandleFunc("POST /admin/api/sessions/revoke-all", g.admin(g.handleRevokeAll))
+	mux.HandleFunc("DELETE /admin/api/security/ban", g.admin(g.handleUnban))
 	mux.HandleFunc("POST /admin/api/reload", g.admin(func(w http.ResponseWriter, r *http.Request) {
 		if err := g.reload(*cfgPath); err != nil {
 			http.Error(w, err.Error(), 400)
@@ -190,10 +202,26 @@ func main() {
 		w.Write([]byte("ok"))
 	}))
 
-	srv := &http.Server{Addr: cfg.Server.Listen, Handler: mux, ReadHeaderTimeout: 15 * time.Second}
+	srv := &http.Server{Addr: cfg.Server.Listen, Handler: g.protect(mux), ReadHeaderTimeout: 15 * time.Second,
+		ReadTimeout: 10 * time.Minute, IdleTimeout: 2 * time.Minute, MaxHeaderBytes: 64 << 10,
+		TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12}}
 	go func() {
-		log.Printf("LLMGW %s à l'écoute sur http://%s (dashboard : /dashboard, documentation : /docs)", Version, cfg.Server.Listen)
-		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		sc := cfg.Security
+		scheme := "http"
+		if sc.TLSCert != "" {
+			scheme = "https"
+		}
+		log.Printf("LLMGW %s à l'écoute sur %s://%s (dashboard : /dashboard, documentation : /docs)", Version, scheme, cfg.Server.Listen)
+		if sc.Disabled {
+			log.Print("ATTENTION : protection web désactivée ([security] disabled = true)")
+		}
+		var err error
+		if sc.TLSCert != "" {
+			err = srv.ListenAndServeTLS(sc.TLSCert, sc.TLSKey)
+		} else {
+			err = srv.ListenAndServe()
+		}
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatal(err)
 		}
 	}()
@@ -251,8 +279,11 @@ func (g *Gateway) maintenance(ctx context.Context) {
 		if err := learner.Forget(365); err != nil { // names unused for a year are forgotten
 			log.Print("mémoire des noms : ", err)
 		}
-		g.store.PurgeAudit(400) // audit log kept 400 days
-		g.store.PurgeFileLog()  // file log kept 30 days
+		g.store.PurgeAudit(400)                        // audit log kept 400 days
+		g.store.PurgeFileLog()                         // file log kept 30 days
+		g.store.PurgeDebug(g.C().Debug.RetentionHours) // even when Debug is off and nobody opens the archive
+		g.purgeRevoked()
+		g.store.ExpireAccess(g.C().Access.ExpireDays) // undecided requests are refused
 		select {
 		case <-ctx.Done():
 			return

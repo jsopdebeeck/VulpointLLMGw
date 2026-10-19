@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	_ "embed"
 	"encoding/binary"
+	"hash"
 	"io"
 	"log"
 	"strings"
@@ -201,14 +202,24 @@ func isAllCaps(w string) bool {
 	return n >= 2
 }
 
-// gapOK: only spaces, a dot or a comma between two tokens of the same name.
-func gapOK(s string) bool {
-	for _, r := range s {
-		if r != ' ' && r != '.' && r != ' ' && r != '\t' {
+// gapOK: only spaces between two tokens of the same name (prev, then gap); a dot only after an
+// initial ("J. Dupont") or an abbreviated title ("Dr. Peeters"), not at the end of a sentence
+// ("Le patient Dupont. Demain…").
+func gapOK(prev, gap string) bool {
+	dot := false
+	for _, r := range gap {
+		switch r {
+		case ' ', '\u00a0', '\t':
+		case '.':
+			dot = true
+		default:
 			return false
 		}
 	}
-	return len(s) <= 3
+	if len(gap) > 3 {
+		return false
+	}
+	return !dot || utf8.RuneCountInString(prev) == 1 && isCap(prev) || shortTitles[fold(prev)]
 }
 
 // editWithin1 reports whether a and b differ by at most one insertion, deletion,
@@ -242,10 +253,14 @@ func isTitle(w string) bool {
 	if shortTitles[f] { // abbreviations need their capital: "me", "m" are ordinary French words
 		return isCap(w)
 	}
-	if utf8.RuneCountInString(f) < 5 {
+	n := utf8.RuneCountInString(f)
+	if n < 5 || n > 13 { // titles have 4 to 12 letters, one typo allowed
 		return false
 	}
 	for _, t := range titles {
+		if d := n - len(t); d < -1 || d > 1 { // titles are ASCII: len is their letter count
+			continue
+		}
 		if f == t || editWithin1(f, t) {
 			// lowercase is only a title for forms of address ("bonjour monsieur Keizer");
 			// "maître", "docteur", "professeur" are also ordinary nouns ("le fichier maître Portugal")
@@ -263,15 +278,18 @@ var addressForms = map[string]bool{"monsieur": true, "madame": true, "mademoisel
 func nameAfter(s string, ts []tok, i int) (int, int) { return nameAfterMode(s, ts, i, false) }
 
 // nameAfterMode: strict (weak evidence, e.g. a first name) refuses common words as surnames.
+// With a title or a context word, the name may start with allowed words ("Mme Claude Dubois",
+// "patient Hermes Vandamme"); allowed() then drops the names made of allowed words only.
 func nameAfterMode(s string, ts []tok, i int, strict bool) (int, int) {
-	last, n := -1, 0
+	last, n, real := -1, 0, false
 	for j := i; j < len(ts) && n < 3; j++ {
-		if j > i && !gapOK(s[ts[j-1].e:ts[j].s]) {
+		if j > i && !gapOK(ts[j-1].w, s[ts[j-1].e:ts[j].s]) {
 			break
 		}
 		w := ts[j].w
-		if isCap(w) && utf8.RuneCountInString(w) >= 2 && !notNames[fold(w)] && !isTitle(w) && !defaultAllow[fold(w)] && !(strict && commonWord(w)) {
-			last, n = j, n+1
+		al := defaultAllow[fold(w)]
+		if isCap(w) && utf8.RuneCountInString(w) >= 2 && !notNames[fold(w)] && !isTitle(w) && !(al && (strict || real)) && !(strict && commonWord(w)) {
+			last, n, real = j, n+1, real || !al
 			continue
 		}
 		if particles[fold(w)] && last >= 0 || particles[fold(w)] && j == i {
@@ -297,7 +315,7 @@ func findTitled(s string) [][2]int {
 		if f == "m" && !strings.HasPrefix(s[ts[i].e:], ".") { // "M." only
 			continue
 		}
-		if !gapOK(s[ts[i].e:ts[i+1].s]) {
+		if !gapOK(ts[i].w, s[ts[i].e:ts[i+1].s]) {
 			continue
 		}
 		if last, _ := nameAfter(s, ts, i+1); last >= 0 {
@@ -333,11 +351,11 @@ func findFirstnames(s string) [][2]int {
 			continue
 		}
 		if i > 0 && isAllCaps(ts[i-1].w) && utf8.RuneCountInString(ts[i-1].w) >= 3 && !commonWord(ts[i-1].w) &&
-			gapOK(s[ts[i-1].e:ts[i].s]) {
+			gapOK(ts[i-1].w, s[ts[i-1].e:ts[i].s]) {
 			out = append(out, [2]int{ts[i-1].s, ts[i].e})
 			continue
 		}
-		if i+1 < len(ts) && gapOK(s[ts[i].e:ts[i+1].s]) {
+		if i+1 < len(ts) && gapOK(ts[i].w, s[ts[i].e:ts[i+1].s]) {
 			if last, _ := nameAfterMode(s, ts, i+1, true); last >= 0 {
 				out = append(out, [2]int{ts[i].s, ts[last].e})
 				i = last
@@ -378,9 +396,10 @@ func variants(f string) []string {
 // (keyed by a secret stored in the database) of the folded name and of its
 // one-deletion variants are kept: the names themselves are never written.
 type Learner struct {
-	mu    sync.RWMutex
+	mu    sync.RWMutex // idx and seen
+	wmu   sync.Mutex   // database writes: the writer goroutine and Forget
 	db    *sql.DB
-	key   []byte
+	key   []byte            // set once by NewLearner
 	idx   map[uint64]uint64 // variant hash -> name hash
 	seen  map[uint64]bool
 	queue chan []string
@@ -393,7 +412,7 @@ func NewLearner(db *sql.DB) (*Learner, error) {
 		CREATE TABLE IF NOT EXISTS learned(h INTEGER PRIMARY KEY, n INTEGER, first INTEGER, last INTEGER, vars BLOB);`); err != nil {
 		return nil, err
 	}
-	l := &Learner{db: db, idx: map[uint64]uint64{}, seen: map[uint64]bool{}, queue: make(chan []string, 1000)}
+	l := &Learner{db: db, queue: make(chan []string, 1000)}
 	if err := db.QueryRow(`SELECT v FROM meta WHERE k='learn_key'`).Scan(&l.key); err != nil {
 		l.key = make([]byte, 32)
 		rand.Read(l.key)
@@ -401,22 +420,32 @@ func NewLearner(db *sql.DB) (*Learner, error) {
 			return nil, err
 		}
 	}
-	rs, err := db.Query(`SELECT h, vars FROM learned`)
-	if err != nil {
+	var err error
+	if l.idx, l.seen, err = l.load(); err != nil {
 		return nil, err
 	}
+	go l.writer()
+	return l, nil
+}
+
+// load reads the memory from the database.
+func (l *Learner) load() (map[uint64]uint64, map[uint64]bool, error) {
+	idx, seen := map[uint64]uint64{}, map[uint64]bool{}
+	rs, err := l.db.Query(`SELECT h, vars FROM learned`)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rs.Close()
 	for rs.Next() {
 		var h int64
 		var vars []byte
 		rs.Scan(&h, &vars)
-		l.seen[uint64(h)] = true
+		seen[uint64(h)] = true
 		for i := 0; i+8 <= len(vars); i += 8 {
-			l.idx[binary.BigEndian.Uint64(vars[i:])] = uint64(h)
+			idx[binary.BigEndian.Uint64(vars[i:])] = uint64(h)
 		}
 	}
-	rs.Close()
-	go l.writer()
-	return l, nil
+	return idx, seen, rs.Err()
 }
 
 func (l *Learner) hash(s string) uint64 {
@@ -425,33 +454,80 @@ func (l *Learner) hash(s string) uint64 {
 	return binary.BigEndian.Uint64(m.Sum(nil))
 }
 
-// Match reports whether a capitalized word is (within one typo of) a remembered name.
-func (l *Learner) Match(w string) bool {
-	if l == nil || !isCap(w) || utf8.RuneCountInString(w) < 4 {
+// candidate: a word that may be a remembered name.
+func (l *Learner) candidate(w string) bool {
+	if !isCap(w) || utf8.RuneCountInString(w) < 4 {
 		return false
 	}
 	f := fold(w)
-	if particles[f] || isTitle(w) || commonWord(w) {
+	return !particles[f] && !isTitle(w) && !commonWord(w)
+}
+
+// Match reports whether a capitalized word is (within one typo of) a remembered name.
+func (l *Learner) Match(w string) bool {
+	if l == nil || !l.candidate(w) {
 		return false
+	}
+	var hs []uint64
+	for _, v := range variants(fold(w)) {
+		hs = append(hs, l.hash(v))
 	}
 	l.mu.RLock()
 	defer l.mu.RUnlock()
-	for _, v := range variants(f) {
-		if _, ok := l.idx[l.hash(v)]; ok {
+	for _, h := range hs {
+		if _, ok := l.idx[h]; ok {
 			return true
 		}
 	}
 	return false
 }
 
+// Find may run concurrently with the other detectors: the hashes are computed without the
+// lock, which is only held for the lookups.
 func (l *Learner) Find(s string) [][2]int {
-	if l == nil {
+	if l == nil || l.Count() == 0 {
+		return nil
+	}
+	type cand struct {
+		s, e int
+		hs   []uint64
+	}
+	var cs []cand
+	var m hash.Hash
+	var sum []byte
+	memo := map[string][]uint64{}
+	for _, t := range tokenize(s) {
+		if !l.candidate(t.w) {
+			continue
+		}
+		f := fold(t.w)
+		hs, ok := memo[f]
+		if !ok {
+			if m == nil {
+				m = hmac.New(sha256.New, l.key)
+			}
+			for _, v := range variants(f) {
+				m.Reset()
+				m.Write([]byte(v))
+				sum = m.Sum(sum[:0])
+				hs = append(hs, binary.BigEndian.Uint64(sum))
+			}
+			memo[f] = hs
+		}
+		cs = append(cs, cand{t.s, t.e, hs})
+	}
+	if len(cs) == 0 {
 		return nil
 	}
 	var out [][2]int
-	for _, t := range tokenize(s) {
-		if l.Match(t.w) {
-			out = append(out, [2]int{t.s, t.e})
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	for _, c := range cs {
+		for _, h := range c.hs {
+			if _, ok := l.idx[h]; ok {
+				out = append(out, [2]int{c.s, c.e})
+				break
+			}
 		}
 	}
 	return out
@@ -469,6 +545,7 @@ func (l *Learner) Learn(words []string) {
 
 func (l *Learner) writer() {
 	for words := range l.queue {
+		l.wmu.Lock()
 		now := time.Now().Unix()
 		for _, w := range words {
 			f := fold(w)
@@ -491,6 +568,7 @@ func (l *Learner) writer() {
 				log.Print("mémoire des noms : ", err)
 			}
 		}
+		l.wmu.Unlock()
 	}
 }
 
@@ -503,36 +581,34 @@ func (l *Learner) Count() int {
 	return len(l.seen)
 }
 
-// Forget erases the memory (all, or entries unused for more than days).
+// Forget erases the memory (all, or entries unused for more than days). The index is only
+// reloaded when entries were deleted; it is rebuilt without the lock, then swapped, so that
+// detection never sees an empty memory nor waits for the database.
 func (l *Learner) Forget(days int) error {
 	if l == nil {
 		return nil
 	}
+	l.wmu.Lock()
+	defer l.wmu.Unlock()
 	q, args := `DELETE FROM learned`, []any{}
 	if days > 0 {
 		q, args = `DELETE FROM learned WHERE last < ?`, []any{time.Now().AddDate(0, 0, -days).Unix()}
 	}
-	if _, err := l.db.Exec(q, args...); err != nil {
-		return err
-	}
-	l.mu.Lock()
-	l.idx, l.seen = map[uint64]uint64{}, map[uint64]bool{}
-	l.mu.Unlock()
-	rs, err := l.db.Query(`SELECT h, vars FROM learned`)
+	res, err := l.db.Exec(q, args...)
 	if err != nil {
 		return err
 	}
-	defer rs.Close()
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	for rs.Next() {
-		var h int64
-		var vars []byte
-		rs.Scan(&h, &vars)
-		l.seen[uint64(h)] = true
-		for i := 0; i+8 <= len(vars); i += 8 {
-			l.idx[binary.BigEndian.Uint64(vars[i:])] = uint64(h)
+	idx, seen := map[uint64]uint64{}, map[uint64]bool{}
+	if days > 0 {
+		if n, err := res.RowsAffected(); err == nil && n == 0 {
+			return nil
+		}
+		if idx, seen, err = l.load(); err != nil {
+			return err
 		}
 	}
+	l.mu.Lock()
+	l.idx, l.seen = idx, seen
+	l.mu.Unlock()
 	return nil
 }

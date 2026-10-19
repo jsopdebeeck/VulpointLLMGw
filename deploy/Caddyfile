@@ -1,6 +1,7 @@
 # llmgw derrière Caddy : HTTPS automatique (Let's Encrypt).
-# deploy/deploy.sh --domain remplace LLMGW_DOMAIN et ADMIN_IPS, puis installe ce fichier
-# dans /etc/caddy/Caddyfile.
+# setup.sh --domain (archive Linux de build.sh) y met le domaine, les IP d'administration
+# (--admin-ip, 127.0.0.1/32 par défaut : tunnel SSH seulement) et le contact --email,
+# puis l'installe dans /etc/caddy/Caddyfile. La première ligne sert de repère à setup.sh.
 
 LLMGW_DOMAIN {
 	# pas de « encode » : la compression retarderait le streaming SSE
@@ -13,6 +14,9 @@ LLMGW_DOMAIN {
 	}
 	respond @admin 403
 
+	# adresse de llmgw (listen de config.toml, alignée par setup.sh). Caddy transmet l'IP du
+	# client dans X-Forwarded-For (valeur reçue ignorée, pas d'usurpation) : côté llmgw,
+	# [security] trusted_proxies = ["127.0.0.1/32", "::1/128"]
 	reverse_proxy 127.0.0.1:8080 {
 		# streaming SSE : envoyer chaque morceau sans attendre
 		flush_interval -1

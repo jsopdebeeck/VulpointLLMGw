@@ -11,3 +11,4 @@ client_secret_*.json
 _archive/
 LLMGW.app/
 llmgw.log
+.claude/worktrees/

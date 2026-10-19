@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -62,6 +64,9 @@ func (g *Gateway) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 		if t.APIKey != "" {
 			t.APIKey = keepSecret
 		}
+		for k := range t.Headers { // custom headers often carry a key
+			t.Headers[k] = keepSecret
+		}
 	}
 	keySet := map[string]bool{}
 	for n, t := range cur.Targets {
@@ -106,18 +111,26 @@ func (g *Gateway) handlePutConfig(w http.ResponseWriter, r *http.Request) {
 		nc = base
 	}
 
+	// A stored secret is kept only for the destination it was entered for: otherwise a stolen
+	// admin session could point a target to its own server and collect the provider key.
 	if nc.Server.AdminToken == keepSecret {
 		nc.Server.AdminToken = cur.Server.AdminToken
 	}
 	if nc.Alerts.SMTPPassword == keepSecret {
+		if !strings.EqualFold(nc.Alerts.SMTPHost, cur.Alerts.SMTPHost) {
+			fail("alertes : le serveur SMTP a changé, ressaisissez le mot de passe")
+			return
+		}
 		nc.Alerts.SMTPPassword = cur.Alerts.SMTPPassword
 	}
 	for _, p := range nc.Auth.Providers {
 		if p.ClientSecret == keepSecret {
-			p.ClientSecret = ""
-			if old := cur.provider(p.ID); old != nil {
-				p.ClientSecret = old.ClientSecret
+			old := cur.provider(p.ID)
+			if old == nil || old.Type != p.Type || old.TenantID != p.TenantID || old.Issuer != p.Issuer {
+				fail("SSO %q : le fournisseur a changé, ressaisissez le code secret", p.ID)
+				return
 			}
+			p.ClientSecret = old.ClientSecret
 		}
 	}
 	for n, t := range nc.Targets {
@@ -125,13 +138,28 @@ func (g *Gateway) handlePutConfig(w http.ResponseWriter, r *http.Request) {
 			fail("nom de cible invalide %q (lettres, chiffres, _ . -)", n)
 			return
 		}
+		old := cur.Targets[n]
+		same := old != nil && origin(old.BaseURL) == origin(t.BaseURL)
 		if t.APIKey == keepSecret {
-			if old := cur.Targets[n]; old != nil {
-				t.APIKey = old.APIKey
-			} else {
-				t.APIKey = ""
+			if !same {
+				fail("cible %q : l'adresse a changé, ressaisissez la clé API", n)
+				return
+			}
+			t.APIKey = old.APIKey
+		}
+		for k, v := range t.Headers {
+			if v == keepSecret {
+				if !same || old.Headers[k] == "" {
+					fail("cible %q : l'adresse a changé, ressaisissez l'en-tête %s", n, k)
+					return
+				}
+				t.Headers[k] = old.Headers[k]
 			}
 		}
+	}
+	if err := checkEnvBindings(cur, nc); err != nil {
+		fail("%v", err)
+		return
 	}
 	for n := range nc.Profiles {
 		if !nameRe.MatchString(n) {
@@ -154,30 +182,20 @@ func (g *Gateway) handlePutConfig(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var buf bytes.Buffer
-	buf.WriteString("# llmgw : configuration gérée par le dashboard (" + time.Now().Format("2006-01-02 15:04") + ").\n" +
-		"# Modifiable à la main ; les commentaires ne sont pas conservés. Documentation : config.example.toml\n\n")
-	if err := toml.NewEncoder(&buf).Encode(nc); err != nil {
-		fail("encodage : %v", err)
-		return
-	}
-	parsed, err := ParseConfig(buf.Bytes(), filepath.Dir(cur.path))
-	if err != nil {
-		fail("%v", err)
-		return
-	}
-	parsed.path = cur.path
-	if err := writeWithBackup(cur.path, buf.Bytes()); err != nil {
-		http.Error(w, err.Error(), 500)
-		return
-	}
-	g.cfg.Store(parsed)
-	log.Print("configuration enregistrée depuis le dashboard")
 	action := "configuration enregistrée"
 	if !actor.admin() {
 		action = "utilisateurs enregistrés"
 	}
-	g.audit(actor, action, "", strings.Join(configChanges(cur, parsed), " ; "))
+	parsed, err := g.saveConfig(cur, nc, actor, action)
+	if err != nil {
+		var ce configError
+		if errors.As(err, &ce) {
+			fail("%v", err)
+		} else {
+			http.Error(w, err.Error(), 500)
+		}
+		return
+	}
 	var notes []string
 	if parsed.Server.Listen != cur.Server.Listen || parsed.dbPath != cur.dbPath || parsed.Server.UpstreamTimeout != cur.Server.UpstreamTimeout {
 		notes = append(notes, "listen, db et upstream_timeout_sec seront pris en compte au prochain redémarrage")
@@ -185,7 +203,89 @@ func (g *Gateway) handlePutConfig(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"ok": true, "notes": notes})
 }
 
-// writeWithBackup keeps the 10 last versions as <file>.bak-YYYYMMDD-HHMMSS.
+// configError: the new configuration is invalid (400), as opposed to a write failure (500).
+type configError struct{ error }
+
+// saveConfig validates nc, writes config.toml (previous version kept), applies it at once and
+// records the change in the audit log. Callers hold saveMu.
+func (g *Gateway) saveConfig(cur, nc *Config, actor *Actor, action string) (*Config, error) {
+	var buf bytes.Buffer
+	buf.WriteString("# llmgw : configuration gérée par le dashboard (" + time.Now().Format("2006-01-02 15:04") + ").\n" +
+		"# Modifiable à la main ; les commentaires ne sont pas conservés. Documentation : config.example.toml\n\n")
+	if err := toml.NewEncoder(&buf).Encode(nc); err != nil {
+		return nil, configError{fmt.Errorf("encodage : %v", err)}
+	}
+	parsed, err := ParseConfig(buf.Bytes(), filepath.Dir(cur.path))
+	if err != nil {
+		return nil, configError{err}
+	}
+	parsed.path = cur.path
+	if err := writeWithBackup(cur.path, buf.Bytes()); err != nil {
+		return nil, err
+	}
+	g.cfg.Store(parsed)
+	log.Print("configuration enregistrée : ", action)
+	g.audit(actor, action, "", strings.Join(configChanges(cur, parsed), " ; "))
+	return parsed, nil
+}
+
+// origin: scheme://host of an address, the destination a secret is bound to.
+func origin(u string) string {
+	p, err := url.Parse(strings.TrimSpace(u))
+	if err != nil {
+		return strings.ToLower(u)
+	}
+	return strings.ToLower(p.Scheme + "://" + p.Host)
+}
+
+// envRefs: environment variables a configuration sends somewhere, with their destination
+// ("*" when several).
+func envRefs(c *Config) map[string]string {
+	m := map[string]string{}
+	add := func(dest string, vals ...string) {
+		for _, v := range vals {
+			var names []string
+			if nameEnvRe.MatchString(v) {
+				names = []string{v}
+			} else {
+				os.Expand(v, func(n string) string { names = append(names, n); return "" })
+			}
+			for _, n := range names {
+				if d, ok := m[n]; ok && d != dest {
+					m[n] = "*"
+				} else {
+					m[n] = dest
+				}
+			}
+		}
+	}
+	for _, t := range c.Targets {
+		add(origin(t.BaseURL), t.APIKeyEnv, t.APIKey)
+	}
+	for _, p := range c.Auth.Providers {
+		add("sso:"+p.Type+":"+p.TenantID+p.Issuer, p.ClientSecretEnv, p.ClientSecret)
+	}
+	add("smtp:"+strings.ToLower(c.Alerts.SMTPHost), c.Alerts.SMTPPasswordEnv, c.Alerts.SMTPPassword)
+	delete(m, "")
+	return m
+}
+
+var nameEnvRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// checkEnvBindings: a variable that already feeds one destination cannot be sent to another
+// one from the dashboard (that change has to be made in config.toml, on the server).
+func checkEnvBindings(cur, nc *Config) error {
+	was := envRefs(cur)
+	for n, d := range envRefs(nc) {
+		if old, ok := was[n]; ok && old != "*" && d != old {
+			return fmt.Errorf("la variable %s sert déjà à %s : elle ne peut pas être envoyée ailleurs depuis le dashboard (modifier config.toml sur le serveur)", n, strings.TrimPrefix(old, "sso:"))
+		}
+	}
+	return nil
+}
+
+// writeWithBackup keeps the 10 last versions as <file>.bak-YYYYMMDD-HHMMSS; older ones are
+// moved to _archive/config/ next to the file, never deleted.
 func writeWithBackup(path string, data []byte) error {
 	if old, err := os.ReadFile(path); err == nil {
 		if err := os.WriteFile(path+".bak-"+time.Now().Format("20060102-150405"), old, 0o600); err != nil {
@@ -193,9 +293,13 @@ func writeWithBackup(path string, data []byte) error {
 		}
 		baks, _ := filepath.Glob(path + ".bak-*")
 		sort.Strings(baks)
-		for len(baks) > 10 {
-			os.Remove(baks[0])
-			baks = baks[1:]
+		if len(baks) > 10 {
+			arch := filepath.Join(filepath.Dir(path), "_archive", "config")
+			if err := os.MkdirAll(arch, 0o700); err == nil {
+				for _, b := range baks[:len(baks)-10] {
+					os.Rename(b, filepath.Join(arch, filepath.Base(b)))
+				}
+			}
 		}
 	}
 	tmp := path + ".tmp"

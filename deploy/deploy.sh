@@ -1,40 +1,47 @@
 #!/usr/bin/env bash
-# llmgw : compile, copie et (re)démarre le gateway sur un VPS Linux (Debian/Ubuntu, systemd).
+# llmgw : construit l'archive Linux (build.sh), la copie sur un VPS (Ubuntu 22.04 / 24.04 LTS,
+# Debian 12) et y lance setup.sh : installation au premier passage, mise à jour ensuite.
 #
-#   deploy/deploy.sh [options] utilisateur@serveur
+#   deploy/deploy.sh [options] utilisateur@serveur [-- options de setup.sh]
 #
-#   --config FICHIER   envoie ce config.toml (l'ancien est gardé en .bak-deploy-*).
-#                      Obligatoire au premier déploiement ; ensuite, sans cette option,
-#                      la configuration du serveur (modifiée depuis le dashboard) est conservée.
+#   --config FICHIER   envoie ce config.toml (l'ancien est gardé en config.toml.bak-setup-*).
+#                      Sans cette option : généré au premier déploiement (jeton admin aléatoire,
+#                      affiché à la fin), puis celui du serveur (modifié depuis le dashboard) est conservé.
 #   --domain DOMAINE   installe Caddy (HTTPS Let's Encrypt) pour ce domaine.
+#   --email EMAIL      contact Let's Encrypt (facultatif).
 #   --admin-ip IP      IP ou plage CIDR autorisée sur /dashboard et /admin (répétable).
 #                      Par défaut : aucune, accès par tunnel SSH seulement.
 #   --arch amd64|arm64 architecture du serveur (détectée sinon).
-#   --skip-tests       ne lance pas go test avant de compiler.
+#   --skip-tests       ne lance pas go vet / go test avant de compiler.
+#   -- …               options passées telles quelles à setup.sh (--no-caddy, --no-firewall).
 #
-# Le serveur reçoit : /opt/llmgw/{llmgw,config.toml,secrets.env,gateway.db}
-# et /etc/systemd/system/llmgw.service. Les clés des LLM vont dans secrets.env.
+# Mise à jour : deploy/deploy.sh utilisateur@serveur (configuration, base et Caddy conservés).
+# Le serveur reçoit /opt/llmgw/{llmgw,config.toml,secrets.env,gateway.db} et les services
+# llmgw, llmgw-backup.timer ; les clés des LLM vont dans secrets.env. Détail : setup.sh --help.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
-here=deploy
 
-host="" arch="" config="" domain="" tests=1
-admin_ips=()
+host="" arch="" config="" domain="" email="" tests=1
+admin_ips=() extra=()
+need() { [ -n "${2:-}" ] || { echo "valeur manquante après $1" >&2; exit 2; }; }
 while [ $# -gt 0 ]; do
 	case "$1" in
-	--config) config="$2"; shift 2 ;;
-	--domain) domain="$2"; shift 2 ;;
-	--admin-ip) admin_ips+=("$2"); shift 2 ;;
-	--arch) arch="$2"; shift 2 ;;
+	--config) need "$@"; config="$2"; shift 2 ;;
+	--domain) need "$@"; domain="$2"; shift 2 ;;
+	--email) need "$@"; email="$2"; shift 2 ;;
+	--admin-ip) need "$@"; admin_ips+=("$2"); shift 2 ;;
+	--arch) need "$@"; arch="$2"; shift 2 ;;
 	--skip-tests) tests=0; shift ;;
-	-h | --help) sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+	--) shift; extra=("$@"); break ;;
+	-h | --help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; exit 0 ;;
 	-*) echo "option inconnue : $1" >&2; exit 2 ;;
 	*) host="$1"; shift ;;
 	esac
 done
 [ -n "$host" ] || { echo "usage : $0 [options] utilisateur@serveur (--help)" >&2; exit 2; }
 [ -z "$config" ] || [ -f "$config" ] || { echo "$config introuvable" >&2; exit 2; }
+case "$arch" in "" | amd64 | arm64) ;; *) echo "--arch amd64 ou arm64" >&2; exit 2 ;; esac
 
 # une seule connexion SSH pour tout le script (un seul mot de passe / une seule clé)
 ctl=$(mktemp -d)
@@ -53,28 +60,32 @@ if [ -z "$arch" ]; then
 	esac
 fi
 
-if [ "$tests" = 1 ]; then
-	echo "→ go vet et go test"
-	go vet ./...
-	go test ./...
-fi
-bin=dist/llmgw-linux-$arch
-echo "→ compilation $bin"
-CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -trimpath -ldflags "-s -w" -o "$bin" .
-
-if [ -n "$domain" ]; then
-	ips="${admin_ips[*]:-127.0.0.1/32}"
-	sed -e "s|LLMGW_DOMAIN|$domain|" -e "s|ADMIN_IPS|$ips|" "$here/Caddyfile" >"$ctl/Caddyfile"
-fi
+build=(--linux-only)
+[ "$tests" = 1 ] || build+=(--skip-tests)
+./build.sh "${build[@]}"
+version=$(sed -n 's/^const Version = "\(.*\)"/\1/p' main.go)
+tarball=dist/llmgw-$version-linux-$arch.tar.gz
+[ -f "$tarball" ] || { echo "$tarball introuvable" >&2; exit 1; }
 
 stage=$(ssh_ "$host" mktemp -d)
-echo "→ copie vers $host:$stage"
-files=("$bin" "$here/llmgw.service" "$here/remote-install.sh")
-[ -n "$config" ] && cp "$config" "$ctl/config.toml" && files+=("$ctl/config.toml")
-[ -n "$domain" ] && files+=("$ctl/Caddyfile")
-scp_ "${files[@]}" "$host:$stage/"
+echo "→ copie de $(basename "$tarball") vers $host:$stage"
+scp_ "$tarball" "$host:$stage/"
+
+args=(--yes)
+[ -z "$domain" ] || args+=(--domain "$domain")
+[ -z "$email" ] || args+=(--email "$email")
+for ip in ${admin_ips[@]+"${admin_ips[@]}"}; do args+=(--admin-ip "$ip"); done
+if [ -n "$config" ]; then
+	scp_ "$config" "$host:$stage/config.toml"
+	args+=(--config "$stage/config.toml")
+fi
+args+=(${extra[@]+"${extra[@]}"})
 
 sudo=sudo
 [ "$(ssh_ "$host" id -u)" = 0 ] && sudo=""
-# -t : sudo peut demander le mot de passe
-ssh_ -t "$host" "$sudo bash $stage/remote-install.sh $stage $(basename "$bin") ${domain:+--caddy}"
+q_stage=$(printf %q "$stage")
+remote="cd $q_stage && tar xzf $(printf %q "$(basename "$tarball")") &&"
+remote="$remote $sudo bash $(printf %q "llmgw-$version/setup.sh") $(printf '%q ' "${args[@]}")"
+# -t : sudo peut demander le mot de passe ; le dossier de transit est supprimé dans tous les cas
+echo "→ setup.sh sur $host"
+ssh_ -t "$host" "$remote; rc=\$?; rm -rf $q_stage; exit \$rc"
