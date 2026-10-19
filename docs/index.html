@@ -150,7 +150,7 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
 
 <div class="page">
   <nav class="toc" aria-label="Sommaire">
-    <a class="toc-brand" href="https://vulpoint.com" target="_blank" rel="noopener"><img src="img/vulpoint-logo.jpg" alt="Vulpoint"><div><b>LLMGW</b><small>by Vulpoint.com · v1.4.0</small></div></a>
+    <a class="toc-brand" href="https://vulpoint.com" target="_blank" rel="noopener"><img src="img/vulpoint-logo.jpg" alt="Vulpoint"><div><b>LLMGW</b><small>by Vulpoint.com · v1.5.1</small></div></a>
     <div class="label">Fonctionnalités</div>
     <ol>
       <li><a href="#objectif"><span>1</span>Objectif</a></li>
@@ -211,7 +211,7 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
       <div class="eyebrow">Documentation fonctionnelle, technique et d'administration</div>
       <h1>LLMGW, la passerelle IA de l'organisation</h1>
       <p class="lede">Un point de connexion unique entre les utilisateurs, les agents et les modèles de langage. Il applique la politique IA : qui peut utiliser quel modèle, quelles données peuvent sortir, et avec quelle traçabilité.</p>
-      <div class="meta"><span><b>Version</b> 1.4.0 (19 octobre 2026)</span><span><b>Composant</b> llmgw (binaire unique Go, macOS et Linux)</span><span><b>Formats d'API</b> OpenAI et Anthropic</span><span><b>Interface</b> anglais, français, néerlandais</span></div>
+      <div class="meta"><span><b>Version</b> 1.5.1 (20 octobre 2026)</span><span><b>Composant</b> llmgw (binaire unique Go, macOS et Linux)</span><span><b>Formats d'API</b> OpenAI et Anthropic</span><span><b>Interface</b> anglais, français, néerlandais</span></div>
       <a class="crosslink" href="chat.html">Guide utilisateur du chat ↗</a>
     </header>
 
@@ -369,7 +369,7 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
         <thead><tr><th>Client</th><th>Raccordement</th><th>État</th></tr></thead>
         <tbody>
           <tr><td class="k">Claude Code</td><td><code>ANTHROPIC_BASE_URL</code> vers la passerelle, <code>ANTHROPIC_AUTH_TOKEN</code> = clé d'application</td><td><span class="pill anon">opérationnel</span></td></tr>
-          <tr><td class="k">Hermes Agent</td><td>fournisseur personnalisé au format OpenAI, adresse <code>/v1</code> de la passerelle ; modèle principal, tâches auxiliaires et mélange de modèles à régler sur ce fournisseur (voir <a href="#clients">Raccorder les clients</a>)</td><td><span class="pill anon">opérationnel</span></td></tr>
+          <tr><td class="k">Hermes Agent</td><td>kit <code>integrations/hermes/</code> : configuration en une commande, plugin de contrôle, pseudonymes stables par conversation (voir <a href="#clients">Raccorder les clients</a>)</td><td><span class="pill anon">opérationnel</span></td></tr>
           <tr><td class="k">SDK OpenAI / Anthropic</td><td>changement d'adresse de base et de clé</td><td><span class="pill anon">opérationnel</span></td></tr>
           <tr><td class="k">Claude Cowork</td><td>trafic redirigé vers la passerelle ; redirection testée avec succès en septembre 2026</td><td><span class="pill anon">opérationnel</span></td></tr>
         </tbody>
@@ -471,6 +471,13 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
         <li>Les espaces insécables, traits d'union conditionnels, caractères invisibles et chiffres pleine chasse sont neutralisés avant la détection : « 0470 12 34 56 » avec des espaces insécables est reconnu.</li>
         <li>En cas de chevauchement, l'action la plus stricte l'emporte : un NISS interdit n'est jamais masqué par une référence seulement journalisée.</li>
         <li>L'ordre de parcours est fixe (outils, système, messages) : la numérotation des jetons reste stable d'un tour à l'autre, et le cache de prompt des fournisseurs reste efficace.</li>
+      </ul>
+      <h3>Mémoire de conversation</h3>
+      <p>Quand le client nomme sa conversation, la passerelle garde la correspondance des jetons pendant toute la conversation : « «PERSON_1» » reste la même personne d'un tour à l'autre, même si les noms apparaissent dans un autre ordre, et un nom repéré à un tour est encore reconnu aux tours suivants, même après une compaction de l'historique par l'agent.</p>
+      <ul>
+        <li>Identifiant de conversation : en-tête <code>X-LLMGW-Session</code> (envoyé par le plugin Hermes), ou identifiant de session que Claude Code place dans <code>metadata.user_id</code>. Sans identifiant, chaque requête est numérotée seule, comme avant.</li>
+        <li>La correspondance reste en mémoire seulement, par utilisateur, profil et conversation ; elle est oubliée après 24 heures sans activité, ou au redémarrage de la passerelle. Au plus 5 000 conversations et 5 000 valeurs par conversation.</li>
+        <li><code>GET /v1/me</code>, avec le même en-tête, donne le nombre de valeurs gardées par type, jamais les valeurs.</li>
       </ul>
     </section>
 
@@ -704,7 +711,7 @@ files_default = "pass_log"                         <span class="c"># autres exte
       <h3>Lancement manuel</h3>
 <pre>export MISTRAL_API_KEY=… ANTHROPIC_API_KEY=…
 ./llmgw -config config.toml
-<span class="c"># LLMGW 1.4.0 à l'écoute sur http://127.0.0.1:8088 (dashboard : /dashboard, documentation : /docs)</span></pre>
+<span class="c"># LLMGW 1.5.1 à l'écoute sur http://127.0.0.1:8088 (dashboard : /dashboard, documentation : /docs)</span></pre>
       <p>Une seule instance par port. Arrêt avec Ctrl+C : les métriques en attente sont enregistrées avant la sortie.</p>
 
       <h3>App macOS dans la barre des menus</h3>
@@ -767,7 +774,7 @@ journalctl -u llmgw -f        <span class="c"># journal des requêtes</span></pr
           <tr><td class="k">SDK et outils OpenAI</td><td>adresse de base <code>https://&lt;passerelle&gt;/v1</code>, clé API = clé gateway</td></tr>
           <tr><td class="k">SDK et outils Anthropic</td><td>adresse de base <code>https://&lt;passerelle&gt;</code>, clé API = clé gateway</td></tr>
           <tr><td class="k">Claude Code</td><td>variables <code>ANTHROPIC_BASE_URL</code> et <code>ANTHROPIC_AUTH_TOKEN</code> (ci-dessous) ; <code>/status</code> confirme l'adresse</td></tr>
-          <tr><td class="k">Hermes Agent</td><td>fournisseur personnalisé au format OpenAI dans <code>~/.hermes/config.yaml</code> (ci-dessous)</td></tr>
+          <tr><td class="k">Hermes Agent</td><td>kit <code>integrations/hermes/</code> : script d'installation et plugin (ci-dessous)</td></tr>
           <tr><td class="k">Claude Cowork</td><td>raccordement validé en interne en septembre 2026 ; procédure détaillée à compléter</td></tr>
         </tbody>
       </table></div>
@@ -778,15 +785,18 @@ journalctl -u llmgw -f        <span class="c"># journal des requêtes</span></pr
     "ANTHROPIC_AUTH_TOKEN": "gw-claude-code-…"
   }
 }</pre>
-      <p>Hermes Agent, dans <code>~/.hermes/config.yaml</code> :</p>
-<pre>providers:
-  llmgw:
-    api: https://&lt;passerelle&gt;/v1
-    api_key: gw-hermes-…
-    transport: chat_completions
-    default_model: mistral-large-latest
-    models: [mistral-large-latest, mistral-small-latest]</pre>
-      <p class="note">Côté Hermes, régler aussi les <strong>modèles auxiliaires</strong> (compression, extraction web…) sur ce fournisseur : sinon ces tâches contournent la passerelle.</p>
+      <h3>Hermes Agent : kit de raccordement</h3>
+      <p>Le dossier <code>integrations/hermes/</code> du dépôt raccorde Hermes en une commande, sur chaque poste (Hermes 0.21.6 ou plus récent) :</p>
+<pre>integrations/hermes/install.sh --url https://&lt;passerelle&gt; --key gw-hermes-…
+integrations/hermes/install.sh --url https://&lt;passerelle&gt; --key gw-hermes-… --dry-run   <span class="c"># aperçu, rien n'est écrit</span>
+integrations/hermes/uninstall.sh                                                            <span class="c"># retour à la configuration d'origine</span></pre>
+      <ul>
+        <li><strong>Configuration</strong> (via <code>hermes config set</code>, après une sauvegarde de <code>config.yaml</code>) : fournisseur <code>llmgw</code> avec les modèles autorisés par la passerelle, modèle principal, tâches auxiliaires (compression, vision, titres…), délégation, tâches planifiées et mélange de modèles (MoA) routés par la passerelle ; secours hors passerelle retirés. La clé va dans le <code>.env</code> de Hermes (droits 600), jamais dans <code>config.yaml</code>.</li>
+        <li><strong>Plugin <code>llmgw</code></strong> : refuse en mode strict un appel du modèle principal qui ne passe pas par la passerelle (<code>--warn</code> : signalement seulement) ; signale à la passerelle les tâches auxiliaires qui la contournent (journal d'audit, <a href="#page-overview">vue d'ensemble</a>) ; commande <code>/llmgw</code> : passerelle, profil, quotas, consommation et valeurs pseudonymisées de la conversation.</li>
+        <li><strong>Pseudonymes stables</strong> : Hermes envoie l'identifiant de la conversation (<code>X-LLMGW-Session</code>) à la passerelle seulement, tâches auxiliaires comprises ; la passerelle garde la même numérotation des jetons toute la conversation (voir <a href="#filtrage">Mémoire de conversation</a>).</li>
+        <li><strong>Hors passerelle, par décision</strong> : la recherche web, le navigateur, la voix et la génération d'images ou de vidéos ne sont pas des appels LLM au format OpenAI : le script les liste, avec la commande pour les couper, sans les modifier.</li>
+      </ul>
+      <p class="note">La passerelle doit nommer exactement au moins un modèle dans les cibles du profil de la clé (<code>models = ["mistral-large-latest"]</code>) : <code>/v1/models</code> ne liste pas les motifs (<code>"mistral-*"</code>). Le détail (modes, dépannage, limites) est dans <code>integrations/hermes/README.md</code>.</p>
     </section>
 
     <section id="sso-setup">
@@ -881,7 +891,7 @@ default_profile = "anonymisation"</pre>
         <li>Période : 48 h, 60 j, 6 semaines, 6 mois (profondeur maximale).</li>
         <li><strong>Indicateurs</strong> : requêtes, tokens, volume, temps total, temps du LLM et de la passerelle (médiane, p95), conversions, violations.</li>
         <li><strong>Graphiques</strong> : requêtes par LLM, tokens par utilisateur, temps de réponse IN / Gateway / LLM, conversions et violations.</li>
-        <li><strong>Tableaux</strong> par utilisateur et par LLM, détections par type, requêtes récentes avec le motif des erreurs.</li>
+        <li><strong>Tableaux</strong> par utilisateur, par LLM et par application (Hermes, Claude Code, chat…, reconnue par l'en-tête <code>X-LLMGW-Client</code> ou le User-Agent, sur la période de détail), détections par type, requêtes récentes avec l'application et le motif des erreurs.</li>
       </ul>
       <figure class="shot"><div class="frame"><img src="img/dash-report.jpg" width="1600" height="2470" alt="Reporting sur 60 jours : indicateurs, graphiques et tableaux" loading="lazy"></div><figcaption class="bar"><span>Dashboard, Reporting sur 60 jours (faire défiler l'image)</span><a href="img/dash-report.jpg">Taille réelle</a></figcaption></figure>
     </section>
@@ -1000,7 +1010,7 @@ default_profile = "anonymisation"</pre>
         <thead><tr><th>Sujet</th><th>Situation</th><th>Piste</th></tr></thead>
         <tbody>
           <tr><td class="k">Noms sans indice</td><td>un nom sans titre, sans prénom connu, jamais vu (« Keizer est malade »), un nom dans une fiche sans libellé reconnu (« Nom : Vandamme »), ou un prénom aussi courant comme mot (Max, Jan, Hugo) n'est pas détecté la première fois ; « Claude Dubois » sans titre reste en clair (sinon « Claude Haiku » serait pseudonymisé)</td><td>modèle de reconnaissance d'entités (Presidio, spaCy)</td></tr>
-          <tr><td class="k">Numérotation au fil de la conversation</td><td>un nom appris à un tour donné est aussi remplacé dans les messages précédents, qui changent donc au tour suivant ; un jeton « «EMAIL_1» » écrit par l'utilisateur lui-même est restauré comme un vrai jeton</td><td>correspondance gardée par conversation (identifiant de session envoyé par l'agent)</td></tr>
+          <tr><td class="k">Numérotation au fil de la conversation</td><td>sans identifiant de conversation (autres clients que Hermes avec le plugin et Claude Code), chaque requête est numérotée seule ; un nom appris à un tour donné est aussi remplacé dans les messages précédents, qui changent donc au tour suivant ; un jeton « «EMAIL_1» » écrit par l'utilisateur lui-même est restauré comme un vrai jeton</td><td>en-tête <code>X-LLMGW-Session</code> pour les autres clients</td></tr>
           <tr><td class="k">Accents décomposés</td><td>un texte en Unicode décomposé (NFD, fréquent dans les copier-coller depuis macOS) peut échapper aux listes</td><td>normalisation NFC</td></tr>
           <tr><td class="k">Logos et texte dans les images</td><td>pas d'analyse d'image : les images et les fichiers sont transmis, remplacés par un carré blanc ou refusés en bloc</td><td>OCR et détection de logos</td></tr>
           <tr><td class="k">Traduction de formats</td><td>un client Anthropic n'atteint que des cibles Anthropic (et inversement)</td><td>traduction OpenAI ↔ Anthropic dans la passerelle</td></tr>
@@ -1017,6 +1027,16 @@ default_profile = "anonymisation"</pre>
       <h2><span class="n">39</span>Notes de version</h2>
       <p>La version en cours s'affiche en bas du menu du dashboard, sur l'écran de connexion du chat, sur <code>GET /version</code> et avec <code>./llmgw -version</code>. Le journal complet est tenu dans <code>RELEASE_NOTES.md</code>, à la racine du dépôt.</p>
       <div class="rel">
+        <h3>1.5.1, 20 octobre 2026</h3>
+        <ul>
+          <li>Fin des faux positifs en cascade avec les agents : mots ordinaires, sigles et produits ne sont plus appris ni propagés dans la conversation (4 224 remplacements ramenés à 79 sur des échanges réels).</li>
+        </ul>
+        <h3>1.5.0, 19 octobre 2026</h3>
+        <ul>
+          <li>Kit Hermes Agent : raccordement en une commande, plugin de contrôle (blocage hors passerelle, signalement des contournements, commande <code>/llmgw</code>).</li>
+          <li>Mémoire de conversation : numérotation des jetons stable sur toute la conversation (Hermes, Claude Code).</li>
+          <li>Reporting par application ; contournements signalés dans la vue d'ensemble et le journal d'audit.</li>
+        </ul>
         <h3>1.4.0, 19 octobre 2026</h3>
         <ul>
           <li>Protection web : limites par adresse, blocage après des connexions refusées, administration par adresse, en-têtes de sécurité, HTTPS intégré.</li>
@@ -1073,7 +1093,7 @@ default_profile = "anonymisation"</pre>
       </div>
     </section>
 
-    <footer class="doc"><img src="img/vulpoint-logo.jpg" alt=""><span>LLMGW 1.4.0 by <a href="https://vulpoint.com" target="_blank" rel="noopener">Vulpoint.com</a></span></footer>
+    <footer class="doc"><img src="img/vulpoint-logo.jpg" alt=""><span>LLMGW 1.5.1 by <a href="https://vulpoint.com" target="_blank" rel="noopener">Vulpoint.com</a></span></footer>
   </main>
 </div>
 </body>

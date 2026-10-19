@@ -318,12 +318,46 @@ func findTitled(s string) [][2]int {
 		if !gapOK(ts[i].w, s[ts[i].e:ts[i+1].s]) {
 			continue
 		}
-		if last, _ := nameAfter(s, ts, i+1); last >= 0 {
+		// "Me" (Maître) and "called" are ordinary words too: the name after them must not be
+		// made of ordinary words ("Follow Me Camera Drone", "it is called GROOVE OS")
+		strict := f == "me" || f == "called" || f == "named"
+		if last, _ := nameAfterMode(s, ts, i+1, strict); last >= 0 && !(strict && ordinaryName(ts[i+1:last+1])) {
 			out = append(out, [2]int{ts[i+1].s, ts[last].e})
 			i = last
 		}
 	}
 	return out
+}
+
+// ordinaryName: every word is an ordinary word or an acronym of up to 4 letters ("Camera Drone",
+// "GROOVE OS", "RTF", "ELRS"): not a person's name.
+func ordinaryName(ws []tok) bool {
+	for _, t := range ws {
+		if particles[fold(t.w)] {
+			continue
+		}
+		if !commonWord(t.w) && !(isAllCaps(t.w) && utf8.RuneCountInString(t.w) <= 4) {
+			return false
+		}
+	}
+	return true
+}
+
+// hasAcronym: a word of up to 4 capitals inside the name ("Kit RTF Aquila"): a product, not a person.
+func hasAcronym(ws []tok) bool {
+	for _, t := range ws {
+		if isAllCaps(t.w) && utf8.RuneCountInString(t.w) <= 4 && !particles[fold(t.w)] {
+			return true
+		}
+	}
+	return false
+}
+
+// headingRun: the name is followed by another capitalized word ("Max Takeoff Altitude",
+// "Kit Camera Drone"): a title-case heading, not a person, when the first name is also a word.
+func headingRun(s string, ts []tok, last int) bool {
+	j := last + 1
+	return j < len(ts) && isCap(ts[j].w) && !particles[fold(ts[j].w)] && gapOK(ts[last].w, s[ts[last].e:ts[j].s])
 }
 
 // findFirstnames: known first name followed by a surname ("Gérald Keizer", "Jean-Pierre van Damme"),
@@ -350,13 +384,14 @@ func findFirstnames(s string) [][2]int {
 		if !isFirst(ts[i].w) {
 			continue
 		}
-		if i > 0 && isAllCaps(ts[i-1].w) && utf8.RuneCountInString(ts[i-1].w) >= 3 && !commonWord(ts[i-1].w) &&
+		if i > 0 && isAllCaps(ts[i-1].w) && utf8.RuneCountInString(ts[i-1].w) >= 4 && !commonWord(ts[i-1].w) && // not "DJI Neo", "FPV Kit"
 			gapOK(ts[i-1].w, s[ts[i-1].e:ts[i].s]) {
 			out = append(out, [2]int{ts[i-1].s, ts[i].e})
 			continue
 		}
 		if i+1 < len(ts) && gapOK(ts[i].w, s[ts[i].e:ts[i+1].s]) {
-			if last, _ := nameAfterMode(s, ts, i+1, true); last >= 0 {
+			if last, _ := nameAfterMode(s, ts, i+1, true); last >= 0 && !ordinaryName(ts[i+1:last+1]) && !hasAcronym(ts[i+1:last+1]) &&
+				!(ambiguousFirst[fold(ts[i].w)] && headingRun(s, ts, last)) {
 				out = append(out, [2]int{ts[i].s, ts[last].e})
 				i = last
 			}
@@ -460,8 +495,25 @@ func (l *Learner) candidate(w string) bool {
 		return false
 	}
 	f := fold(w)
-	return !particles[f] && !isTitle(w) && !commonWord(w)
+	return !particles[f] && !isTitle(w) && !commonWord(w) && !notPersonWord[f]
 }
+
+// notPersonWord: localities and health organisations (Bruxelles, Erasme, Bordet…) are detected by
+// their own detectors; remembered as names, they would be counted twice and as the wrong kind.
+var notPersonWord = func() map[string]bool {
+	m := map[string]bool{}
+	for _, l := range [][]string{placeList, healthOrgs} {
+		for _, p := range l {
+			m[fold(p)] = true
+			for _, w := range strings.FieldsFunc(p, func(r rune) bool { return r == ' ' || r == '-' || r == '\'' }) {
+				if utf8.RuneCountInString(w) >= 4 {
+					m[fold(w)] = true
+				}
+			}
+		}
+	}
+	return m
+}()
 
 // Match reports whether a capitalized word is (within one typo of) a remembered name.
 func (l *Learner) Match(w string) bool {
@@ -534,7 +586,16 @@ func (l *Learner) Find(s string) [][2]int {
 }
 
 func (l *Learner) Learn(words []string) {
-	if l == nil || len(words) == 0 {
+	if l == nil {
+		return
+	}
+	kept := words[:0:0]
+	for _, w := range words {
+		if l.candidate(w) { // ordinary words, places and organisations are never remembered as names
+			kept = append(kept, w)
+		}
+	}
+	if words = kept; len(words) == 0 {
 		return
 	}
 	select {

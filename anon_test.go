@@ -895,3 +895,54 @@ func benchHistory(b *testing.B, cache bool) {
 
 func BenchmarkProcessHistory100KB(b *testing.B)        { benchHistory(b, true) }
 func BenchmarkProcessHistory100KBNoCache(b *testing.B) { benchHistory(b, false) }
+
+// Real false positives seen with Hermes (1.5.1): a technical or English text must come out
+// unchanged, and nothing learned from it may spread through the conversation.
+func TestHermesFalsePositives(t *testing.T) {
+	cfg, err := LoadConfig("config.example.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	conv := &convState{}
+	anon := func(in string) (string, *Session) {
+		s := NewSession(cfg, cfg.Profiles["standard"])
+		s.NoLearn = true
+		s.Resume(conv)
+		body := map[string]any{"messages": []any{map[string]any{"role": "user", "content": in}}}
+		s.Process(body, "openai")
+		s.Save(conv)
+		msgs := body["messages"].([]any)
+		return msgs[len(msgs)-1].(map[string]any)["content"].(string), s
+	}
+	for _, in := range []string{
+		"Open the chat. The assistant answers. A chat window, Image upload, What next?",
+		"Use cat. The file is listed. The dog. The end.",
+		"Buy DJI Neo 2 - Follow Me Camera Drone",
+		"The new firmware for the FM-1 is called GROOVE OS.",
+		"FPV Kit with Max VTX Power 1200mW and Max Takeoff Altitude 6000 m",
+		"BetaFPV Kit RTF Aquila16 and Kit ELRS receiver",
+		"Les DJI Avata 2 et Les VR goggles",
+		"DJI Neo Fly More Combo (CP.FP.00000151.02) + 64GB Card",
+	} {
+		if out, _ := anon(in); out != in {
+			t.Errorf("faux positif :\n%q\n%q", in, out)
+		}
+	}
+	// after all that, ordinary words are not replaced anywhere
+	out, s := anon("the max value of a set, what image, the kit")
+	if s.Anon != 0 {
+		t.Errorf("mots ordinaires remplacés : %q", out)
+	}
+	// the real cases still work
+	for _, c := range []struct{ in, leak string }{{"Mon chien Rex est malade.", "Rex"}, {"My dog called Rex is ill.", "Rex"},
+		{"Mme Claire Dubois a appelé.", "Dubois"}, {"Max Mustermann wohnt hier.", "Mustermann"}, {"Appeler le 0470 12 34 56.", "0470"}} {
+		if out, _ := anon(c.in); strings.Contains(out, c.leak) {
+			t.Errorf("%q → %q", c.in, out)
+		}
+	}
+	// a name learned capitalized is not replaced in lowercase ("Max" the person, "max" the word)
+	anon("M. Max Mustermann arrive.")
+	if out, _ := anon("Mustermann et la valeur max."); !strings.Contains(out, "valeur max") || strings.Contains(out, "Mustermann") {
+		t.Errorf("forme en minuscules : %q", out)
+	}
+}

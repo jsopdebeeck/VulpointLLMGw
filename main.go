@@ -34,7 +34,7 @@ var i18nJS []byte
 var docsFS embed.FS
 
 // Version of LLMGW; every release is described in RELEASE_NOTES.md.
-const Version = "1.4.0"
+const Version = "1.5.1"
 
 var sessKey []byte
 
@@ -107,6 +107,7 @@ func main() {
 	mux.HandleFunc("POST /v1/messages/count_tokens", g.handleCountTokens)
 	mux.HandleFunc("GET /v1/models", g.handleModels)
 	mux.HandleFunc("GET /v1/me", g.handleMe)
+	mux.HandleFunc("POST /v1/events", g.handleEvents)
 	mux.HandleFunc("GET /auth/providers", g.handleAuthProviders)
 	mux.HandleFunc("GET /auth/login/{id}", g.handleAuthLogin)
 	mux.HandleFunc("GET /auth/callback/{id}", g.handleAuthCallback)
@@ -283,6 +284,7 @@ func (g *Gateway) maintenance(ctx context.Context) {
 		g.store.PurgeFileLog()                         // file log kept 30 days
 		g.store.PurgeDebug(g.C().Debug.RetentionHours) // even when Debug is off and nobody opens the archive
 		g.purgeRevoked()
+		conversations.gc()                            // conversations idle for 24 h are forgotten
 		g.store.ExpireAccess(g.C().Access.ExpireDays) // undecided requests are refused
 		select {
 		case <-ctx.Done():

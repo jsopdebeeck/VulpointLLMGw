@@ -212,7 +212,7 @@ func (g *Gateway) handleLLM(api string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		t0 := time.Now()
 		cfg := g.C()
-		rec := &Rec{TS: t0, API: api, User: "?"}
+		rec := &Rec{TS: t0, API: api, User: "?", Client: clientName(r)}
 		var inDur, upDur time.Duration
 		admitted := false
 		var dbg *DebugEntry
@@ -349,7 +349,20 @@ func (g *Gateway) handleLLM(api string) http.HandlerFunc {
 		}
 		sess = NewSession(cfg, prof)
 		sess.Debug = cfg.Debug.Enabled
-		sess.Process(body, api)
+		func() {
+			// a named conversation keeps its placeholders from one turn to the next
+			if id := conversationID(r, body); id != "" {
+				conv := conversations.get(convKey(name, u.Profile, id))
+				defer conv.mu.Unlock()
+				sess.Resume(conv)
+				defer func() {
+					if sess.Blocked == 0 {
+						sess.Save(conv)
+					}
+				}()
+			}
+			sess.Process(body, api)
+		}()
 		release()
 		if cfg.Debug.Enabled {
 			dbg = &DebugEntry{Req: debugBody(encodeJSON(body), cfg.Debug.MaxKB)}
@@ -759,9 +772,41 @@ func (g *Gateway) handleMe(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	us := g.meter.Snapshot()["u:"+name]
-	writeJSON(w, map[string]any{"user": name, "description": u.Description, "profile": u.Profile,
+	out := map[string]any{"user": name, "description": u.Description, "profile": u.Profile,
 		"profileDescription": p.Description, "images": p.Images, "files": p.Files, "files_default": p.FilesDefault, "targets": ts,
-		"quota": cfg.EffectiveQuota(u), "usage": us})
+		"quota": cfg.EffectiveQuota(u), "usage": us, "version": Version, "client": clientName(r)}
+	if id := conversationID(r, nil); id != "" { // what this conversation keeps (counts only)
+		out["session"] = conversations.summary(convKey(name, u.Profile, id), id)
+	}
+	writeJSON(w, out)
+}
+
+// handleEvents: a client reports what the gateway cannot see, e.g. an agent call that went
+// to a provider directly (bypass). Recorded in the audit log, at most once an hour per
+// user and kind of event; never any content.
+func (g *Gateway) handleEvents(w http.ResponseWriter, r *http.Request) {
+	cfg := g.C()
+	name, u := g.auth(cfg, r)
+	if u == nil {
+		apiError(w, "openai", 401, "authentication_error", "clé API gateway invalide ou utilisateur désactivé")
+		return
+	}
+	var in struct {
+		Kind     string `json:"kind"`
+		Provider string `json:"provider"`
+		BaseURL  string `json:"base_url"`
+		Model    string `json:"model"`
+		Task     string `json:"task"`
+	}
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10))
+	if err := dec.Decode(&in); err != nil || in.Kind != "bypass" {
+		http.Error(w, "événement invalide (kind = bypass)", 400)
+		return
+	}
+	host := origin(in.BaseURL)
+	detail := fmt.Sprintf("%s · fournisseur %s · %s · modèle %s · tâche %s", clientName(r), clip(in.Provider, 40), clip(host, 80), clip(in.Model, 60), clip(in.Task, 40))
+	g.auditOnce("bypass:"+name+":"+in.Provider+":"+host+":"+in.Task, time.Hour, &Actor{Name: name}, "contournement de la passerelle", clientName(r), detail)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (t *Target) local() bool {

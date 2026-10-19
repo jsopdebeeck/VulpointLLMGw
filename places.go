@@ -136,18 +136,34 @@ var petCues = map[string]bool{"chien": true, "chienne": true, "chiot": true, "ch
 	"paard": true, "konijn": true, "dog": true, "cat": true, "horse": true, "puppy": true, "kitten": true}
 
 // findPets: "mon chien Rex", "le chat nommé Félix", "onze hond Max".
+// petDeterminers: a pet cue counts only after a determiner ("mon chien Rex", "our dog Rex"):
+// "chat" alone is mostly the English word (chat completions, the chat window).
+var petDeterminers = map[string]bool{"mon": true, "ma": true, "ton": true, "ta": true, "son": true, "sa": true, "notre": true,
+	"votre": true, "leur": true, "le": true, "la": true, "un": true, "une": true, "my": true, "our": true, "your": true,
+	"his": true, "her": true, "their": true, "the": true, "a": true, "mijn": true, "onze": true, "jouw": true, "zijn": true,
+	"haar": true, "hun": true, "de": true, "het": true, "een": true}
+
+// petNaming: words allowed between the cue and the name ("le chat nommé Félix", "a dog called Rex").
+var petNaming = map[string]bool{"nomme": true, "nommee": true, "appele": true, "appelee": true, "qui": true, "s": true,
+	"appelle": true, "named": true, "called": true, "genaamd": true, "heet": true, "die": true}
+
 func findPets(s string) [][2]int {
 	ts := tokenize(s)
 	var out [][2]int
-	for i := 0; i < len(ts)-1; i++ {
-		if !petCues[fold(ts[i].w)] {
+	for i := 1; i < len(ts)-1; i++ {
+		if !petCues[fold(ts[i].w)] || !petDeterminers[fold(ts[i-1].w)] || !gapOK(ts[i-1].w, s[ts[i-1].e:ts[i].s]) {
 			continue
 		}
 		j := i + 1
-		for j < len(ts) && j <= i+3 && !isCap(ts[j].w) { // "nommé", "qui s'appelle"
+		for j < len(ts) && j <= i+3 && petNaming[fold(ts[j].w)] && gapOK(ts[j-1].w, s[ts[j-1].e:ts[j].s]) {
 			j++
 		}
-		if j < len(ts) && j <= i+3 && isCap(ts[j].w) && !defaultAllow[fold(ts[j].w)] {
+		if j >= len(ts) || j > i+3 || !gapOK(ts[j-1].w, s[ts[j-1].e:ts[j].s]) {
+			continue
+		}
+		w := ts[j].w
+		// a pet's name is a proper noun: capitalized, not an ordinary word ("The", "Image", "What")
+		if isCap(w) && !isAllCaps(w) && utf8.RuneCountInString(w) >= 2 && !commonWord(w) && !defaultAllow[fold(w)] {
 			out = append(out, [2]int{ts[j].s, ts[j].e})
 			i = j
 		}
@@ -165,7 +181,9 @@ var ambiguousFirst = map[string]bool{"rose": true, "olive": true, "victoire": tr
 	"joy": true, "ivy": true, "eve": true, "kit": true, "jay": true, "mac": true, "rex": true, "sal": true, "ace": true,
 	"del": true, "les": true, "mo": true, "ty": true, "al": true, "ed": true, "bo": true, "jo": true, "sy": true, "val": true,
 	"dee": true, "flo": true, "ike": true, "nan": true, "norm": true, "rod": true, "russ": true, "tad": true, "len": true,
-	"lee": true, "ken": true, "gene": true, "dean": true, "chase": true, "frank": true, "rich": true, "dawn": true, "faith": true}
+	"lee": true, "ken": true, "gene": true, "dean": true, "chase": true, "frank": true, "rich": true, "dawn": true, "faith": true,
+	// first names that are also technical words
+	"max": true, "neo": true, "ruby": true, "rust": true, "kai": true, "ada": true, "nova": true, "echo": true}
 
 // findFirstnameAlone: a known first name on its own ("Luc a rappelé"), unless it is also an ordinary word.
 func findFirstnameAlone(s string) [][2]int {

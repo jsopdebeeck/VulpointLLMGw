@@ -2,7 +2,7 @@
 
 [Version française](README.fr.md)
 
-Version **1.4.0** · release notes in [RELEASE_NOTES.md](RELEASE_NOTES.md) (French) · built-in documentation at `/docs/` (administration) and `/docs/chat.html` (chat user guide), sources in [docs/](docs/) (French).
+Version **1.5.1** · release notes in [RELEASE_NOTES.md](RELEASE_NOTES.md) (French) · built-in documentation at `/docs/` (administration) and `/docs/chat.html` (chat user guide), sources in [docs/](docs/) (French).
 
 <p align="center"><img src="docs/img/architecture-en.svg" alt="LLMGW architecture: users, agents and applications in the trusted zone reach the LLMs only through the gateway, on the zone boundary; direct access to the Internet is blocked" width="100%"></p>
 
@@ -37,6 +37,7 @@ On the client side, only the URL and the key change:
 |---|---|
 | OpenAI SDK / compatible tools | `base_url = http://gateway:8080/v1`, `api_key = <gateway key>` |
 | Anthropic SDK / Claude Code | `ANTHROPIC_BASE_URL=http://gateway:8080`, `ANTHROPIC_AUTH_TOKEN=<gateway key>` |
+| Hermes Agent | `integrations/hermes/install.sh --url http://gateway:8080 --key <gateway key>` (kit below) |
 
 Model: `mistral-large` (routed automatically according to the profile) or `mistral/mistral-large` (forced target).
 `GET /v1/models` lists the models allowed for the user, and `GET /v1/me` returns their profile, quotas and usage. `GET /version` returns the version.
@@ -189,6 +190,10 @@ The detail view switches between the anonymised view and the original view, with
 
 **Access requests (`[access]`, Access requests page).** « Request access » on the chat sign-in screen: name, email, reason. The person confirms their address through a single-use link sent by email (a page with a button, because mail filters open links). Trusted domain: access granted at once with the default profile, the gateway key shown once. Other domain: waits for a decision in the dashboard (Admin or Support), refused after 14 days without one; approval emails a single-use link to the key. The key is never sent by email. Requires the SMTP server of `[alerts]` and the public `[auth] base_url`.
 
+**Conversation memory.** When the client names its conversation (`X-LLMGW-Session` header, sent by the Hermes kit; Claude Code's session id in `metadata.user_id`), the gateway keeps the placeholder mapping for the whole conversation: `«PERSON_1»` stays the same person from turn to turn, and a name found at one turn is still recognised later. Memory only, per user, profile and conversation, forgotten after 24 h of inactivity. `GET /v1/me` with the header returns the counts per kind (never the values). The reporting shows a per-application view (`X-LLMGW-Client` header or User-Agent).
+
+**Hermes Agent kit (`integrations/hermes/`).** `install.sh --url <gateway> --key <gw-key>` backs up Hermes' `config.yaml` and routes its main model, auxiliary tasks, delegation, scheduled jobs and mixture of agents through the gateway (key in Hermes' `.env`, never in `config.yaml`); `--dry-run` previews, `uninstall.sh` restores. Its `llmgw` plugin refuses main-model calls outside the gateway in strict mode (`--warn`: report only), reports auxiliary calls that bypass the gateway (`POST /v1/events` → audit log and overview), and adds a `/llmgw` command (gateway, profile, quotas, usage, the conversation's pseudonymised values). Web search, browser, voice and image or video generation are not OpenAI-format LLM calls: the script lists them without changing them. Details in [integrations/hermes/README.md](integrations/hermes/README.md) (French).
+
 ## Performance
 
 Measured on an Apple M5 (10 cores), native arm64 build, with a corpus of French medical prose containing one personal-data sentence per KB. Anonymisation is the only CPU-heavy step: the gateway adds well under a millisecond for routing, then the anonymisation time below; the LLM's own latency (seconds) dominates.
@@ -244,6 +249,8 @@ An entry-level VPS core is slower than an M5 core: count on half these figures. 
 | `start.command` | double-click start in Terminal (macOS) |
 | `shield.go` | web protection: client address, limits, bans, security headers |
 | `access.go` | access requests: confirmation links, approval, key retrieval |
+| `conv.go` | conversation memory (stable placeholders per conversation), client identification |
+| `integrations/hermes/` | Hermes Agent kit: `install.sh`, `uninstall.sh`, `llmgw` plugin, tests (`tests/run_tests.sh`) |
 | `build.sh` | macOS app + DMG and Linux archives in `dist/` |
 | `deploy/setup.sh`, `deploy/LISEZMOI.txt` | installer for a fresh Ubuntu / Debian server (inside the Linux archive) |
 | `deploy/deploy.sh` | build, copy and `setup.sh` on a VPS in one command (`--help`) |

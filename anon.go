@@ -442,7 +442,7 @@ func findINAMI(s string) [][2]int {
 	return out
 }
 
-var rePhone = regexp.MustCompile(`(?:\+|\b00)\d{2,3}[\s./-]?(?:\(0\)[\s./-]?)?\d(?:[\s./-]?\d){6,10}\b|\b0\d(?:[\s./-]?\d){7,8}\b`)
+var rePhone = regexp.MustCompile(`(?:\+|\b00)[1-9]\d{1,2}[\s./-]?(?:\(0\)[\s./-]?)?\d(?:[\s./-]?\d){6,10}\b|\b0[1-9](?:[\s./-]?\d){7,8}\b`)
 
 func findPhones(s string) [][2]int {
 	var out [][2]int
@@ -1220,10 +1220,13 @@ func (s *Session) learnFrom(text string) string {
 		if isAllCaps(v) && sp.det != nil && sp.det.words && sp.det.kinds == nil { // list acronym: must not be learned case-insensitively
 			continue
 		}
+		if !learnable(v) {
+			continue
+		}
 		k := learnKey(v)
 		s.learn[k] = sp.kind
-		if sp.det != nil && (sp.det.builtin == "place" || sp.det.words) && isCap(v) {
-			s.capOnly[k] = true // a place or a company when capitalized only: "Manage", not "you can manage"
+		if isCap(v) {
+			s.capOnly[k] = true // learned capitalized, found again capitalized only: "Max", not "max"
 		}
 		if !s.nameKinds[sp.kind] {
 			continue
@@ -1253,6 +1256,26 @@ func (s *Session) learnFrom(text string) string {
 		}
 	}
 	return text
+}
+
+// learnable: a value worth looking for elsewhere in the conversation. An ordinary word, a word
+// of one or two letters or a short acronym found once by a heuristic ("The" after "chat",
+// "DJI", "Kit") must not be replaced everywhere, turn after turn.
+func learnable(v string) bool {
+	words := strings.FieldsFunc(v, func(r rune) bool { return unicode.IsSpace(r) || r == '-' })
+	if len(words) == 0 {
+		return false
+	}
+	if strings.ContainsAny(v, "@0123456789") { // emails, numbers, identifiers: exact values
+		return true
+	}
+	for _, w := range words {
+		w = strings.Trim(w, trimPunct)
+		if utf8.RuneCountInString(w) >= 3 && !commonWord(w) && !(isAllCaps(w) && utf8.RuneCountInString(w) <= 4) {
+			return true // at least one word that is really a name
+		}
+	}
+	return false
 }
 
 func (s *Session) buildLearned() {

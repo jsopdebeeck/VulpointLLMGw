@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -1452,5 +1453,138 @@ func TestAccessRequests(t *testing.T) {
 	// unknown link
 	if st, _ := form("/access/key", "inventé-0123456789abcdefghij"); st != 400 {
 		t.Errorf("lien inventé : %d", st)
+	}
+}
+
+func TestConversationMemory(t *testing.T) {
+	gw, oai, _, g := setup(t)
+	g.C().Server.AdminToken = "tok"
+	send := func(session, ua, text string, md map[string]any) string {
+		body := map[string]any{"model": "mistral-large", "messages": []any{map[string]any{"role": "user", "content": text}}}
+		if md != nil {
+			body["metadata"] = md
+		}
+		b, _ := json.Marshal(body)
+		req, _ := http.NewRequest("POST", gw.URL+"/v1/chat/completions", bytes.NewReader(b))
+		req.Header.Set("Authorization", "Bearer gw-alice-remplace-moi")
+		if session != "" {
+			req.Header.Set("X-LLMGW-Session", session)
+		}
+		if ua != "" {
+			req.Header.Set("User-Agent", ua)
+		}
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		io.ReadAll(r.Body)
+		r.Body.Close()
+		var up map[string]any
+		json.Unmarshal([]byte(oai.last()), &up)
+		msgs := up["messages"].([]any)
+		return msgs[len(msgs)-1].(map[string]any)["content"].(string)
+	}
+	// turn 1 numbers Sophie Vandamme then Paul Martin; turn 2 names them in the other order:
+	// the conversation keeps its numbering (a fresh request would number Paul first)
+	send("conv-1", "", "Mme Sophie Vandamme et M. Paul Martin ont appelé.", nil)
+	out := send("conv-1", "", "Répondre à M. Paul Martin puis à Mme Sophie Vandamme.", nil)
+	if !strings.Contains(out, "M. «PERSON_2» puis à Mme «PERSON_1»") {
+		t.Errorf("numérotation de la conversation non conservée : %s", out)
+	}
+	// a name learned at an earlier turn is still recognised alone
+	if out := send("conv-1", "", "Vandamme rappelle demain.", nil); strings.Contains(out, "Vandamme") {
+		t.Errorf("nom appris au tour 1 non reconnu : %s", out)
+	}
+	// another conversation starts afresh
+	if out := send("conv-2", "", "Répondre à M. Paul Martin puis à Mme Sophie Vandamme.", nil); !strings.Contains(out, "M. «PERSON_1» puis à Mme «PERSON_2»") {
+		t.Errorf("autre conversation : %s", out)
+	}
+	// Claude Code: the session id comes from metadata.user_id
+	md := map[string]any{"user_id": "user_abc_account__session_0123abcd-4567-89ef-0123-456789abcdef"}
+	send("", "claude-cli/2.1 (external, cli)", "Mme Sophie Vandamme et M. Paul Martin ont appelé.", md)
+	if out := send("", "claude-cli/2.1 (external, cli)", "Répondre à M. Paul Martin puis à Mme Sophie Vandamme.", md); !strings.Contains(out, "M. «PERSON_2» puis à Mme «PERSON_1»") {
+		t.Errorf("session Claude Code : %s", out)
+	}
+	// /v1/me reports what the conversation keeps (counts only)
+	req, _ := http.NewRequest("GET", gw.URL+"/v1/me", nil)
+	req.Header.Set("Authorization", "Bearer gw-alice-remplace-moi")
+	req.Header.Set("X-LLMGW-Session", "conv-1")
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /v1/me", g.handleMe)
+	mux.HandleFunc("POST /v1/events", g.handleEvents)
+	gw2 := httptest.NewServer(mux)
+	defer gw2.Close()
+	req.URL, _ = url.Parse(gw2.URL + "/v1/me")
+	r, _ := http.DefaultClient.Do(req)
+	b, _ := io.ReadAll(r.Body)
+	var me struct {
+		Version string
+		Session struct {
+			ID     string
+			Values int
+			Kinds  map[string]int
+		}
+	}
+	json.Unmarshal(b, &me)
+	if me.Version != Version || me.Session.ID != "conv-1" || me.Session.Values < 2 || me.Session.Kinds["PERSON"] < 2 {
+		t.Errorf("/v1/me : %s", b)
+	}
+	if strings.Contains(string(b), "Vandamme") || strings.Contains(string(b), "Paul") {
+		t.Errorf("/v1/me ne doit renvoyer aucune valeur : %s", b)
+	}
+	// bypass report: audited once, without content
+	for i := 0; i < 2; i++ {
+		ev, _ := http.NewRequest("POST", gw2.URL+"/v1/events", strings.NewReader(`{"kind":"bypass","provider":"nous","base_url":"https://inference.example/v1","model":"m","task":"compression"}`))
+		ev.Header.Set("Authorization", "Bearer gw-alice-remplace-moi")
+		ev.Header.Set("X-LLMGW-Client", "hermes/0.9 llmgw-plugin/1.0")
+		if r, _ := http.DefaultClient.Do(ev); r.StatusCode != 204 {
+			t.Fatalf("événement : %d", r.StatusCode)
+		}
+	}
+	var n int
+	g.store.db.QueryRow(`SELECT COUNT(*) FROM audit WHERE action = 'contournement de la passerelle'
+		AND detail = 'hermes · fournisseur nous · https://inference.example · modèle m · tâche compression'`).Scan(&n)
+	if n != 1 {
+		t.Errorf("contournements journalisés : %d, 1 attendu", n)
+	}
+}
+
+func TestClientName(t *testing.T) {
+	for _, c := range []struct{ hdr, ua, want string }{
+		{"hermes/0.9 llmgw-plugin/1.0", "", "hermes"}, {"", "claude-cli/2.1.3 (external, cli)", "claude-code"},
+		{"", "OpenAI/Python 1.40", "openai-sdk"}, {"", "Mozilla/5.0", "autre"}, {"", "", "inconnu"},
+	} {
+		r := httptest.NewRequest("POST", "/v1/chat/completions", nil)
+		if c.hdr != "" {
+			r.Header.Set("X-LLMGW-Client", c.hdr)
+		}
+		if c.ua != "" {
+			r.Header.Set("User-Agent", c.ua)
+		}
+		if got := clientName(r); got != c.want {
+			t.Errorf("clientName(%q, %q) = %q, %q attendu", c.hdr, c.ua, got, c.want)
+		}
+	}
+}
+
+func TestClientColumnMigration(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "old.db")
+	db, _ := sql.Open("sqlite", p)
+	db.Exec(`CREATE TABLE requests(id INTEGER PRIMARY KEY, ts INTEGER, user TEXT, profile TEXT, target TEXT, model TEXT,
+  api TEXT, status INTEGER, stream INTEGER, bytes_in INTEGER, bytes_out INTEGER, tok_in INTEGER, tok_out INTEGER,
+  in_ms INTEGER, gw_ms INTEGER, up_ms INTEGER, ttfb_ms INTEGER, total_ms INTEGER, anon INTEGER, blocked INTEGER, err TEXT)`)
+	db.Exec(`INSERT INTO requests(ts, user) VALUES(1, 'ancien')`)
+	db.Close()
+	st, err := OpenStore(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	var c string
+	if err := st.db.QueryRow(`SELECT client FROM requests WHERE user = 'ancien'`).Scan(&c); err != nil || c != "" {
+		t.Errorf("colonne client : %q %v", c, err)
+	}
+	if _, err := st.Stats("48h"); err != nil {
+		t.Errorf("statistiques après migration : %v", err)
 	}
 }

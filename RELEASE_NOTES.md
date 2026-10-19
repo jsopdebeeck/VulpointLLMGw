@@ -2,6 +2,29 @@
 
 Le numéro suit le schéma `majeur.mineur.correctif`. La version en cours s'affiche en bas du menu du dashboard, dans l'en-tête de connexion du chat, sur `GET /version` et avec `./llmgw -version`.
 
+## 1.5.1 (20 octobre 2026)
+
+### Corrections
+- **Faux positifs en cascade avec Hermes.** Une détection erronée était apprise puis remplacée partout, et la mémoire de conversation la propageait de tour en tour : jusqu'à 4 000 remplacements par requête (« the » ×1 412 et « a » ×816 classés comme noms d'animaux, « DJI » ×956 comme personne). Sur les échanges réels rejoués, le nombre de remplacements passe de 4 224 à 79, tous de vraies données.
+  - Apprentissage : un mot ordinaire, un mot d'une ou deux lettres ou un sigle de 4 lettres au plus n'est plus appris ; une valeur apprise avec une majuscule n'est retrouvée qu'avec sa majuscule (« Max », pas « max »).
+  - Noms d'animaux : seulement après un déterminant (« mon chien Rex », « my dog Rex »), sans ponctuation entre les deux, et pour un nom propre qui n'est pas un mot ordinaire ; « chat » est le plus souvent le mot anglais.
+  - Noms après « Me » (Maître), « called » ou « named » : refusés s'ils ne sont faits que de mots ordinaires ou de sigles (« Follow Me Camera Drone », « called GROOVE OS »).
+  - NOM + prénom : le nom en capitales doit compter au moins 4 lettres (« DJI Neo », « FPV Kit ») ; un sigle au milieu d'un nom signale un produit (« Kit RTF Aquila ») ; un prénom qui est aussi un mot (Max, Kit, Les, Neo…) suivi d'un titre en capitales n'est pas une personne (« Max Takeoff Altitude »).
+  - Mémoire des noms : les localités et les établissements de soins (Bruxelles, Erasme, Bordet…) ne sont plus retenus ni reconnus comme des personnes.
+  - Téléphone : le préfixe international « 00 » doit être suivi d'un indicatif, et un numéro national commencer par 0 suivi d'un chiffre de 1 à 9 (« CP.FP.00000151.02 » n'est plus un téléphone).
+- Après la mise à jour, redémarrer la passerelle vide la mémoire des conversations, qui contenait les valeurs erronées.
+
+## 1.5.0 (19 octobre 2026)
+
+### Nouveautés
+- **Kit Hermes Agent** (`integrations/hermes/`, Hermes 0.21.6 ou plus récent) :
+  - `install.sh --url <passerelle> --key <clé>` sauvegarde `config.yaml` puis, via `hermes config set`, fait passer par la passerelle le modèle principal, toutes les tâches auxiliaires (compression, vision, titres…), la délégation, les tâches planifiées et le mélange de modèles (MoA, fan-out coupé sauf `--keep-moa`) ; les secours hors passerelle sont retirés ; la clé va dans le `.env` de Hermes (600), jamais dans `config.yaml`. `--dry-run` montre le plan ; `uninstall.sh` rétablit la configuration d'origine et met le plugin de côté, sans rien effacer ;
+  - plugin `llmgw` : en mode strict (par défaut), un appel du modèle principal hors passerelle est refusé avant tout envoi ; les tâches auxiliaires qui contournent la passerelle sont signalées (un plugin ne peut pas les bloquer) ; commande `/llmgw` : passerelle et version, profil, quotas, consommation, valeurs pseudonymisées de la conversation, contournements vus ;
+  - ce qui n'est pas un appel LLM au format OpenAI (recherche web, navigateur, voix, génération d'images et de vidéos) est listé avec la commande pour le couper, sans être modifié.
+- **Mémoire de conversation** : avec l'en-tête `X-LLMGW-Session` (envoyé par Hermes, tâches auxiliaires comprises) ou l'identifiant de session de Claude Code (`metadata.user_id`), la numérotation des jetons reste la même toute la conversation, et un nom repéré à un tour est encore reconnu aux suivants, même après une compaction de l'historique. En mémoire seulement, par utilisateur, profil et conversation, oubliée après 24 heures d'inactivité. `GET /v1/me` donne, avec cet en-tête, le nombre de valeurs gardées par type (jamais les valeurs) et la version de la passerelle.
+- **Contournements signalés** : `POST /v1/events` reçoit les appels d'un agent partis directement chez un fournisseur ; inscrits au journal d'audit (au plus une fois par heure, utilisateur et type), comptés dans la vue d'ensemble. Aucun contenu n'est transmis.
+- **Reporting par application** (Hermes, Claude Code, chat, SDK…), reconnue par l'en-tête `X-LLMGW-Client` ou le User-Agent ; colonne Application dans les requêtes récentes. Une base existante reçoit la nouvelle colonne au démarrage.
+
 ## 1.4.0 (19 octobre 2026)
 
 ### Nouveautés

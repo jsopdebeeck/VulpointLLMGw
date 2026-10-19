@@ -2,7 +2,7 @@
 
 [English version](README.md)
 
-Version **1.4.0** · notes de version dans [RELEASE_NOTES.md](RELEASE_NOTES.md) · documentation intégrée sur `/docs/` (administration) et `/docs/chat.html` (guide utilisateur du chat), sources dans [docs/](docs/).
+Version **1.5.1** · notes de version dans [RELEASE_NOTES.md](RELEASE_NOTES.md) · documentation intégrée sur `/docs/` (administration) et `/docs/chat.html` (guide utilisateur du chat), sources dans [docs/](docs/).
 
 <p align="center"><img src="docs/img/architecture-fr.svg" alt="Architecture de LLMGW : utilisateurs, agents et applications de la zone de confiance ne joignent les LLM que par la passerelle, en bordure de zone ; les accès directs vers Internet sont bloqués" width="100%"></p>
 
@@ -37,6 +37,7 @@ Côté client, il suffit de changer l'URL et la clé :
 |---|---|
 | SDK OpenAI / outils compatibles | `base_url = http://gateway:8080/v1`, `api_key = <clé gateway>` |
 | SDK Anthropic / Claude Code | `ANTHROPIC_BASE_URL=http://gateway:8080`, `ANTHROPIC_API_KEY=<clé gateway>` |
+| Hermes Agent | `integrations/hermes/install.sh --url http://gateway:8080 --key <clé gateway>` (kit ci-dessous) |
 
 Modèle : `mistral-large` (routage automatique selon le profil) ou `mistral/mistral-large` (cible imposée).
 `GET /v1/models` liste les modèles autorisés pour l'utilisateur, `GET /v1/me` son profil, ses quotas et sa consommation.
@@ -139,6 +140,10 @@ Un nom repéré une fois (« Mme Claire Dubois ») est aussi remplacé ailleurs 
 
 **Demandes d'accès (`[access]`, page Demandes d'accès).** « Demander un accès » sur l'écran de connexion du chat : nom, email, motif. La personne confirme son adresse par un lien à usage unique envoyé par email (une page avec un bouton, car les filtres de messagerie ouvrent les liens). Domaine de confiance : accès accordé tout de suite avec le profil par défaut, clé gateway affichée une fois. Autre domaine : décision dans le dashboard (Admin ou Support), refus après 14 jours sans décision ; l'approbation envoie un lien à usage unique vers la clé. La clé n'est jamais envoyée par email. Prérequis : le serveur SMTP de `[alerts]` et l'adresse publique `[auth] base_url`.
 
+**Mémoire de conversation.** Quand le client nomme sa conversation (en-tête `X-LLMGW-Session`, envoyé par le kit Hermes ; identifiant de session de Claude Code dans `metadata.user_id`), la passerelle garde la correspondance des jetons toute la conversation : `«PERSON_1»` reste la même personne d'un tour à l'autre, et un nom repéré à un tour est encore reconnu ensuite. En mémoire seulement, par utilisateur, profil et conversation, oubliée après 24 h d'inactivité. `GET /v1/me` avec l'en-tête donne les nombres par type (jamais les valeurs). Le reporting propose une vue par application (en-tête `X-LLMGW-Client` ou User-Agent).
+
+**Kit Hermes Agent (`integrations/hermes/`).** `install.sh --url <passerelle> --key <clé gw>` sauvegarde le `config.yaml` de Hermes et fait passer par la passerelle le modèle principal, les tâches auxiliaires, la délégation, les tâches planifiées et le mélange de modèles (clé dans le `.env` de Hermes, jamais dans `config.yaml`) ; `--dry-run` montre le plan, `uninstall.sh` revient en arrière. Son plugin `llmgw` refuse en mode strict les appels du modèle principal hors passerelle (`--warn` : signalement seulement), signale les tâches auxiliaires qui la contournent (`POST /v1/events` → journal d'audit et vue d'ensemble) et ajoute la commande `/llmgw` (passerelle, profil, quotas, consommation, valeurs pseudonymisées de la conversation). Recherche web, navigateur, voix et génération d'images ou de vidéos ne sont pas des appels LLM au format OpenAI : le script les liste sans les modifier. Détail dans [integrations/hermes/README.md](integrations/hermes/README.md).
+
 ## Performances
 
 Mesures sur Apple M5 (10 cœurs), binaire arm64 natif, corpus de prose médicale en français avec une phrase de données personnelles par Ko. L'anonymisation est la seule étape coûteuse en CPU : la passerelle ajoute bien moins d'une milliseconde pour le routage, plus le temps d'anonymisation ci-dessous ; la latence propre du LLM (plusieurs secondes) domine.
@@ -193,6 +198,8 @@ Un cœur de VPS d'entrée de gamme est plus lent qu'un cœur M5 : comptez la moi
 | `start.command` | démarrage en double-clic dans le Terminal (macOS) |
 | `shield.go` | protection web : adresse du client, limites, blocages, en-têtes de sécurité |
 | `access.go` | demandes d'accès : liens de confirmation, approbation, récupération de la clé |
+| `conv.go` | mémoire de conversation (jetons stables par conversation), identification du client |
+| `integrations/hermes/` | kit Hermes Agent : `install.sh`, `uninstall.sh`, plugin `llmgw`, tests (`tests/run_tests.sh`) |
 | `build.sh` | app macOS + DMG et archives Linux dans `dist/` |
 | `deploy/setup.sh`, `deploy/LISEZMOI.txt` | installation sur un serveur Ubuntu / Debian neuf (dans l'archive Linux) |
 | `deploy/deploy.sh` | compilation, copie et `setup.sh` sur un VPS en une commande (`--help`) |

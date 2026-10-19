@@ -316,6 +316,11 @@
     ["seule une demande en attente, adresse confirmée, peut être acceptée", "only a pending request with a confirmed address can be accepted", "alleen een aanvraag in afwachting met een bevestigd adres kan aanvaard worden"],
     ["demande déjà traitée", "request already handled", "aanvraag al behandeld"], ["demande non approuvée, ou utilisateur supprimé", "request not approved, or user deleted", "aanvraag niet goedgekeurd, of gebruiker verwijderd"], ["demande introuvable", "request not found", "aanvraag niet gevonden"],
     ["demande d'accès", "access request", "toegangsaanvraag"],
+    // clients and conversations (1.5.0)
+    ["Application", "Application", "Applicatie"], ["Par application", "Per application", "Per applicatie"], ["(avant agrégation)", "(before aggregation)", "(vóór aggregatie)"],
+    ["Hermes, Claude Code, chat… Reconnue par l'en-tête X-LLMGW-Client ou le User-Agent ; au-delà de la période de détail, les requêtes agrégées ne sont plus ventilées par application.", "Hermes, Claude Code, chat… Recognised by the X-LLMGW-Client header or the User-Agent; beyond the detail period, aggregated requests are no longer split per application.", "Hermes, Claude Code, chat… Herkend aan de header X-LLMGW-Client of de User-Agent; na de detailperiode worden geaggregeerde verzoeken niet meer per applicatie opgesplitst."],
+    ["Un agent a appelé un fournisseur sans passer par la passerelle : détail dans le journal d'audit.", "An agent called a provider without going through the gateway: details in the audit log.", "Een agent riep een provider aan zonder via de gateway te gaan: details in het auditlogboek."],
+    ["contournement de la passerelle", "gateway bypass", "omzeiling van de gateway"], ["inconnu", "unknown", "onbekend"], ["autre", "other", "andere"],
     ["Les liens des emails pointeront vers", "The email links will point to", "De links in de e-mails wijzen naar"],
     [": adresse injoignable depuis l'extérieur. Renseignez l'adresse publique (section [auth] base_url de config.toml).", ": an address unreachable from outside. Set the public address (section [auth] base_url of config.toml).", ": een adres dat van buitenaf onbereikbaar is. Vul het publieke adres in (sectie [auth] base_url van config.toml)."], ["accès refusé", "access refused", "toegang geweigerd"], ["lien de clé renvoyé", "key link resent", "sleutellink opnieuw verstuurd"], ["clé récupérée", "key retrieved", "sleutel opgehaald"],
   ];
@@ -389,6 +394,8 @@
     [/^Non enregistré : (.+)$/, (m, a) => `Not saved: ${tr(a)}`, (m, a) => `Niet opgeslagen: ${tr(a)}`],
     [/^(\d+) requêtes\/min par adresse, blocage après (\d+) connexions refusées\.$/, "$1 requests/min per address, ban after $2 refused sign-ins.", "$1 verzoeken/min per adres, blokkering na $2 geweigerde aanmeldingen."],
     [/^Adresse débloquée : (.+)$/, "Address unbanned: $1", "Adres gedeblokkeerd: $1"],
+    [/^(.+) contournement\(s\) de la passerelle signalé\(s\) en 48 h$/, "$1 gateway bypass(es) reported in 48 h", "$1 omzeiling(en) van de gateway gemeld in 48 u"],
+    [/^(.+) · fournisseur (.+) · (.+) · modèle (.*) · tâche (.*)$/, "$1 · provider $2 · $3 · model $4 · task $5", "$1 · provider $2 · $3 · model $4 · taak $5"],
     [/^(\d+) en attente de décision\. Approuver crée l'utilisateur avec le profil choisi et lui envoie un lien vers sa clé\.$/, "$1 waiting for a decision. Approving creates the user with the chosen profile and sends them a link to their key.", "$1 in afwachting van een beslissing. Goedkeuren maakt de gebruiker aan met het gekozen profiel en stuurt een link naar de sleutel."],
     [/^Accès accordé : utilisateur (.+)\. Un lien vers sa clé lui est envoyé par email\.$/, "Access granted: user $1. A link to their key is sent by email.", "Toegang verleend: gebruiker $1. Een link naar de sleutel wordt per e-mail verstuurd."],
     [/^Nouveau lien envoyé à (.+)$/, "New link sent to $1", "Nieuwe link verstuurd naar $1"],

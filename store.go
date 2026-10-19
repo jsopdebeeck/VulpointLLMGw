@@ -14,6 +14,7 @@ import (
 type Rec struct {
 	TS                                time.Time
 	User, Profile, Target, Model, API string
+	Client                            string // application: hermes, claude-code, chat…
 	Err                               string
 	Status                            int
 	Stream                            bool
@@ -55,6 +56,9 @@ func OpenStore(path string) (*Store, error) {
 	if _, err := db.Exec(schema); err != nil {
 		return nil, err
 	}
+	if err := addColumn(db, "requests", "client", "TEXT NOT NULL DEFAULT ''"); err != nil { // 1.5.0
+		return nil, err
+	}
 	// the database holds the session signing key and the Debug archive: owner only
 	// (SQLite gives the -wal and -shm files the permissions of the database)
 	if err := os.Chmod(path, 0o600); err != nil {
@@ -79,6 +83,24 @@ func OpenStore(path string) (*Store, error) {
 	go s.writer()
 	go s.debugWriter()
 	return s, nil
+}
+
+// addColumn adds a column to a table created by an earlier version (no-op when present).
+func addColumn(db *sql.DB, table, col, def string) error {
+	rs, err := db.Query(`SELECT name FROM pragma_table_info(?)`, table)
+	if err != nil {
+		return err
+	}
+	defer rs.Close()
+	for rs.Next() {
+		var n string
+		if rs.Scan(&n) == nil && n == col {
+			return nil
+		}
+	}
+	rs.Close()
+	_, err = db.Exec(`ALTER TABLE ` + table + ` ADD COLUMN ` + col + ` ` + def)
+	return err
 }
 
 func (s *Store) Add(r *Rec) {
@@ -145,9 +167,9 @@ func (s *Store) flushOnce(batch []*Rec) error {
 	for _, r := range batch {
 		ts := r.TS.Unix()
 		if _, err := tx.Exec(`INSERT INTO requests(ts,user,profile,target,model,api,status,stream,bytes_in,bytes_out,tok_in,tok_out,
-			in_ms,gw_ms,up_ms,ttfb_ms,total_ms,anon,blocked,err) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+			in_ms,gw_ms,up_ms,ttfb_ms,total_ms,anon,blocked,err,client) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 			ts, r.User, r.Profile, r.Target, r.Model, r.API, r.Status, r.Stream, r.BytesIn, r.BytesOut, r.TokIn, r.TokOut,
-			r.InMs, r.GwMs, r.UpMs, r.TtfbMs, r.TotalMs, r.Anon, r.Blocked, r.Err); err != nil {
+			r.InMs, r.GwMs, r.UpMs, r.TtfbMs, r.TotalMs, r.Anon, r.Blocked, r.Err, r.Client); err != nil {
 			return err
 		}
 		for kind, acts := range r.Dets {
@@ -244,7 +266,9 @@ type Row struct {
 	An, Bl                                 int64
 }
 
-func (s *Store) rows(rd rangeDef, grp string, since time.Time) ([]Row, error) {
+// rows groups by grp; the daily aggregates have no client column: their part is grouped
+// under grpDaily ("" for the client view, i.e. requests older than the raw retention).
+func (s *Store) rows(rd rangeDef, grp, grpDaily string, since time.Time) ([]Row, error) {
 	daily := 1
 	if rd.raw {
 		daily = 0
@@ -253,9 +277,9 @@ func (s *Store) rows(rd rangeDef, grp string, since time.Time) ([]Row, error) {
 		SELECT strftime('%[1]s', ts, 'unixepoch', 'localtime') b, %[2]s g, 1 n, %[3]s er, bytes_in bi, bytes_out bo, tok_in ti, tok_out tt,
 		  in_ms si, gw_ms sg, up_ms su, total_ms st, anon an, blocked bl FROM requests WHERE ts >= ?
 		UNION ALL
-		SELECT strftime('%[1]s', day) b, %[2]s g, requests, errors, bytes_in, bytes_out, tok_in, tok_out,
+		SELECT strftime('%[1]s', day) b, %[4]s g, requests, errors, bytes_in, bytes_out, tok_in, tok_out,
 		  sum_in, sum_gw, sum_up, sum_total, anon, blocked FROM daily WHERE day >= ? AND ?
-	) GROUP BY b, g ORDER BY b, g`, rd.sqlFmt, grp, errExpr)
+	) GROUP BY b, g ORDER BY b, g`, rd.sqlFmt, grp, errExpr, grpDaily)
 	rs, err := s.db.Query(q, since.Unix(), since.Format("2006-01-02"), daily)
 	if err != nil {
 		return nil, err
@@ -295,8 +319,9 @@ func (s *Store) Stats(rng string) (map[string]any, error) {
 	}
 
 	res := map[string]any{"range": rng, "buckets": buckets, "since": since.Unix()}
-	for key, grp := range map[string]string{"all": "'all'", "user": "user", "target": "target"} {
-		rows, err := s.rows(rd, grp, since)
+	for key, grp := range map[string][2]string{"all": {"'all'", "'all'"}, "user": {"user", "user"}, "target": {"target", "target"},
+		"client": {"client", "''"}} {
+		rows, err := s.rows(rd, grp[0], grp[1], since)
 		if err != nil {
 			return nil, err
 		}
@@ -345,24 +370,27 @@ func (s *Store) Stats(rng string) (map[string]any, error) {
 
 	type recent struct {
 		TS                                 int64
-		User, Target, Model, Err           string
+		User, Target, Model, Err, Client   string
 		Status                             int
 		Stream                             bool
 		TokIn, TokOut, TotalMs, UpMs, GwMs int64
 		Anon, Blocked                      int
 	}
 	var rec []recent
-	rs, err = s.db.Query(`SELECT ts, user, target, model, err, status, stream, tok_in, tok_out, total_ms, up_ms, gw_ms, anon, blocked
+	rs, err = s.db.Query(`SELECT ts, user, target, model, err, status, stream, tok_in, tok_out, total_ms, up_ms, gw_ms, anon, blocked, client
 		FROM requests ORDER BY id DESC LIMIT 50`)
 	if err != nil {
 		return nil, err
 	}
 	for rs.Next() {
 		var r recent
-		rs.Scan(&r.TS, &r.User, &r.Target, &r.Model, &r.Err, &r.Status, &r.Stream, &r.TokIn, &r.TokOut, &r.TotalMs, &r.UpMs, &r.GwMs, &r.Anon, &r.Blocked)
+		rs.Scan(&r.TS, &r.User, &r.Target, &r.Model, &r.Err, &r.Status, &r.Stream, &r.TokIn, &r.TokOut, &r.TotalMs, &r.UpMs, &r.GwMs, &r.Anon, &r.Blocked, &r.Client)
 		rec = append(rec, r)
 	}
 	rs.Close()
 	res["recent"] = rec
+	var bypass int64 // calls reported as having bypassed the gateway (POST /v1/events)
+	s.db.QueryRow(`SELECT COUNT(*) FROM audit WHERE action = 'contournement de la passerelle' AND ts >= ?`, since.Unix()).Scan(&bypass)
+	res["bypass"] = bypass
 	return res, nil
 }

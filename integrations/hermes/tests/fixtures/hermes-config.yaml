@@ -1,0 +1,93 @@
+# Configuration Hermes synthétique pour les tests du kit (même structure qu'une vraie, aucun secret :
+# la « clé » ci-dessous est une valeur bidon).
+model:
+  default: anthropic/claude-fable-5.1
+  provider: nous
+  base_url: https://inference-api.nousresearch.com/v1
+agent:
+  reasoning_effort: high
+terminal:
+  backend: local
+web:
+  backend: nous
+browser:
+  cloud_provider: nous
+checkpoints:
+  enabled: true
+tts:
+  provider: nous
+stt:
+  provider: nous
+moa:
+  presets:
+    default:
+      reference_models:
+      - provider: deepseek
+        model: deepseek-flash
+        enabled: true
+      - provider: xai
+        model: grok-4.6
+        enabled: true
+      - provider: nous
+        model: anthropic/claude-opus-5
+        enabled: true
+      aggregator:
+        provider: xai
+        model: grok-4.6
+      degraded_reference_policy: loud
+      fanout: user_turn
+  reference_models:
+  - provider: deepseek
+    model: deepseek-flash
+    enabled: true
+  - provider: xai
+    model: grok-4.6
+    enabled: true
+  aggregator:
+    provider: xai
+    model: grok-4.6
+  degraded_reference_policy: loud
+  max_tokens: 4096
+  fanout: user_turn
+  enabled: true
+approvals:
+  mode: manual
+image_gen:
+  provider: nous
+video_gen:
+  provider: nous
+auxiliary:
+  vision:
+    provider: openrouter
+    model: google/gemini-3-flash-preview
+    base_url: https://openrouter.ai/api/v1
+  compression:
+    timeout: 180
+    fallback_chain:
+    - provider: nous
+      model: deepseek/deepseek-chat
+    - provider: llmgw
+      model: deepseek-v4-pro
+fallback_providers:
+- provider: nous
+  model: anthropic/claude-opus-5
+providers:
+  llmgw:
+    api: http://127.0.0.1:8088/v1
+    api_key: gw-fixture-not-a-real-key-0000
+    transport: chat_completions
+    default_model: deepseek-flash
+    models:
+    - deepseek-flash
+  other-local:
+    api: http://127.0.0.1:11434/v1
+    transport: chat_completions
+plugins:
+  enabled:
+  - spotify
+  disabled: []
+telemetry:
+  shared_metrics:
+    enabled: false
+    send: false
+_config_version: 50

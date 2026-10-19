@@ -293,7 +293,7 @@ async function showWho() {
 $("#loginf").onsubmit = e => { e.preventDefault(); token = $("#tok").value; store.set("gwtok", token); boot(); };
 function toast(msg, bad) { const t = $("#toast"); t.textContent = msg; t.className = bad ? "bad" : ""; t.style.display = "block"; clearTimeout(t._h); t._h = setTimeout(() => t.style.display = "none", bad ? 9000 : 3500); }
 
-const entityOrder = { user: [], target: [] };
+const entityOrder = { user: [], target: [], client: [] };
 function colorOf(kind, name) {
   const list = entityOrder[kind]; let i = list.indexOf(name);
   if (i < 0) { list.push(name); i = list.length - 1; }
@@ -397,8 +397,8 @@ function sumRows(rows) {
 }
 function table(el, rows, kind) {
   if (!rows.length) { el.innerHTML = `<p class="sub">Aucune donnée sur la période.</p>`; return; }
-  el.innerHTML = `<table><thead><tr><th>${kind === "user" ? "Utilisateur" : "LLM"}</th><th class="n">Requêtes</th><th class="n">Tokens in</th><th class="n">Tokens out</th><th class="n">Volume in/out</th><th class="n">Moy. totale</th><th class="n">Moy. LLM</th><th class="n">Moy. gateway</th><th class="n">Conv.</th><th class="n">Viol.</th><th class="n">Erreurs</th></tr></thead><tbody>` +
-    rows.map(r => { const ok = r.N - r.Bl || 1; return `<tr><td><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${colorOf(kind, r.G)};margin-right:8px"></i>${esc(r.G || "?")}</td><td class="n">${fmt(r.N)}</td><td class="n">${fmt(r.TI)}</td><td class="n">${fmt(r.TO)}</td><td class="n">${fmtB(r.BI)} / ${fmtB(r.BO)}</td><td class="n">${fmtMs(r.ST / r.N)}</td><td class="n">${fmtMs(r.SU / ok)}</td><td class="n">${fmtMs(r.SG / r.N)}</td><td class="n">${fmt(r.An)}</td><td class="n">${r.Bl ? `<span class="badge bad">${fmt(r.Bl)}</span>` : "0"}</td><td class="n">${r.Err ? `<span class="badge warn">${fmt(r.Err)}</span>` : "0"}</td></tr>`; }).join("") + `</tbody></table>`;
+  el.innerHTML = `<table><thead><tr><th>${kind === "user" ? "Utilisateur" : kind === "client" ? "Application" : "LLM"}</th><th class="n">Requêtes</th><th class="n">Tokens in</th><th class="n">Tokens out</th><th class="n">Volume in/out</th><th class="n">Moy. totale</th><th class="n">Moy. LLM</th><th class="n">Moy. gateway</th><th class="n">Conv.</th><th class="n">Viol.</th><th class="n">Erreurs</th></tr></thead><tbody>` +
+    rows.map(r => { const ok = r.N - r.Bl || 1; return `<tr><td><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${colorOf(kind, r.G)};margin-right:8px"></i>${kind === "client" && !r.G ? "(avant agrégation)" : esc(r.G || "?")}</td><td class="n">${fmt(r.N)}</td><td class="n">${fmt(r.TI)}</td><td class="n">${fmt(r.TO)}</td><td class="n">${fmtB(r.BI)} / ${fmtB(r.BO)}</td><td class="n">${fmtMs(r.ST / r.N)}</td><td class="n">${fmtMs(r.SU / ok)}</td><td class="n">${fmtMs(r.SG / r.N)}</td><td class="n">${fmt(r.An)}</td><td class="n">${r.Bl ? `<span class="badge bad">${fmt(r.Bl)}</span>` : "0"}</td><td class="n">${r.Err ? `<span class="badge warn">${fmt(r.Err)}</span>` : "0"}</td></tr>`; }).join("") + `</tbody></table>`;
 }
 const ACT = { anonymize: ["conv", "anonymisé"], strip: ["conv", "retiré"], block: ["bad", "bloqué"], log: ["warn", "journalisé"], pass: ["ok", "laissé passer"] };
 function detTable(el, dets) {
@@ -409,8 +409,8 @@ function detTable(el, dets) {
 }
 function recentTable(el, rec) {
   if (!rec?.length) { el.innerHTML = `<p class="sub">Aucune requête pour l'instant.</p>`; return; }
-  el.innerHTML = `<table><thead><tr><th>Heure</th><th>Utilisateur</th><th>LLM</th><th>Modèle</th><th class="n">Statut</th><th class="n">Tokens</th><th class="n">Total</th><th class="n">LLM</th><th class="n">Gateway</th><th class="n">Conv.</th><th>Remarque</th></tr></thead><tbody>` +
-    rec.map(r => `<tr><td>${new Date(r.TS * 1000).toLocaleString(I18N.loc, { dateStyle: "short", timeStyle: "medium" })}</td><td>${esc(r.User)}</td><td>${esc(r.Target)}</td><td>${esc(r.Model)}${r.Stream ? " ⇢" : ""}</td>
+  el.innerHTML = `<table><thead><tr><th>Heure</th><th>Utilisateur</th><th>Application</th><th>LLM</th><th>Modèle</th><th class="n">Statut</th><th class="n">Tokens</th><th class="n">Total</th><th class="n">LLM</th><th class="n">Gateway</th><th class="n">Conv.</th><th>Remarque</th></tr></thead><tbody>` +
+    rec.map(r => `<tr><td>${new Date(r.TS * 1000).toLocaleString(I18N.loc, { dateStyle: "short", timeStyle: "medium" })}</td><td>${esc(r.User)}</td><td>${esc(r.Client || "—")}</td><td>${esc(r.Target)}</td><td>${esc(r.Model)}${r.Stream ? " ⇢" : ""}</td>
       <td class="n">${r.Blocked ? `<span class="badge bad">${r.Status}</span>` : r.Status >= 400 || !r.Status ? `<span class="badge warn">${r.Status}</span>` : r.Status}</td>
       <td class="n">${fmt(r.TokIn)} / ${fmt(r.TokOut)}</td><td class="n">${fmtMs(r.TotalMs)}</td><td class="n">${fmtMs(r.UpMs)}</td><td class="n">${fmtMs(r.GwMs)}</td><td class="n">${r.Anon}</td><td class="err">${esc(r.Err)}</td></tr>`).join("") + `</tbody></table>`;
 }
@@ -964,6 +964,7 @@ function viewReport() {
       <div class="card"><h2>Par utilisateur (source)</h2><div class="tw" id="t-user"></div></div>
       <div class="card"><h2>Par LLM (destination)</h2><div class="tw" id="t-target"></div></div>
     </section>
+    <section class="card"><h2>Par application</h2><div class="sub">Hermes, Claude Code, chat… Reconnue par l'en-tête X-LLMGW-Client ou le User-Agent ; au-delà de la période de détail, les requêtes agrégées ne sont plus ventilées par application.</div><div class="tw" id="t-client"></div></section>
     <section class="card"><h2>Détections et quotas par type</h2><div class="sub">Aucune valeur sensible n'est stockée, seulement des compteurs</div><div class="tw" id="t-det"></div></section>
     <section class="card"><h2>Requêtes récentes</h2><div class="tw" id="t-recent"></div></section>`;
 }
@@ -1000,6 +1001,7 @@ function drawReport() {
   ], fmt);
   table($("#t-user"), sumRows(d.user || []), "user");
   table($("#t-target"), sumRows(d.target || []), "target");
+  table($("#t-client"), sumRows(d.client || []), "client");
   detTable($("#t-det"), d.dets || []);
   recentTable($("#t-recent"), d.recent);
 }
@@ -1150,6 +1152,8 @@ function viewOverview() {
   const tokenSet = saved.Server?.AdminToken === KEEP, sso = saved.Auth?.Providers || [];
   add(tokenSet || sso.length ? "" : "c", tokenSet || sso.length ? "Administration protégée" : "Administration ouverte",
     [tokenSet && "jeton d'administration", sso.length && "SSO " + sso.map(p => esc(p.Label || p.ID)).join(", ")].filter(Boolean).join(" et ") || "Ni jeton ni SSO : quiconque atteint la passerelle peut la configurer.", "settings", "Paramètres");
+  // agent calls that went to a provider directly (reported by the Hermes plugin)
+  if (d?.bypass) add("w", `${fmt(d.bypass)} contournement(s) de la passerelle signalé(s) en 48 h`, "Un agent a appelé un fournisseur sans passer par la passerelle : détail dans le journal d'audit.", "audit", "Journal d'audit");
   // access requests waiting for a decision
   if (S.acc?.pending) add("w", `${S.acc.pending} demande(s) d'accès en attente`, "Adresse confirmée, décision à prendre ; sans décision, refus automatique.", "access", "Demandes d'accès");
   // web protection
