@@ -442,12 +442,27 @@ func findINAMI(s string) [][2]int {
 	return out
 }
 
-var rePhone = regexp.MustCompile(`(?:\+|\b00)[1-9]\d{1,2}[\s./-]?(?:\(0\)[\s./-]?)?\d(?:[\s./-]?\d){6,10}\b|\b0[1-9](?:[\s./-]?\d){7,8}\b`)
+// a number never spans a line break: separators are horizontal spaces, dots, slashes and dashes
+var rePhone = regexp.MustCompile(`(?:\+|\b00)[1-9]\d{1,2}[\t \x{00A0}./-]?(?:\(0\)[\t \x{00A0}./-]?)?\d(?:[\t \x{00A0}./-]?\d){6,10}\b|\b0[1-9](?:[\t \x{00A0}./-]?\d){7,8}\b`)
+
+// slashOK: a slash only follows the zone or mobile prefix ("02/541 91 91", "0470/12 34 56");
+// "08/10/2026 14" is a date, "001435/001442" two serial numbers.
+func slashOK(v string) bool {
+	i := strings.IndexByte(v, '/')
+	if i < 0 {
+		return true
+	}
+	prefix := 4 // 0 + zone or mobile prefix
+	if v[0] == '+' || strings.HasPrefix(v, "00") {
+		prefix = 7 // + country code ("+32 470/12 34 56")
+	}
+	return strings.Count(v, "/") == 1 && len(onlyDigits(v[:i])) <= prefix && !strings.HasPrefix(v[i+1:], "0")
+}
 
 func findPhones(s string) [][2]int {
 	var out [][2]int
 	for _, m := range rePhone.FindAllStringIndex(s, -1) {
-		if n := len(onlyDigits(s[m[0]:m[1]])); n < 8 || n > 15 {
+		if n := len(onlyDigits(s[m[0]:m[1]])); n < 8 || n > 15 || !slashOK(s[m[0]:m[1]]) {
 			continue
 		}
 		if afterDecimal(s, m[0]) { // 0.0012345678: a decimal number
@@ -1266,8 +1281,11 @@ func learnable(v string) bool {
 	if len(words) == 0 {
 		return false
 	}
-	if strings.ContainsAny(v, "@0123456789") { // emails, numbers, identifiers: exact values
+	if strings.Contains(v, "@") || len(onlyDigits(v)) >= 5 { // emails, phone numbers, identifiers: exact values
 		return true
+	}
+	if strings.ContainsAny(v, "0123456789") { // a short number and a word ("6148 Aug", "Clos le 20"): the detector
+		return false // finds it again in its own layout, a guess must not spread to every turn
 	}
 	for _, w := range words {
 		w = strings.Trim(w, trimPunct)
@@ -1533,6 +1551,13 @@ func (s *Session) walkBody(body map[string]any, fn func(string) string, parts bo
 					mm["name"] = walkName(n, fn)
 				}
 				msgs[i] = walk(m, modeStruct, fn)
+				// the reasoning of an earlier answer (DeepSeek, GLM, Grok, vLLM), sent back by the
+				// client as it was restored: unsigned text, pseudonymized like the content
+				for _, f := range reasoningKeys {
+					if t, ok := mm[f].(string); ok {
+						mm[f] = fn(t)
+					}
+				}
 			}
 		case "user", "safety_identifier", "stop", "stop_sequences": // OpenAI end-user id, stop sequences
 			body[k] = walk(body[k], modeText, fn)
@@ -1917,6 +1942,8 @@ var (
 	schemaMaps = map[string]bool{"properties": true, "patternProperties": true, "$defs": true, "definitions": true}
 	schemaSkip = map[string]bool{"type": true, "name": true, "format": true, "pattern": true, "required": true, "$ref": true,
 		"$schema": true, "$id": true, "cache_control": true, "strict": true}
+	// reasoning text of an assistant message (OpenAI-compatible APIs)
+	reasoningKeys = []string{"reasoning", "reasoning_content"}
 	// tool arguments travel as JSON text: values restored there are JSON-escaped
 	jsonTextKeys = map[string]bool{"arguments": true, "partial_json": true}
 )

@@ -946,3 +946,50 @@ func TestHermesFalsePositives(t *testing.T) {
 		t.Errorf("forme en minuscules : %q", out)
 	}
 }
+
+// Cases of the Debug archive (Hermes, 20 October 2026).
+func TestHermesDebugCases(t *testing.T) {
+	cfg := anonConfig(t)
+	std := cfg.Profiles["standard"]
+
+	// the reasoning of an earlier answer, sent back by the client, is pseudonymized like the content
+	_, out, _ := anonProcess(t, cfg, std, "openai", `{"model":"m","messages":[{"role":"user","content":"ok"},
+		{"role":"assistant","content":"Fait.","reasoning_content":"Mme Claire Dubois, claire.dubois@acme.be, 0470 12 34 56",
+		"reasoning":"Mme Claire Dubois, claire.dubois@acme.be"},{"role":"user","content":"merci"}]}`)
+	noLeak(t, out, "Dubois", "claire.dubois@acme.be", "0470 12 34 56")
+
+	// file listings, dates, laws and technical text are not addresses nor phone numbers
+	for _, in := range []string{
+		"-rw-r--r--@   1 js  staff  6148 Aug 18 11:39 .DS_Store\n1216 Oct 4 09:29 .\n2531 Jul 3 10:00 x",
+		"128 .\n3316 CHARTE-BOTS.md\n96 archive",
+		"**Clos le 20/10 (00:15)** : l'écart 98/105 n'est pas une erreur",
+		"Mise en place en décembre\n73 lignes",
+		"Mise en place\nLibreOffice 26 installé",
+		"| Trop-plein             arase 2 cm |",
+		"do artigo 1º, § 1º, da Lei nº 5.709/1971",
+		"Rendez-vous le 08/10/2026 14:30, puis le 03/09/2026\n43 entrées",
+		"sauvegarde SOUL.md.20261020-001435/001442.bak",
+	} {
+		if _, o, s := anonProcess(t, cfg, std, "openai", string(encodeJSON(map[string]any{"model": "m",
+			"messages": []any{map[string]any{"role": "user", "content": in}}}))); s.Anon != 0 {
+			t.Errorf("faux positif :\n%q\n%s", in, o)
+		}
+	}
+
+	// the real cases still work
+	for _, c := range []struct{ in, leak string }{
+		{"Écrire à Rue de la Loi 16, 1000 Bruxelles.", "Loi 16"},
+		{"Route de Philippeville 134\n5544 Hastière", "Philippeville 134"},
+		{"Avenue Louise 54 bte 3", "Louise 54"},
+		{"Kerkstraat 12, 9000 Gent", "Kerkstraat 12"},
+		{"Appeler le 02/541 91 91.", "541 91 91"},
+		{"Appeler le 0470/12 34 56.", "12 34 56"},
+		{"Mobile +32 470/12 34 56.", "12 34 56"},
+		{"Tel +55 61 99436-9383", "99436"},
+	} {
+		if _, o, _ := anonProcess(t, cfg, std, "openai", string(encodeJSON(map[string]any{"model": "m",
+			"messages": []any{map[string]any{"role": "user", "content": c.in}}}))); strings.Contains(o, c.leak) {
+			t.Errorf("%q → %s", c.in, o)
+		}
+	}
+}

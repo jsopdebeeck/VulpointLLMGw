@@ -150,7 +150,7 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
 
 <div class="page">
   <nav class="toc" aria-label="Sommaire">
-    <a class="toc-brand" href="https://vulpoint.com" target="_blank" rel="noopener"><img src="img/vulpoint-logo.jpg" alt="Vulpoint"><div><b>LLMGW</b><small>by Vulpoint.com · v1.5.1</small></div></a>
+    <a class="toc-brand" href="https://vulpoint.com" target="_blank" rel="noopener"><img src="img/vulpoint-logo.jpg" alt="Vulpoint"><div><b>LLMGW</b><small>by Vulpoint.com · v1.5.2</small></div></a>
     <div class="label">Fonctionnalités</div>
     <ol>
       <li><a href="#objectif"><span>1</span>Objectif</a></li>
@@ -211,7 +211,7 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
       <div class="eyebrow">Documentation fonctionnelle, technique et d'administration</div>
       <h1>LLMGW, la passerelle IA de l'organisation</h1>
       <p class="lede">Un point de connexion unique entre les utilisateurs, les agents et les modèles de langage. Il applique la politique IA : qui peut utiliser quel modèle, quelles données peuvent sortir, et avec quelle traçabilité.</p>
-      <div class="meta"><span><b>Version</b> 1.5.1 (20 octobre 2026)</span><span><b>Composant</b> llmgw (binaire unique Go, macOS et Linux)</span><span><b>Formats d'API</b> OpenAI et Anthropic</span><span><b>Interface</b> anglais, français, néerlandais</span></div>
+      <div class="meta"><span><b>Version</b> 1.5.2 (21 octobre 2026)</span><span><b>Composant</b> llmgw (binaire unique Go, macOS et Linux)</span><span><b>Formats d'API</b> OpenAI et Anthropic</span><span><b>Interface</b> anglais, français, néerlandais</span></div>
       <a class="crosslink" href="chat.html">Guide utilisateur du chat ↗</a>
     </header>
 
@@ -466,7 +466,7 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
       <p>Une liste <strong>« jamais anonymiser »</strong> protège les produits, les marques et les termes techniques (Claude, GitHub, API…) contre les faux positifs ; elle vaut pour le terme entier, si bien que « Mme Claude Dubois » reste pseudonymisé. Un dictionnaire de mots courants évite de prendre « Transport » ou « Custom » pour un nom de famille.</p>
       <h3>Ce qui est parcouru</h3>
       <ul>
-        <li>Tout le texte de la requête : messages, système, documents texte, résultats d'outils et arguments de fonctions, noms des messages, descriptions et valeurs d'exemple des outils, champs <code>user</code>, <code>metadata</code> et <code>stop</code>. Les signatures, les blocs chiffrés (<code>encrypted_*</code>) et les données base64 ne sont jamais modifiés.</li>
+        <li>Tout le texte de la requête : messages, système, documents texte, résultats d'outils et arguments de fonctions, noms des messages, descriptions et valeurs d'exemple des outils, champs <code>user</code>, <code>metadata</code> et <code>stop</code>, et le raisonnement des réponses précédentes que l'agent renvoie dans l'historique (<code>reasoning</code>, <code>reasoning_content</code> : DeepSeek, GLM, Grok, vLLM). Les signatures, les blocs chiffrés (<code>encrypted_*</code>) et les données base64 ne sont jamais modifiés.</li>
         <li>Le texte JSON contenu dans une chaîne (résultat d'un outil, arguments d'une fonction) est analysé une fois ses échappements décodés ; le JSON envoyé reste valide.</li>
         <li>Les espaces insécables, traits d'union conditionnels, caractères invisibles et chiffres pleine chasse sont neutralisés avant la détection : « 0470 12 34 56 » avec des espaces insécables est reconnu.</li>
         <li>En cas de chevauchement, l'action la plus stricte l'emporte : un NISS interdit n'est jamais masqué par une référence seulement journalisée.</li>
@@ -711,7 +711,7 @@ files_default = "pass_log"                         <span class="c"># autres exte
       <h3>Lancement manuel</h3>
 <pre>export MISTRAL_API_KEY=… ANTHROPIC_API_KEY=…
 ./llmgw -config config.toml
-<span class="c"># LLMGW 1.5.1 à l'écoute sur http://127.0.0.1:8088 (dashboard : /dashboard, documentation : /docs)</span></pre>
+<span class="c"># LLMGW 1.5.2 à l'écoute sur http://127.0.0.1:8088 (dashboard : /dashboard, documentation : /docs)</span></pre>
       <p>Une seule instance par port. Arrêt avec Ctrl+C : les métriques en attente sont enregistrées avant la sortie.</p>
 
       <h3>App macOS dans la barre des menus</h3>
@@ -1027,6 +1027,11 @@ default_profile = "anonymisation"</pre>
       <h2><span class="n">39</span>Notes de version</h2>
       <p>La version en cours s'affiche en bas du menu du dashboard, sur l'écran de connexion du chat, sur <code>GET /version</code> et avec <code>./llmgw -version</code>. Le journal complet est tenu dans <code>RELEASE_NOTES.md</code>, à la racine du dépôt.</p>
       <div class="rel">
+        <h3>1.5.2, 21 octobre 2026</h3>
+        <ul>
+          <li>Le raisonnement des réponses précédentes, renvoyé par l'agent dans l'historique, est désormais pseudonymisé : il partait en clair vers le fournisseur.</li>
+          <li>Moins de fausses adresses et de faux numéros de téléphone dans les listings de fichiers, les dates et les textes techniques ; un numéro court accompagné d'un mot n'est plus propagé dans la conversation.</li>
+        </ul>
         <h3>1.5.1, 20 octobre 2026</h3>
         <ul>
           <li>Fin des faux positifs en cascade avec les agents : mots ordinaires, sigles et produits ne sont plus appris ni propagés dans la conversation (4 224 remplacements ramenés à 79 sur des échanges réels).</li>
@@ -1093,7 +1098,7 @@ default_profile = "anonymisation"</pre>
       </div>
     </section>
 
-    <footer class="doc"><img src="img/vulpoint-logo.jpg" alt=""><span>LLMGW 1.5.1 by <a href="https://vulpoint.com" target="_blank" rel="noopener">Vulpoint.com</a></span></footer>
+    <footer class="doc"><img src="img/vulpoint-logo.jpg" alt=""><span>LLMGW 1.5.2 by <a href="https://vulpoint.com" target="_blank" rel="noopener">Vulpoint.com</a></span></footer>
   </main>
 </div>
 </body>

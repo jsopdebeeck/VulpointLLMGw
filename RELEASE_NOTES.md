@@ -2,6 +2,19 @@
 
 Le numéro suit le schéma `majeur.mineur.correctif`. La version en cours s'affiche en bas du menu du dashboard, dans l'en-tête de connexion du chat, sur `GET /version` et avec `./llmgw -version`.
 
+## 1.5.2 (21 octobre 2026)
+
+### Corrections
+- **Le raisonnement du modèle partait en clair.** Les modèles qui exposent leur raisonnement (DeepSeek, GLM, Grok, vLLM) le renvoient dans `reasoning` ou `reasoning_content`. La passerelle le pseudonymisait dans la réponse puis le restaurait pour le client ; quand l'agent (Hermes) le renvoyait dans l'historique au tour suivant, ce champ n'était pas parcouru. Sur une demi-journée d'échanges Hermes, plus de 1 000 champs (1,4 million de caractères) partaient ainsi en clair, noms, emails et clients compris. Ces champs sont maintenant traités comme le contenu des messages.
+- **Fausses adresses** (16 802 détections le 20 octobre, presque toutes fausses et propagées de tour en tour) :
+  - un code postal suivi d'un mois n'est pas une adresse (« 6148 Aug 18 » dans un listing `ls -l`), ni un nombre suivi d'un nom de fichier (« 3316 CHARTE-BOTS.md ») ;
+  - une rue ne s'étend plus sur deux lignes, et seuls le type de voie et les particules ignorent la casse : les mots suivants doivent vraiment commencer par une majuscule (« place en décembre 73 » n'est plus une adresse) ;
+  - un numéro suivi d'une barre, de deux-points ou d'une décimale est une date, une heure ou une mesure (« Clos le 20/10 ») ; un type de voie après un trait d'union n'en est pas un (« Trop-plein ») ;
+  - les types néerlandais qui ne sont que des suffixes (straat, lei, plein, weg, kaai) ne sont plus cherchés seuls (« Lei nº 5.709 », une loi brésilienne) ; « Kerkstraat 12 » reste reconnu.
+- **Faux téléphones** : un numéro ne s'étend plus sur deux lignes ; une barre ne suit que l'indicatif de zone ou de mobile (« 02/541 91 91 », « 0470/12 34 56 », « +32 470/12 34 56 ») : « 08/10/2026 14 » (une date) et « 001435/001442 » (des numéros de série) ne sont plus des téléphones.
+- **Apprentissage** : une valeur faite d'un nombre court et d'un mot (« 6148 Aug ») n'est plus apprise ni remplacée partout ; le détecteur la retrouve dans sa propre mise en forme. Emails, téléphones et identifiants (5 chiffres ou plus) restent appris.
+- Après la mise à jour, redémarrer la passerelle vide la mémoire des conversations, qui contenait les valeurs erronées.
+
 ## 1.5.1 (20 octobre 2026)
 
 ### Corrections

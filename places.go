@@ -36,10 +36,15 @@ var placeSet = func() map[string]bool {
 	return m
 }()
 
+// hs: horizontal space (a value never spans a line break)
+const hs = `[^\S\r\n]`
+
 var (
-	streetTypes = `rue|avenue|av\.|chaussée|chée|boulevard|bd|place|square|quai|allée|impasse|chemin|route|drève|clos|sentier|venelle|straat|laan|steenweg|lei|plein|kaai|dreef|weg|street|road|lane`
+	streetTypes = `rue|avenue|av\.|chaussée|chée|boulevard|bd|place|square|quai|allée|impasse|chemin|route|drève|clos|sentier|venelle|laan|steenweg|dreef|street|road|lane`
 	// "rue de la Loi 16", "Avenue Louise 54 bte 3", "Chaussée de Waterloo, 1180"
-	reStreet = regexp.MustCompile(`(?i)\b(?:` + streetTypes + `)\s+(?:(?:de la|de l'|du|des|de|d'|van|van de|van der|der|den|la|le|les)\s+)?[\p{L}'’\-]+(?:\s+[\p{Lu}][\p{L}'’\-]+){0,3},?\s+\d{1,4}[a-zA-Z]?(?:\s*(?:bte|boîte|bus|b)\.?\s*\d+)?\b`)
+	// Dutch types that are only suffixes (Kerkstraat, Frankrijklei, Stationsplein) are left to reStreetNL;
+	// a street never spans a line break, and only the type and the particles ignore case
+	reStreet = regexp.MustCompile(`\b(?i:` + streetTypes + `)` + hs + `+(?:(?i:de la|de l'|du|des|de|d'|van|van de|van der|der|den|la|le|les)` + hs + `+)?[\p{L}'’\-]+(?:` + hs + `+[\p{Lu}][\p{L}'’\-]+){0,3},?` + hs + `+\d{1,4}[a-zA-Z]?(?:` + hs + `*(?i:bte|boîte|bus|b)\.?` + hs + `*\d+)?\b`)
 	// Dutch compounds: "Kerkstraat 12", "Stationsplein 3"
 	reStreetNL = regexp.MustCompile(`\b[\p{Lu}][\p{L}\-]+(?:straat|laan|steenweg|weg|lei|plein|dreef|kaai|singel|markt|pad)\s+\d{1,4}[a-zA-Z]?(?:\s*(?:bus|b)\s*\d+)?\b`)
 	// "1000 Bruxelles", "B-6041 Gosselies"
@@ -54,14 +59,39 @@ var (
 	}()
 )
 
+// monthWord: a month, in full or abbreviated ("6148 Aug 18 11:39" is a file listing, not "6148 Aug").
+var monthWord = func() map[string]bool {
+	m := map[string]bool{}
+	for _, w := range strings.Split(months+`|jan|janv|feb|fev|fevr|mar|apr|avr|jun|jul|juil|aug|sep|sept|oct|okt|nov|dec`, "|") {
+		m[fold(w)] = true
+	}
+	return m
+}()
+
+// notAddressEnd: the number of the match goes on as a date, a time or a decimal ("Clos le 20/10",
+// "place 12:30"), or the match is the start of a file name ("3316 CHARTE-BOTS.md").
+func notAddressEnd(s string, e int) bool {
+	if e+1 >= len(s) {
+		return false
+	}
+	c, d := s[e], s[e+1]
+	return (c == '/' || c == ':' || c == '.' || c == ',') && isDigitByte(d) || c == '.' && isWordRune(rune(d))
+}
+
 func findAddresses(s string) [][2]int {
 	var out [][2]int
 	for _, m := range append(streetList.find(s), reStreetNL.FindAllStringIndex(s, -1)...) {
+		if m[0] > 0 && s[m[0]-1] == '-' || notAddressEnd(s, m[1]) { // "Trop-plein à 2", "Clos le 20/10"
+			continue
+		}
 		out = append(out, [2]int{m[0], m[1]})
 	}
 	for _, m := range rePostal.FindAllStringSubmatchIndex(s, -1) {
 		loc := s[m[6]:m[7]]
 		first := strings.Fields(strings.ReplaceAll(loc, "-", " "))[0]
+		if monthWord[fold(first)] || notAddressEnd(s, m[1]) {
+			continue
+		}
 		before := strings.TrimRight(s[max(0, m[0]-3):m[0]], " ")
 		// a year followed by a word is not an address: require the B- prefix, a known locality,
 		// or an address layout (after a comma or a line break)
