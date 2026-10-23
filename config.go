@@ -235,8 +235,8 @@ func ParseConfig(data []byte, base string) (*Config, error) {
 			return nil, fmt.Errorf("target %q : base_url manquant", n)
 		}
 		t.key = os.ExpandEnv(t.APIKey)
-		if t.APIKeyEnv != "" {
-			t.key = os.Getenv(t.APIKeyEnv)
+		if v := os.Getenv(t.APIKeyEnv); t.APIKeyEnv != "" && v != "" {
+			t.key = v // la variable d'env. ne remplace api_key que si elle est définie
 		}
 		if err := checkQuota(t.Quota); err != nil {
 			return nil, fmt.Errorf("target %q : %w", n, err)

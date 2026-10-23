@@ -32,7 +32,7 @@ ban_minutes = 30                  # 24 h au plus
 # ---------------------------------------------------------------- LLM cibles
 # api = "openai"    → base_url se termine par /v1  (POST {base_url}/chat/completions)
 # api = "anthropic" → base_url sans /v1             (POST {base_url}/v1/messages)
-# models : globs acceptés ("claude-*", "*"). Clé : api_key_env (recommandé) ou api_key.
+# models : globs acceptés ("claude-*", "*"). Clé : api_key_env (recommandé) ou api_key ; api_key sert quand la variable n'est pas définie.
 
 [targets.local]
 api = "openai"

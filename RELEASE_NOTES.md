@@ -2,6 +2,11 @@
 
 Le numéro suit le schéma `majeur.mineur.correctif`. La version en cours s'affiche en bas du menu du dashboard, dans l'en-tête de connexion du chat, sur `GET /version` et avec `./llmgw -version`.
 
+## 1.5.3 (23 octobre 2026)
+
+### Corrections
+- **Clé d'API ignorée quand une variable d'environnement était indiquée.** Une cible qui a à la fois `api_key` et `api_key_env` prenait toujours la variable, même si elle n'était pas définie : la clé envoyée au fournisseur était vide et chaque appel était refusé (constaté sur Grok, `XAI_API_KEY` absente). La variable d'environnement reste prioritaire, mais seulement quand elle est définie et non vide ; sinon, la clé `api_key` du fichier est utilisée.
+
 ## 1.5.2 (21 octobre 2026)
 
 ### Corrections

@@ -1110,6 +1110,31 @@ files = { zip = "block_alert" }
 	}
 }
 
+func TestAPIKeyEnvFallback(t *testing.T) {
+	cfg := []byte(`[targets.grok]
+api = "openai"
+base_url = "https://api.x.ai/v1"
+api_key = "xai-fichier"
+api_key_env = "LLMGW_TEST_XAI_KEY"
+models = ["grok-*"]
+`)
+	t.Setenv("LLMGW_TEST_XAI_KEY", "")
+	c, err := ParseConfig(cfg, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if k := c.Targets["grok"].key; k != "xai-fichier" {
+		t.Errorf("variable vide : clé %q, attendu celle du fichier", k)
+	}
+	t.Setenv("LLMGW_TEST_XAI_KEY", "xai-env")
+	if c, err = ParseConfig(cfg, t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	if k := c.Targets["grok"].key; k != "xai-env" {
+		t.Errorf("variable définie : clé %q, attendu xai-env", k)
+	}
+}
+
 func TestSignInAudit(t *testing.T) {
 	gw, _, _, g := setup(t)
 	loginSeen.Range(func(k, _ any) bool { loginSeen.Delete(k); return true })
