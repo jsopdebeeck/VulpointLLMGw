@@ -3,11 +3,13 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -739,8 +741,16 @@ func (g *Gateway) handleModels(w http.ResponseWriter, r *http.Request) {
 		if t.Disabled || !g.ready(t) {
 			continue
 		}
+		var ids []string
 		for _, m := range t.Models {
-			if !strings.Contains(m, "*") && !seen[m] {
+			if strings.Contains(m, "*") { // a glob: the provider's own list says which models it covers
+				ids = append(ids, g.matchingModels(r.Context(), t)...)
+			} else {
+				ids = append(ids, m)
+			}
+		}
+		for _, m := range ids {
+			if !seen[m] {
 				seen[m] = true
 				data = append(data, map[string]any{"id": m, "object": "model", "owned_by": n})
 			}
@@ -843,6 +853,75 @@ func (g *Gateway) ready(t *Target) bool {
 	}
 	probeCache.Store(t.BaseURL, probeResult{ok, time.Now()})
 	return ok
+}
+
+var modelsCache sync.Map // base URL + key -> modelsResult
+
+type modelsResult struct {
+	ids []string
+	at  time.Time
+}
+
+// upstreamModels asks the provider for its model list (GET /models).
+func (g *Gateway) upstreamModels(ctx context.Context, t *Target, timeout time.Duration) (ids []string, status int, body []byte, err error) {
+	url := strings.TrimRight(t.BaseURL, "/") + "/models"
+	if t.API == "anthropic" {
+		url = strings.TrimRight(t.BaseURL, "/") + "/v1/models"
+	}
+	req, _ := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if t.API == "anthropic" {
+		req.Header.Set("anthropic-version", "2023-06-01")
+		if t.key != "" {
+			req.Header.Set("x-api-key", t.key)
+		}
+	} else if t.key != "" {
+		req.Header.Set("Authorization", "Bearer "+t.key)
+	}
+	for k, v := range t.Headers {
+		req.Header.Set(k, v)
+	}
+	cl := &http.Client{Timeout: timeout, Transport: g.client.Transport}
+	resp, err := cl.Do(req)
+	if err != nil {
+		return nil, 0, nil, err
+	}
+	defer resp.Body.Close()
+	body, _ = io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	var m struct{ Data []struct{ ID string } }
+	if resp.StatusCode < 400 && json.Unmarshal(body, &m) == nil {
+		for _, d := range m.Data {
+			ids = append(ids, d.ID)
+		}
+		sort.Strings(ids)
+	}
+	return ids, resp.StatusCode, body, nil
+}
+
+// matchingModels: the provider's models that the target's globs allow, kept 10 minutes
+// (1 minute after a failure, which lists nothing rather than delaying /v1/models).
+func (g *Gateway) matchingModels(ctx context.Context, t *Target) []string {
+	ck := t.BaseURL + "\x00" + t.key
+	var ids []string
+	if v, ok := modelsCache.Load(ck); ok && time.Since(v.(modelsResult).at) < 10*time.Minute {
+		ids = v.(modelsResult).ids
+	} else {
+		ids, _, _, _ = g.upstreamModels(ctx, t, 5*time.Second)
+		at := time.Now()
+		if ids == nil {
+			at = at.Add(-9 * time.Minute)
+		}
+		modelsCache.Store(ck, modelsResult{ids, at})
+	}
+	var out []string
+	for _, id := range ids {
+		for i, p := range t.pats {
+			if strings.Contains(t.Models[i], "*") && p.MatchString(id) {
+				out = append(out, id)
+				break
+			}
+		}
+	}
+	return out
 }
 
 // adaptBody applies per-target compatibility tweaks on a shallow copy of the request.

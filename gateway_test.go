@@ -1135,6 +1135,46 @@ models = ["grok-*"]
 	}
 }
 
+func TestModelsListsGlobTargets(t *testing.T) {
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/models" || r.Header.Get("Authorization") != "Bearer xai-test" {
+			http.Error(w, "refusé", 401)
+			return
+		}
+		w.Write([]byte(`{"data":[{"id":"grok-4"},{"id":"grok-3-mini"},{"id":"grok-imagine-video"},{"id":"other-model"}]}`))
+	}))
+	defer up.Close()
+	c, err := ParseConfig([]byte(`[targets.grok]
+api = "openai"
+base_url = "`+up.URL+`/v1"
+api_key = "xai-test"
+models = ["grok-4", "grok-3-*"]
+[profiles.p]
+targets = ["grok"]
+[users.hermes]
+key = "gw-hermes-test"
+profile = "p"
+`), t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, _, g := setup(t)
+	g.cfg.Store(c)
+	req := httptest.NewRequest("GET", "/v1/models", nil)
+	req.Header.Set("Authorization", "Bearer gw-hermes-test")
+	rec := httptest.NewRecorder()
+	g.handleModels(rec, req)
+	var out struct{ Data []struct{ ID string } }
+	json.Unmarshal(rec.Body.Bytes(), &out)
+	var ids []string
+	for _, d := range out.Data {
+		ids = append(ids, d.ID)
+	}
+	if strings.Join(ids, ",") != "grok-4,grok-3-mini" {
+		t.Errorf("modèles listés : %v (%s)", ids, rec.Body.String())
+	}
+}
+
 func TestSignInAudit(t *testing.T) {
 	gw, _, _, g := setup(t)
 	loginSeen.Range(func(k, _ any) bool { loginSeen.Delete(k); return true })

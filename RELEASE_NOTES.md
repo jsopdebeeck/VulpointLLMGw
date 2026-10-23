@@ -2,6 +2,12 @@
 
 Le numéro suit le schéma `majeur.mineur.correctif`. La version en cours s'affiche en bas du menu du dashboard, dans l'en-tête de connexion du chat, sur `GET /version` et avec `./llmgw -version`.
 
+## 1.5.4 (23 octobre 2026)
+
+### Corrections
+- **Les cibles décrites par un motif n'apparaissaient pas dans `GET /v1/models`.** Seuls les modèles nommés exactement étaient listés : une cible `models = ["grok-*"]` restait invisible, et Hermes ne proposait aucun modèle Grok dans son sélecteur. Pour une telle cible, la passerelle demande maintenant la liste au fournisseur et ne garde que les modèles qui correspondent au motif. La liste est gardée 10 minutes ; si le fournisseur ne répond pas, la cible n'ajoute rien, sans retarder la réponse (nouvel essai au bout d'une minute). Un motif plus étroit (`"grok-4*"`) écarte les modèles d'image et de vidéo.
+- Le test d'une cible depuis le dashboard utilise le même appel au fournisseur.
+
 ## 1.5.3 (23 octobre 2026)
 
 ### Corrections

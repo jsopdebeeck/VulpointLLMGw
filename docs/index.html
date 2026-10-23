@@ -150,7 +150,7 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
 
 <div class="page">
   <nav class="toc" aria-label="Sommaire">
-    <a class="toc-brand" href="https://vulpoint.com" target="_blank" rel="noopener"><img src="img/vulpoint-logo.jpg" alt="Vulpoint"><div><b>LLMGW</b><small>by Vulpoint.com · v1.5.3</small></div></a>
+    <a class="toc-brand" href="https://vulpoint.com" target="_blank" rel="noopener"><img src="img/vulpoint-logo.jpg" alt="Vulpoint"><div><b>LLMGW</b><small>by Vulpoint.com · v1.5.4</small></div></a>
     <div class="label">Fonctionnalités</div>
     <ol>
       <li><a href="#objectif"><span>1</span>Objectif</a></li>
@@ -211,7 +211,7 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
       <div class="eyebrow">Documentation fonctionnelle, technique et d'administration</div>
       <h1>LLMGW, la passerelle IA de l'organisation</h1>
       <p class="lede">Un point de connexion unique entre les utilisateurs, les agents et les modèles de langage. Il applique la politique IA : qui peut utiliser quel modèle, quelles données peuvent sortir, et avec quelle traçabilité.</p>
-      <div class="meta"><span><b>Version</b> 1.5.3 (23 octobre 2026)</span><span><b>Composant</b> llmgw (binaire unique Go, macOS et Linux)</span><span><b>Formats d'API</b> OpenAI et Anthropic</span><span><b>Interface</b> anglais, français, néerlandais</span></div>
+      <div class="meta"><span><b>Version</b> 1.5.4 (23 octobre 2026)</span><span><b>Composant</b> llmgw (binaire unique Go, macOS et Linux)</span><span><b>Formats d'API</b> OpenAI et Anthropic</span><span><b>Interface</b> anglais, français, néerlandais</span></div>
       <a class="crosslink" href="chat.html">Guide utilisateur du chat ↗</a>
     </header>
 
@@ -711,7 +711,7 @@ files_default = "pass_log"                         <span class="c"># autres exte
       <h3>Lancement manuel</h3>
 <pre>export MISTRAL_API_KEY=… ANTHROPIC_API_KEY=…
 ./llmgw -config config.toml
-<span class="c"># LLMGW 1.5.3 à l'écoute sur http://127.0.0.1:8088 (dashboard : /dashboard, documentation : /docs)</span></pre>
+<span class="c"># LLMGW 1.5.4 à l'écoute sur http://127.0.0.1:8088 (dashboard : /dashboard, documentation : /docs)</span></pre>
       <p>Une seule instance par port. Arrêt avec Ctrl+C : les métriques en attente sont enregistrées avant la sortie.</p>
 
       <h3>App macOS dans la barre des menus</h3>
@@ -796,7 +796,7 @@ integrations/hermes/uninstall.sh                                                
         <li><strong>Pseudonymes stables</strong> : Hermes envoie l'identifiant de la conversation (<code>X-LLMGW-Session</code>) à la passerelle seulement, tâches auxiliaires comprises ; la passerelle garde la même numérotation des jetons toute la conversation (voir <a href="#filtrage">Mémoire de conversation</a>).</li>
         <li><strong>Hors passerelle, par décision</strong> : la recherche web, le navigateur, la voix et la génération d'images ou de vidéos ne sont pas des appels LLM au format OpenAI : le script les liste, avec la commande pour les couper, sans les modifier.</li>
       </ul>
-      <p class="note">La passerelle doit nommer exactement au moins un modèle dans les cibles du profil de la clé (<code>models = ["mistral-large-latest"]</code>) : <code>/v1/models</code> ne liste pas les motifs (<code>"mistral-*"</code>). Le détail (modes, dépannage, limites) est dans <code>integrations/hermes/README.md</code>.</p>
+      <p class="note">Le profil de la clé doit autoriser au moins un modèle. <code>/v1/models</code> liste les modèles nommés (<code>"mistral-large-latest"</code>) et, pour une cible décrite par un motif (<code>"grok-*"</code>), les modèles du fournisseur qui y correspondent (liste demandée au fournisseur et gardée 10 minutes). Un motif plus étroit (<code>"grok-4*"</code>) écarte les modèles d'image ou de vidéo. Le détail (modes, dépannage, limites) est dans <code>integrations/hermes/README.md</code>.</p>
     </section>
 
     <section id="sso-setup">
@@ -1027,6 +1027,10 @@ default_profile = "anonymisation"</pre>
       <h2><span class="n">39</span>Notes de version</h2>
       <p>La version en cours s'affiche en bas du menu du dashboard, sur l'écran de connexion du chat, sur <code>GET /version</code> et avec <code>./llmgw -version</code>. Le journal complet est tenu dans <code>RELEASE_NOTES.md</code>, à la racine du dépôt.</p>
       <div class="rel">
+        <h3>1.5.4, 23 octobre 2026</h3>
+        <ul>
+          <li><code>GET /v1/models</code> liste aussi les modèles des cibles décrites par un motif (<code>"grok-*"</code>) : Hermes et les autres clients voient enfin Grok dans leur sélecteur.</li>
+        </ul>
         <h3>1.5.3, 23 octobre 2026</h3>
         <ul>
           <li>Une cible qui indique une variable d'environnement non définie utilise désormais sa clé <code>api_key</code> au lieu d'envoyer une clé vide (appels Grok refusés).</li>
@@ -1102,7 +1106,7 @@ default_profile = "anonymisation"</pre>
       </div>
     </section>
 
-    <footer class="doc"><img src="img/vulpoint-logo.jpg" alt=""><span>LLMGW 1.5.3 by <a href="https://vulpoint.com" target="_blank" rel="noopener">Vulpoint.com</a></span></footer>
+    <footer class="doc"><img src="img/vulpoint-logo.jpg" alt=""><span>LLMGW 1.5.4 by <a href="https://vulpoint.com" target="_blank" rel="noopener">Vulpoint.com</a></span></footer>
   </main>
 </div>
 </body>

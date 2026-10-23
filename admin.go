@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -335,40 +334,19 @@ func (g *Gateway) handleTargetTest(w http.ResponseWriter, r *http.Request) {
 	if t.API == "anthropic" {
 		url = strings.TrimRight(t.BaseURL, "/") + "/v1/models"
 	}
-	req, _ := http.NewRequestWithContext(r.Context(), "GET", url, nil)
-	if t.API == "anthropic" {
-		req.Header.Set("anthropic-version", "2023-06-01")
-		if t.key != "" {
-			req.Header.Set("x-api-key", t.key)
-		}
-	} else if t.key != "" {
-		req.Header.Set("Authorization", "Bearer "+t.key)
-	}
-	for k, v := range t.Headers {
-		req.Header.Set(k, v)
-	}
 	t0 := time.Now()
-	cl := &http.Client{Timeout: 10 * time.Second, Transport: g.client.Transport}
-	resp, err := cl.Do(req)
+	ids, status, body, err := g.upstreamModels(r.Context(), t, 10*time.Second)
 	res := map[string]any{"url": url}
 	if err != nil {
 		res["error"] = err.Error()
 		writeJSON(w, res)
 		return
 	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
-	res["status"], res["ms"] = resp.StatusCode, time.Since(t0).Milliseconds()
-	var m struct{ Data []struct{ ID string } }
-	if json.Unmarshal(body, &m) == nil {
-		var ids []string
-		for _, d := range m.Data {
-			ids = append(ids, d.ID)
-		}
-		sort.Strings(ids)
+	res["status"], res["ms"] = status, time.Since(t0).Milliseconds()
+	if ids != nil {
 		res["models"] = ids
 	}
-	if resp.StatusCode >= 400 {
+	if status >= 400 {
 		res["error"] = strings.TrimSpace(string(body[:min(len(body), 300)]))
 	}
 	writeJSON(w, res)

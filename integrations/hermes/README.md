@@ -23,9 +23,9 @@ Il contient :
   supplémentaire) et la commande `hermes` elle-même pour lire et écrire la configuration.
 - macOS ou Linux, bash.
 - Une passerelle LLMGW joignable (1.5.0 ou plus récente) et une clé `gw-…` ; la passerelle doit autoriser
-  au moins un modèle pour cette clé (`GET /v1/models`). `/v1/models` ne liste que les modèles **nommés
-  exactement** dans les cibles du profil (`models = ["mistral-large-latest", …]`) : une cible qui ne
-  donne qu'un motif (`"mistral-*"`) n'y apparaît pas. Avec une passerelle antérieure à 1.5.0, Hermes
+  au moins un modèle pour cette clé (`GET /v1/models`). Depuis 1.5.4, une cible décrite par un motif
+  (`"grok-*"`) y apparaît avec les modèles du fournisseur qui y correspondent ; avant 1.5.4, seuls les
+  modèles **nommés exactement** dans les cibles du profil étaient listés. Avec une passerelle antérieure à 1.5.0, Hermes
   fonctionne, mais sans pseudonymes stables sur la conversation, sans signalement des contournements et
   sans détail de session dans `/llmgw`.
 
