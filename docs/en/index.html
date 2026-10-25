@@ -1,0 +1,1120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LLMGW by Vulpoint.com · Documentation</title>
+<link rel="icon" href="../img/vulpoint-logo.jpg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Sans+Condensed:wght@500;600&display=swap">
+<style>
+/* Layout: technical specification, left menu in three parts (features, setup, pages) + one reading column; diagrams and screenshots break out to full width */
+:root {
+  --bg: #f5f6f4;
+  --paper: #ffffff;
+  --ink: #16201f;
+  --ink-2: #4a5654;
+  --ink-3: #7d8886;
+  --line: #d9dedb;
+  --accent: #0e7c6b;        /* teal: the gateway */
+  --accent-soft: #dcefe9;
+  --src: #2f5d9e;           /* blue: sources */
+  --src-soft: #e2ebf7;
+  --dst: #7a4b12;           /* amber-brown: destinations */
+  --dst-soft: #f5ead9;
+  --block: #b3261e;         /* red: blocked, violations */
+  --block-soft: #f8e1df;
+  --log: #9a6200;
+  --log-soft: #fbefd4;
+  --code-bg: #eef1ef;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-label: "IBM Plex Sans Condensed", "IBM Plex Sans", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111615; --paper: #182120; --ink: #e7eeec; --ink-2: #b1bcb9; --ink-3: #7f8c89; --line: #2c3836;
+    --accent: #3fbfa7; --accent-soft: #173a34; --src: #7fa9e3; --src-soft: #1b2a3f; --dst: #e0ae6a; --dst-soft: #37291a;
+    --block: #f08a82; --block-soft: #3d1f1d; --log: #e9b75a; --log-soft: #3a2e17; --code-bg: #1f2a28;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111615; --paper: #182120; --ink: #e7eeec; --ink-2: #b1bcb9; --ink-3: #7f8c89; --line: #2c3836;
+  --accent: #3fbfa7; --accent-soft: #173a34; --src: #7fa9e3; --src-soft: #1b2a3f; --dst: #e0ae6a; --dst-soft: #37291a;
+  --block: #f08a82; --block-soft: #3d1f1d; --log: #e9b75a; --log-soft: #3a2e17; --code-bg: #1f2a28;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 16px/1.6 var(--f-body); }
+.page { max-width: 1220px; margin: 0 auto; padding-inline: 24px; padding-block: 40px 80px; display: grid; grid-template-columns: 236px minmax(0, 1fr); gap: 48px; }
+nav.toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 20px); align-self: start; font-size: 14px; max-height: calc(100vh - 40px); overflow-y: auto; padding-right: 4px; }
+nav.toc .label { font: 600 12px/1 var(--f-label); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); margin: 18px 0 8px 8px; }
+nav.toc .label:first-child { margin-top: 0; }
+nav.toc ol { list-style: none; padding: 0; margin: 0; display: grid; gap: 1px; }
+nav.toc a { display: flex; gap: 8px; color: var(--ink-2); text-decoration: none; padding: 4px 8px; border-radius: 6px; }
+nav.toc a:hover, nav.toc a:focus-visible { background: var(--paper); color: var(--ink); outline: none; }
+nav.toc a span { font-family: var(--f-mono); font-size: 12px; color: var(--ink-3); min-width: 24px; padding-top: 1px; }
+main { min-width: 0; }
+header.doc { border-bottom: 1px solid var(--line); padding-bottom: 28px; margin-bottom: 8px; }
+.eyebrow { font: 600 12px/1 var(--f-label); letter-spacing: .1em; text-transform: uppercase; color: var(--accent); }
+h1 { font: 600 40px/1.15 var(--f-body); letter-spacing: -.02em; margin: 12px 0 14px; text-wrap: balance; }
+.lede { font-size: 19px; color: var(--ink-2); max-width: 62ch; margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 20px; font: 500 13px/1.4 var(--f-label); color: var(--ink-3); }
+.meta b { color: var(--ink-2); font-weight: 600; }
+.part { margin-top: 56px; padding: 14px 0 0; border-top: 2px solid var(--ink); font: 600 13px/1 var(--f-label); letter-spacing: .12em; text-transform: uppercase; color: var(--ink); }
+section { padding-top: 36px; }
+h2 { font: 600 26px/1.25 var(--f-body); letter-spacing: -.01em; margin: 0 0 14px; display: flex; gap: 14px; align-items: baseline; text-wrap: balance; }
+h2 .n { font: 500 15px/1 var(--f-mono); color: var(--accent); }
+h3 { font: 600 18px/1.3 var(--f-body); margin: 28px 0 8px; display: flex; gap: 10px; align-items: baseline; }
+h3 .n { font: 500 13px/1 var(--f-mono); color: var(--accent); }
+p, ul, ol { max-width: 68ch; }
+p { margin: 0 0 12px; }
+ul, ol.steps { padding-left: 22px; margin: 0 0 12px; }
+li { margin: 4px 0; }
+li::marker { color: var(--ink-3); }
+code, .mono { font-family: var(--f-mono); font-size: .88em; }
+code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+.tok { font-family: var(--f-mono); font-size: .88em; color: var(--accent); background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; white-space: nowrap; }
+.figure { background: var(--paper); border: 1px solid var(--line); border-radius: 14px; padding: 20px; margin: 20px 0 8px; }
+.figure .scroll { overflow-x: auto; }
+.figure svg { display: block; width: 100%; min-width: 760px; height: auto; }
+.caption { font-size: 13px; color: var(--ink-3); margin-top: 10px; }
+.shot { margin: 14px 0 6px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--paper); }
+.shot .frame { max-height: 620px; overflow-y: auto; }
+.shot img { display: block; width: 100%; height: auto; }
+.shot .bar { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 8px 14px; border-top: 1px solid var(--line); font-size: 13px; color: var(--ink-3); background: var(--bg); }
+.shot .bar a { white-space: nowrap; }
+.tw { overflow-x: auto; margin: 12px 0 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; vertical-align: top; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+th { font: 600 12px/1.3 var(--f-label); letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3); background: var(--bg); }
+tr:last-child td { border-bottom: 0; }
+td.k { font-weight: 600; white-space: nowrap; }
+.pill { display: inline-block; font: 600 12px/1.6 var(--f-label); letter-spacing: .03em; padding: 0 8px; border-radius: 999px; white-space: nowrap; }
+.pill.anon { color: var(--accent); background: var(--accent-soft); }
+.pill.block { color: var(--block); background: var(--block-soft); }
+.pill.log { color: var(--log); background: var(--log-soft); }
+.pill.off { color: var(--ink-2); background: var(--code-bg); }
+.pill.src { color: var(--src); background: var(--src-soft); }
+.pill.dst { color: var(--dst); background: var(--dst-soft); }
+.flow { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin: 16px 0 8px; }
+.step { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 12px; min-width: 0; }
+.step .who { font: 600 11px/1 var(--f-label); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 8px; }
+.step .txt { font-size: 13.5px; line-height: 1.5; overflow-wrap: anywhere; }
+.step.gw { border-color: var(--accent); }
+.step.gw .who { color: var(--accent); }
+.step.llm .who { color: var(--dst); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--ink-2); font-size: 15px; max-width: 68ch; margin: 12px 0; }
+.note.warn { border-left-color: var(--log); }
+.note strong { color: var(--ink); }
+.cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 14px 0; }
+.card { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 16px; min-width: 0; }
+.card h4 { margin: 0 0 6px; font: 600 15px/1.3 var(--f-body); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.card p { font-size: 14px; color: var(--ink-2); margin: 0; }
+.card ul { font-size: 14px; color: var(--ink-2); margin: 6px 0 0; }
+pre { background: var(--code-bg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 13px/1.55 var(--f-mono); margin: 10px 0 14px; max-width: 100%; }
+pre .c { color: var(--ink-3); }
+a { color: var(--accent); }
+/* diagram text colours from tokens */
+.d-t { fill: var(--ink); font-family: var(--f-body); }
+.d-t2 { fill: var(--ink-2); font-family: var(--f-body); }
+.d-lab { fill: var(--ink-3); font-family: var(--f-label); letter-spacing: .08em; }
+@media (max-width: 900px) {
+  .page { grid-template-columns: minmax(0, 1fr); gap: 16px; padding-block: 24px 64px; padding-inline: 16px; }
+  nav.toc { position: static; max-height: none; }
+  nav.toc ol { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  h1 { font-size: 30px; }
+  .flow { grid-template-columns: minmax(0, 1fr); }
+  .cards { grid-template-columns: minmax(0, 1fr); }
+  .shot .frame { max-height: 480px; }
+}
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+.brandline { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+.brandline img { width: 56px; height: 56px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px var(--line); }
+.brandline b { display: block; font: 600 20px/1.2 var(--f-body); }
+.brandline span { color: var(--ink-3); font-size: 14px; }
+.brandline a { color: inherit; text-decoration: none; }
+.toc-brand { display: flex; align-items: center; gap: 10px; margin: 0 0 18px 8px; text-decoration: none; color: var(--ink); }
+.toc-brand img { width: 34px; height: 34px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px var(--line); }
+.toc-brand b { display: block; font-size: 14px; } .toc-brand small { color: var(--ink-3); font-size: 12px; }
+.crosslink { display: inline-flex; gap: 8px; align-items: center; background: var(--accent-soft); color: var(--accent); border-radius: 999px; padding: 6px 14px; text-decoration: none; font: 600 13px/1.2 var(--f-label); margin-top: 18px; }
+.rel { border: 1px solid var(--line); border-radius: 12px; background: var(--paper); padding: 16px 18px; margin: 12px 0; }
+.rel h3 { margin-top: 0; }
+footer.doc { margin-top: 64px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--ink-3); font-size: 13px; display: flex; gap: 10px; align-items: center; }
+footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff; }
+</style>
+</head>
+<body>
+
+<div class="page">
+  <nav class="toc" aria-label="Contents">
+    <a class="toc-brand" href="https://vulpoint.com" target="_blank" rel="noopener"><img src="../img/vulpoint-logo.jpg" alt="Vulpoint"><div><b>LLMGW</b><small>by Vulpoint.com · v1.5.5</small></div></a>
+    <ol>
+      <li><a href="../index.html" hreflang="fr" lang="fr"><span>FR</span>Version française</a></li>
+    </ol>
+    <div class="label">Features</div>
+    <ol>
+      <li><a href="#objectif"><span>1</span>Purpose</a></li>
+      <li><a href="#architecture"><span>2</span>Architecture</a></li>
+      <li><a href="#acces"><span>3</span>Access</a></li>
+      <li><a href="#authentification"><span>4</span>Authentication</a></li>
+      <li><a href="#profils"><span>5</span>Profiles</a></li>
+      <li><a href="#filtrage"><span>6</span>Filtering and anonymisation</a></li>
+      <li><a href="#routage"><span>7</span>Routing</a></li>
+      <li><a href="#quotas"><span>8</span>Quotas and alerts</a></li>
+      <li><a href="#monitoring"><span>9</span>Monitoring</a></li>
+      <li><a href="#debug"><span>10</span>DEBUG mode</a></li>
+      <li><a href="#fichiers"><span>11</span>Images and files</a></li>
+      <li><a href="#administration"><span>12</span>Accounts and audit</a></li>
+      <li><a href="#langues"><span>13</span>Languages</a></li>
+      <li><a href="#securite"><span>14</span>Security</a></li>
+    </ol>
+    <div class="label">Setup</div>
+    <ol>
+      <li><a href="#prerequis"><span>15</span>Requirements</a></li>
+      <li><a href="#installation"><span>16</span>Installation</a></li>
+      <li><a href="#configuration"><span>17</span>Configuration</a></li>
+      <li><a href="#demarrage"><span>18</span>Startup and service</a></li>
+      <li><a href="#clients"><span>19</span>Connecting clients</a></li>
+      <li><a href="#sso-setup"><span>20</span>Enabling SSO</a></li>
+      <li><a href="#reseau"><span>21</span>Network and HTTPS</a></li>
+    </ol>
+    <div class="label">Dashboard pages</div>
+    <ol>
+      <li><a href="#page-dash-login"><span>22</span>Sign-in</a></li>
+      <li><a href="#page-overview"><span>23</span>Overview</a></li>
+      <li><a href="#page-report"><span>24</span>Reporting</a></li>
+      <li><a href="#page-users"><span>25</span>Users</a></li>
+      <li><a href="#page-access"><span>26</span>Access requests</a></li>
+      <li><a href="#page-profiles"><span>27</span>Profiles</a></li>
+      <li><a href="#page-targets"><span>28</span>Target LLMs</a></li>
+      <li><a href="#page-quotas"><span>29</span>Quotas</a></li>
+      <li><a href="#page-privacy"><span>30</span>Filtering and privacy</a></li>
+      <li><a href="#page-filelog"><span>31</span>File log</a></li>
+      <li><a href="#page-debug"><span>32</span>Debug</a></li>
+      <li><a href="#page-settings"><span>33</span>Alerts and SSO</a></li>
+      <li><a href="#page-security"><span>34</span>Web security</a></li>
+      <li><a href="#page-accounts"><span>35</span>Administration accounts</a></li>
+      <li><a href="#page-audit"><span>36</span>Audit log</a></li>
+    </ol>
+    <div class="label">Chat and versions</div>
+    <ol>
+      <li><a href="#page-chat"><span>37</span>Chat (overview)</a></li>
+      <li><a href="chat.html"><span>↗</span>Chat user guide</a></li>
+      <li><a href="#limites"><span>38</span>Limitations</a></li>
+      <li><a href="#versions"><span>39</span>Release notes</a></li>
+    </ol>
+  </nav>
+
+  <main>
+    <header class="doc">
+      <div class="brandline"><img src="../img/vulpoint-logo.jpg" alt="Vulpoint logo"><div><b>LLMGW</b><span>by <a href="https://vulpoint.com" target="_blank" rel="noopener">Vulpoint.com</a></span></div></div>
+      <div class="eyebrow">Functional, technical and administration documentation</div>
+      <h1>LLMGW, the organisation's AI gateway</h1>
+      <p class="lede">A single connection point between users, agents and language models. It enforces the AI policy: who may use which model, which data may leave, and with what traceability.</p>
+      <div class="meta"><span><b>Version</b> 1.5.5 (25 October 2026)</span><span><b>Component</b> llmgw (single Go binary, macOS and Linux)</span><span><b>API formats</b> OpenAI and Anthropic</span><span><b>Interface</b> English, French, Dutch</span></div>
+      <a class="crosslink" href="chat.html">Chat user guide ↗</a>
+    </header>
+
+    <div class="part">Features</div>
+
+    <section id="objectif">
+      <h2><span class="n">1</span>Purpose</h2>
+      <p>Strengthen the AI policy by enforcing a single path to the LLMs. Direct access to the providers (OpenAI, Anthropic, Mistral, DeepSeek…) is blocked in the firewalls and in Cisco Umbrella. Only the gateway is allowed to reach them.</p>
+      <p>This central point makes it possible to:</p>
+      <ul>
+        <li><strong>control access</strong>: each user or application identifies itself with its own key and is given a profile;</li>
+        <li><strong>protect data</strong>: sensitive information is replaced by tokens before it leaves the organisation, then restored in the answer;</li>
+        <li><strong>choose the model</strong> according to the profile, with automatic fallback when a provider is down;</li>
+        <li><strong>measure</strong> volumes, response times, conversions and violations.</li>
+      </ul>
+    </section>
+
+    <section id="architecture">
+      <h2><span class="n">2</span>Architecture</h2>
+      <p>On the left, the <strong>trust zone</strong>: users, agents, applications and local LLMs. On the right, the <strong>Internet</strong>, an uncontrolled zone: the cloud LLMs. The gateway sits <strong>on the boundary</strong>: every request to an LLM goes through it, and it is the only component allowed to reach the providers.</p>
+
+      <div class="figure">
+        <div class="scroll">
+        <svg viewBox="0 0 1100 600" role="img" aria-labelledby="archTitle archDesc">
+          <title id="archTitle">LLMGW gateway architecture</title>
+          <desc id="archDesc">On the left, the trust zone: users, agents, applications and local LLMs. On the right, the Internet: the cloud LLMs. LLMGW sits on the boundary between the two zones. Direct access from the trust zone to the Internet is blocked by the firewall and Umbrella.</desc>
+          <defs>
+            <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill: var(--ink-3)"/></marker>
+          </defs>
+
+          <!-- zones -->
+          <rect x="12" y="12" width="528" height="576" rx="18" style="fill: var(--src-soft)" fill-opacity=".35"/>
+          <rect x="540" y="12" width="548" height="576" rx="18" style="fill: var(--block-soft)" fill-opacity=".45"/>
+          <line x1="540" y1="12" x2="540" y2="588" style="stroke: var(--ink-3)" stroke-width="1.5" stroke-dasharray="3 5"/>
+          <text x="32" y="42" class="d-lab" font-size="13">TRUST ZONE</text>
+          <text x="1068" y="42" text-anchor="end" class="d-lab" font-size="13">INTERNET (UNTRUST)</text>
+
+          <!-- sources -->
+          <g>
+            <rect x="40" y="110" width="260" height="88" rx="14" style="fill: var(--src-soft); stroke: var(--src)" stroke-width="1.5"/>
+            <text x="60" y="142" class="d-t" font-size="17" font-weight="600">Users</text>
+            <text x="60" y="165" class="d-t2" font-size="13.5">Web portal /chat</text>
+            <text x="60" y="184" class="d-t2" font-size="13.5">SSO Entra ID, Google or key</text>
+
+            <rect x="40" y="212" width="260" height="88" rx="14" style="fill: var(--src-soft); stroke: var(--src)" stroke-width="1.5"/>
+            <text x="60" y="244" class="d-t" font-size="17" font-weight="600">Agents</text>
+            <text x="60" y="267" class="d-t2" font-size="13.5">Cowork, Claude Code, Hermes</text>
+            <text x="60" y="286" class="d-t2" font-size="13.5">Anthropic or OpenAI API</text>
+
+            <rect x="40" y="314" width="260" height="88" rx="14" style="fill: var(--src-soft); stroke: var(--src)" stroke-width="1.5"/>
+            <text x="60" y="346" class="d-t" font-size="17" font-weight="600">Applications</text>
+            <text x="60" y="369" class="d-t2" font-size="13.5">scripts, SDKs, business tools</text>
+            <text x="60" y="388" class="d-t2" font-size="13.5">application key</text>
+          </g>
+
+          <!-- local LLMs: inside the trust zone -->
+          <g>
+            <rect x="40" y="446" width="260" height="118" rx="14" style="fill: var(--dst-soft); stroke: var(--dst)" stroke-width="1.5"/>
+            <text x="60" y="478" class="d-t" font-size="17" font-weight="600">Local LLMs</text>
+            <g font-size="13" class="d-t2">
+              <text x="60" y="502">Ollama · vLLM · LM Studio</text>
+              <text x="60" y="523">sensitive data</text>
+              <text x="60" y="544">never leaves the network</text>
+            </g>
+          </g>
+
+          <!-- sources -> gateway -->
+          <g fill="none" style="stroke: var(--src)" stroke-width="2">
+            <path d="M300,154 C344,154 344,256 372,256"/>
+            <path d="M300,256 L372,256" marker-end="url(#arr)"/>
+            <path d="M300,358 C344,358 344,256 372,256"/>
+          </g>
+          <!-- gateway -> local LLMs and cloud LLMs -->
+          <g fill="none" style="stroke: var(--dst)" stroke-width="2">
+            <path d="M380,505 L308,505" marker-end="url(#arr)"/>
+            <path d="M700,330 L792,330" marker-end="url(#arr)"/>
+          </g>
+
+          <!-- gateway, on the boundary -->
+          <g>
+            <rect x="380" y="110" width="320" height="454" rx="20" style="fill: var(--paper); stroke: var(--accent)" stroke-width="2"/>
+            <rect x="445" y="126" width="190" height="42" rx="21" style="fill: var(--accent)"/>
+            <text x="540" y="153" text-anchor="middle" font-size="19" font-weight="600" style="fill: var(--paper); font-family: var(--f-mono)">llmgw</text>
+            <g font-size="14.5">
+              <rect x="400" y="184" width="280" height="44" rx="10" style="fill: var(--accent-soft)"/>
+              <text x="416" y="211" class="d-t" font-weight="600">Identification and profiles</text>
+              <rect x="400" y="238" width="280" height="44" rx="10" style="fill: var(--accent-soft)"/>
+              <text x="416" y="265" class="d-t" font-weight="600">Filtering and anonymisation ⇄</text>
+              <rect x="400" y="292" width="280" height="44" rx="10" style="fill: var(--accent-soft)"/>
+              <text x="416" y="319" class="d-t" font-weight="600">Routing, fallback and quotas</text>
+              <rect x="400" y="346" width="280" height="44" rx="10" style="fill: var(--accent-soft)"/>
+              <text x="416" y="373" class="d-t" font-weight="600">Monitoring, alerts, DEBUG</text>
+              <rect x="400" y="400" width="280" height="44" rx="10" style="fill: none; stroke: var(--accent)" stroke-dasharray="4 4"/>
+              <text x="416" y="427" class="d-t2">Administration dashboard</text>
+            </g>
+            <text x="540" y="478" text-anchor="middle" class="d-lab" font-size="12">ON THE ZONE BOUNDARY</text>
+            <text x="540" y="498" text-anchor="middle" class="d-t2" font-size="13">single point of passage</text>
+            <text x="540" y="516" text-anchor="middle" class="d-t2" font-size="13">to the LLMs</text>
+          </g>
+
+          <!-- cloud LLMs: untrust -->
+          <g>
+            <rect x="800" y="250" width="260" height="160" rx="14" style="fill: var(--dst-soft); stroke: var(--dst)" stroke-width="1.5"/>
+            <text x="822" y="283" class="d-t" font-size="17" font-weight="600">Cloud LLMs</text>
+            <g font-size="13" class="d-t2">
+              <text x="822" y="310">Mistral · Anthropic</text>
+              <text x="822" y="332">OpenAI · Azure OpenAI</text>
+              <text x="822" y="354">DeepSeek · GLM · Grok</text>
+              <text x="822" y="386">keys held by the gateway</text>
+            </g>
+          </g>
+
+          <!-- direct access to untrust: blocked -->
+          <g>
+            <path d="M300,128 C334,128 334,84 368,84 L930,84 L930,242" fill="none" style="stroke: var(--block)" stroke-width="2" stroke-dasharray="6 6" marker-end="url(#arr)"/>
+            <g transform="translate(540,84)">
+              <circle r="15" style="fill: var(--block)"/>
+              <path d="M-5.5,-5.5 L5.5,5.5 M5.5,-5.5 L-5.5,5.5" style="stroke: var(--paper)" stroke-width="3" stroke-linecap="round"/>
+            </g>
+            <text x="740" y="72" text-anchor="middle" class="d-t" font-size="13.5" font-weight="600">Direct access blocked: firewall and Cisco Umbrella</text>
+            <text x="740" y="108" text-anchor="middle" class="d-t2" font-size="12.5">only the gateway goes out to the Internet</text>
+          </g>
+        </svg>
+        </div>
+        <div class="caption">Figure 1. Trust zone on the left, Internet on the right, gateway on the boundary. Allowed flows as solid lines; direct access to the Internet blocked (red dashes).</div>
+      </div>
+    </section>
+
+    <section id="acces">
+      <h2><span class="n">3</span>Access</h2>
+      <div class="cards">
+        <div class="card">
+          <h4>Web portal <span class="pill src">/chat</span></h4>
+          <p>For users. Sign in with Microsoft (Entra ID), Google or a personal key, then pick a model among those the profile allows. Someone without access can request it (see <a href="#demandes">Access requests</a>).</p>
+          <ul>
+            <li>Attached documents: txt, md, csv, json, PDF, docx. The text is extracted in the browser, then anonymised by the gateway.</li>
+            <li>Images and files handled according to the profile: sent, replaced by a white square, or refused (see <a href="#fichiers">11. Images and files</a>).</li>
+            <li>History of the last 10 conversations, kept in the browser; Help button leading to the <a href="chat.html">user guide</a>.</li>
+            <li>Under each answer: the model used and the number of pseudonymised values.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h4>API <span class="pill src">agents and applications</span></h4>
+          <p>For agents (Claude Cowork, Claude Code, Hermes) and applications. Same address as the portal, with an application key.</p>
+          <ul>
+            <li>OpenAI format: <code>/v1/chat/completions</code>, <code>/v1/models</code>.</li>
+            <li>Anthropic format: <code>/v1/messages</code>, <code>/v1/messages/count_tokens</code>.</li>
+            <li><code>/v1/me</code>: the caller's profile, quotas and consumption.</li>
+            <li>Streaming supported in both formats.</li>
+          </ul>
+        </div>
+      </div>
+      <h3>Tested clients</h3>
+      <div class="tw"><table>
+        <thead><tr><th>Client</th><th>Connection</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td class="k">Claude Code</td><td><code>ANTHROPIC_BASE_URL</code> pointing to the gateway, <code>ANTHROPIC_AUTH_TOKEN</code> = application key</td><td><span class="pill anon">working</span></td></tr>
+          <tr><td class="k">Hermes Agent</td><td><code>integrations/hermes/</code> kit: one-command setup, control plugin, stable pseudonyms per conversation (see <a href="#clients">Connecting clients</a>)</td><td><span class="pill anon">working</span></td></tr>
+          <tr><td class="k">OpenAI / Anthropic SDKs</td><td>change of base address and key</td><td><span class="pill anon">working</span></td></tr>
+          <tr><td class="k">Claude Cowork</td><td>traffic redirected to the gateway; redirection successfully tested in September 2026</td><td><span class="pill anon">working</span></td></tr>
+        </tbody>
+      </table></div>
+      <p>Connection procedures: see <a href="#clients">19. Connecting clients</a>.</p>
+    </section>
+
+    <section id="authentification">
+      <h2><span class="n">4</span>Authentication</h2>
+      <p>Every access is identified. Three methods coexist; SSO is added to the keys without replacing them.</p>
+      <div class="tw"><table>
+        <thead><tr><th>Method</th><th>For whom</th><th>Where</th></tr></thead>
+        <tbody>
+          <tr><td class="k">OpenID Connect SSO</td><td>people: Microsoft Entra ID, Google, or any OIDC provider (Okta, Keycloak…)</td><td>web portal and dashboard</td></tr>
+          <tr><td class="k">Gateway key</td><td>people without SSO, agents and applications</td><td>web portal (can be disabled) and API</td></tr>
+          <tr><td class="k">Admin token</td><td>technical administrator, emergency access</td><td>dashboard</td></tr>
+        </tbody>
+      </table></div>
+      <h3>Profile assigned after an SSO sign-in</h3>
+      <ol class="steps">
+        <li>A declared user with the same email address keeps their profile and quotas.</li>
+        <li>Otherwise, the first matching rule: <strong>Entra group</strong> → profile, <strong>app role</strong> → profile, or <strong>email pattern</strong> (<code>*@example.com</code>) → profile.</li>
+        <li>Otherwise, the provider's default profile.</li>
+        <li>Otherwise, access is refused with an explicit message.</li>
+      </ol>
+      <p><strong>Administrators</strong> are designated by app role, Entra group or email address, or listed in the <a href="#administration">administration accounts</a> (Admin or Support): they open the dashboard without a token. Google does not send groups: with Google, profiles are assigned by domain, by email or by declared user.</p>
+      <p class="note">Joiners, leavers and department changes follow the directory. Role and profile are recomputed at every request with the configuration in force: removing a rule, an account or a user takes effect immediately. A group change in the directory takes effect at the next sign-in (12-hour session by default). Signing out revokes the session, even if its cookie was copied.</p>
+      <p>Identity used: for Entra ID, the UPN, set by the tenant administrators; for Google and other OIDC providers, the email address <strong>marked as verified</strong> by the provider, otherwise the sign-in is refused. An OIDC provider that does not send this flag is accepted with <code>trust_unverified_email = true</code>, only if nobody can register on it freely.</p>
+
+      <h3 id="demandes">Access requests</h3>
+      <p>Someone without access can request it from the chat sign-in screen (« Request access » link: name, email, reason). Section <code>[access]</code>, <a href="#page-access">Access requests</a> tab of the dashboard.</p>
+      <ol class="steps">
+        <li>The gateway sends an email with a confirmation link, valid for 24 hours and single-use. The link opens a page with a « Confirm » button: mail filters (Safe Links…) open the links they find, so confirmation requires a click.</li>
+        <li><strong>Trusted domain</strong> (<code>trusted_domains</code>): access is granted at once. The user is created with the default profile and their gateway key is shown <strong>only once</strong> on the page.</li>
+        <li><strong>Other domain</strong>: the request waits for a decision in the dashboard; the <code>notify</code> recipients (failing that, the alert recipients) are informed. Approving creates the user with the chosen profile and sends a single-use link to the key. Without a decision, the request is refused after 14 days.</li>
+      </ol>
+      <p>The key is never sent by email. The request page always answers the same way, whether the address is known or not. Requests are limited per IP address (5 per hour), per email (3 per day) and in total (300 per day); an invented link counts as a refused sign-in for <a href="#securite">web protection</a>. Each step is written to the audit log. Requirements: the SMTP server of <code>[alerts]</code> and the public address <code>[auth] base_url</code>, which the links point to.</p>
+    </section>
+
+    <section id="profils">
+      <h2><span class="n">5</span>Profiles</h2>
+      <p>A profile groups everything that applies to a user or an application: allowed models, data policy, images and files by extension, a behaviour prompt, quotas and alert recipients. Each key is attached to a single profile.</p>
+      <div class="tw"><table>
+        <thead><tr><th>Profile</th><th>Use</th><th>Sensitive data</th><th>Images</th><th>Models</th></tr></thead>
+        <tbody>
+          <tr><td class="k">Open</td><td>tests, public data</td><td><span class="pill log">logged</span> nothing is changed</td><td>sent</td><td>all</td></tr>
+          <tr><td class="k">Anonymisation</td><td>everyday use</td><td><span class="pill anon">anonymised</span> then restored</td><td>white square</td><td>cloud and local</td></tr>
+          <tr><td class="k">Restricted</td><td>health, personal data</td><td><span class="pill anon">anonymised</span>; NISS, IBAN, cards <span class="pill block">blocked</span></td><td>blocked + log</td><td>short list</td></tr>
+          <tr><td class="k">Internal</td><td>confidential processing</td><td><span class="pill log">logged</span></td><td>sent</td><td>local LLMs only</td></tr>
+        </tbody>
+      </table></div>
+      <p class="caption">Reference profiles. Names and rules are set in the dashboard.</p>
+      <p>The <strong>behaviour prompt</strong> is added at the top of every request of the profile, for example « Answer in French; never make a diagnosis ». It is not anonymised.</p>
+    </section>
+
+    <section id="filtrage">
+      <h2><span class="n">6</span>Filtering and anonymisation</h2>
+      <p>On the way out, the gateway detects sensitive data and applies the profile's action. On the way back, it replaces the tokens with the original values, streaming included. The user reads a normal answer; the provider only saw tokens.</p>
+      <div class="flow" aria-label="Round-trip example">
+        <div class="step"><div class="who">1 · User</div><div class="txt">« Write a letter for Mrs Claire Dubois, case DOS-2025-00042. »</div></div>
+        <div class="step gw"><div class="who">2 · Gateway</div><div class="txt">Detection: one person, one case number.</div></div>
+        <div class="step llm"><div class="who">3 · LLM</div><div class="txt">Receives « … for Mrs <span class="tok">«PERSON_1»</span>, case <span class="tok">«DOSSIER_1»</span>. »</div></div>
+        <div class="step gw"><div class="who">4 · Gateway</div><div class="txt">Restores the tokens in the answer, as it streams.</div></div>
+        <div class="step"><div class="who">5 · User</div><div class="txt">« Dear Mrs Claire Dubois, regarding your case DOS-2025-00042… »</div></div>
+      </div>
+      <p class="caption">Figure 2. Bidirectional anonymisation. The token → value mapping never leaves the gateway and is not kept.</p>
+
+      <h3>Possible actions, per data type and per profile</h3>
+      <div class="tw"><table>
+        <thead><tr><th>Action</th><th>Effect</th><th>Counted as</th></tr></thead>
+        <tbody>
+          <tr><td><span class="pill anon">anonymise</span></td><td>replaced by a token, restored in the answer</td><td>conversion</td></tr>
+          <tr><td><span class="pill block">block</span></td><td>request refused, nothing is sent to the LLM</td><td>violation</td></tr>
+          <tr><td><span class="pill log">log</span></td><td>sent as is, but counted</td><td>detection</td></tr>
+          <tr><td><span class="pill off">ignore</span></td><td>no detection</td><td>nothing</td></tr>
+        </tbody>
+      </table></div>
+
+      <h3>What is detected</h3>
+      <div class="tw"><table>
+        <thead><tr><th>Family</th><th>Examples</th><th>Method</th></tr></thead>
+        <tbody>
+          <tr><td class="k">Identifiers</td><td>email, phone, IBAN, Belgian NISS (national register number), INAMI / RIZIV number of a healthcare provider (1-23456-25-001), bank card, IP address</td><td>patterns with check digits (IBAN, NISS, INAMI, Luhn)</td></tr>
+          <tr><td class="k">References</td><td>case, patient or invoice number, staff number</td><td>business patterns, or identifier after « dossier », « patient », « n° »…</td></tr>
+          <tr><td class="k">People</td><td>« M. Keizer », « Gérald Keizer », « KEIZER Gérald », first names alone</td><td>titles (typos tolerated), context words, dictionary of French, Dutch and English first names</td></tr>
+          <tr><td class="k">Organisations</td><td>customers, healthcare institutions (HUB, Erasme, Bordet, HUDERF…)</td><td>configurable lists; acronyms also with dots (H.U.B.)</td></tr>
+          <tr><td class="k">Places</td><td>addresses, « 6041 Gosselies », « domicilié à… » (residing at…)</td><td>address formats, list of localities, context words</td></tr>
+          <tr><td class="k">Dates</td><td>date of birth, or all dates</td><td>numeric and spelled-out formats</td></tr>
+          <tr><td class="k">Miscellaneous</td><td>a pet's name (« mon chien Rex », my dog Rex)</td><td>context word</td></tr>
+          <tr><td class="k">Images and files</td><td>photos, scans, PDF, Word, spreadsheets, archives…</td><td>action per profile and per extension: see <a href="#fichiers">11. Images and files</a></td></tr>
+        </tbody>
+      </table></div>
+      <p>A <strong>name memory</strong> then recognises a name already found, even on its own and even misspelt (« Keizr »). It only holds encrypted fingerprints, never the names.</p>
+      <p>A <strong>« Never anonymise »</strong> list protects products, brands and technical terms (Claude, GitHub, API…) against false positives; it applies to the whole term, so « Mrs Claude Dubois » is still pseudonymised. A dictionary of common words prevents « Transport » or « Custom » from being taken for a surname.</p>
+      <h3>What is scanned</h3>
+      <ul>
+        <li>All the text of the request: messages, system, text documents, tool results and function arguments, message names, tool descriptions and example values, the <code>user</code>, <code>metadata</code> and <code>stop</code> fields, and the reasoning of previous answers that the agent sends back in the history (<code>reasoning</code>, <code>reasoning_content</code>: DeepSeek, GLM, Grok, vLLM). Signatures, encrypted blocks (<code>encrypted_*</code>) and base64 data are never changed.</li>
+        <li>JSON text held in a string (a tool result, function arguments) is analysed once its escapes are decoded; the JSON sent stays valid.</li>
+        <li>Non-breaking spaces, soft hyphens, invisible characters and full-width digits are neutralised before detection: « 0470 12 34 56 » with non-breaking spaces is recognised.</li>
+        <li>When matches overlap, the strictest action wins: a forbidden NISS is never hidden by a reference that is only logged.</li>
+        <li>The scanning order is fixed (tools, system, messages): token numbering stays stable from one turn to the next, and the providers' prompt cache stays effective.</li>
+      </ul>
+      <h3>Conversation memory</h3>
+      <p>When the client names its conversation, the gateway keeps the token mapping for the whole conversation: « «PERSON_1» » stays the same person from one turn to the next, even if the names appear in a different order, and a name found in one turn is still recognised in the following turns, even after the agent compacts the history.</p>
+      <ul>
+        <li>Conversation identifier: the <code>X-LLMGW-Session</code> header (sent by the Hermes plugin), or the session identifier that Claude Code puts in <code>metadata.user_id</code>. Without an identifier, each request is numbered on its own, as before.</li>
+        <li>The mapping is kept in memory only, per user, profile and conversation; it is forgotten after 24 hours without activity, or when the gateway restarts. At most 5,000 conversations and 5,000 values per conversation.</li>
+        <li><code>GET /v1/me</code>, with the same header, gives the number of values kept per type, never the values.</li>
+      </ul>
+    </section>
+
+    <section id="routage">
+      <h2><span class="n">7</span>Routing</h2>
+      <p>The decision always follows the same path: <span class="pill src">key</span> → <span class="pill src">user</span> → <span class="pill anon">profile</span> → <span class="pill dst">allowed LLMs, in order</span>.</p>
+      <ul>
+        <li><strong>Allowed models per target</strong>, with patterns (<code>mistral-*</code>, <code>claude-*</code>).</li>
+        <li><strong>Automatic fallback</strong>: if the first target is down, saturated (429) or failing (5xx), the next one in the profile takes over.</li>
+        <li><strong>Forced target</strong>: <code>mistral/mistral-large</code> forces a specific target, if the profile allows it.</li>
+        <li><strong>Aliases</strong>: a requested name can be translated, for example <code>claude-*</code> to <code>deepseek-flash</code>.</li>
+        <li><strong>Formats</strong>: an OpenAI client is routed to OpenAI targets, an Anthropic client to Anthropic targets.</li>
+        <li><strong>Unavailable targets</strong>: a target without a key, or a local LLM that does not answer, is not offered to users.</li>
+      </ul>
+    </section>
+
+    <section id="quotas">
+      <h2><span class="n">8</span>Quotas and alerts</h2>
+      <p>Four limits: requests per minute, requests per day, tokens per day, tokens per month. They are set at three levels:</p>
+      <ul>
+        <li><strong>per profile</strong>: the limit applies to each user of the profile;</li>
+        <li><strong>per user</strong>: it overrides the profile's limit, field by field;</li>
+        <li><strong>per LLM</strong>: a total budget shared by everyone. A saturated target is skipped in favour of the next one.</li>
+      </ul>
+      <p>When a limit is exceeded, the request is <span class="pill block">blocked</span> (error 429) or simply <span class="pill log">reported</span>, as you choose.</p>
+      <p><strong>Email alerts</strong>: a summary every N minutes, sent to the profile's recipients and to the default recipients. Triggers: violation, quota reached, LLM error, address banned by web protection, and blocked file whose rule asks for an alert (sent even if the « violation » trigger is disabled). The messages contain no sensitive value, only the data types concerned.</p>
+    </section>
+
+    <section id="monitoring">
+      <h2><span class="n">9</span>Monitoring and statistics</h2>
+      <p>Each request records the source, the destination, the model, the status, the volumes, the tokens and the response times. <strong>No sensitive value is stored</strong>, only counters per type.</p>
+      <div class="tw"><table>
+        <thead><tr><th>Measure</th><th>Detail</th></tr></thead>
+        <tbody>
+          <tr><td class="k">Volume</td><td>overall, per LLM (destination), per user (source): requests, input and output tokens, bytes</td></tr>
+          <tr><td class="k">Response times</td><td><span class="mono">IN</span> reading the request · <span class="mono">GATEWAY</span> processing by the gateway · <span class="mono">OUT</span> LLM response, with first byte, median and p95</td></tr>
+          <tr><td class="k">Sensitive data</td><td>conversions (anonymised or removed) and violations (blocked), per type and per user</td></tr>
+          <tr><td class="k">Errors</td><td>outages, refused keys, quotas, with the reason returned by the LLM</td></tr>
+          <tr><td class="k">Files</td><td>dedicated log: name, extension, size, SHA-256 fingerprint and action, 30 days (see <a href="#fichiers">11</a>)</td></tr>
+        </tbody>
+      </table></div>
+      <h3>Periods and retention</h3>
+      <div class="tw"><table>
+        <thead><tr><th>View</th><th>Granularity</th><th>Data source</th></tr></thead>
+        <tbody>
+          <tr><td class="k">48 hours</td><td>hour</td><td>per-request detail</td></tr>
+          <tr><td class="k">60 days</td><td>day</td><td>detail (last 30 days), then aggregates</td></tr>
+          <tr><td class="k">6 weeks</td><td>week</td><td>detail and aggregates</td></tr>
+          <tr><td class="k">6 months</td><td>month</td><td>aggregates (maximum depth)</td></tr>
+        </tbody>
+      </table></div>
+      <p class="note"><strong>Generalisation after 30 days.</strong> The per-request detail is grouped by day × user × LLM. The exact model and the percentiles are then lost; volumes, averages, conversions and violations are kept for about 6 months, then deleted.</p>
+    </section>
+
+    <section id="debug">
+      <h2><span class="n">10</span>DEBUG mode</h2>
+      <p>Off by default, can be switched on for the duration of a diagnosis. Each exchange is then archived: the request as received by the LLM, the raw response, the token → value mapping and every detected word with the action applied.</p>
+      <ul>
+        <li><strong>Exchange view</strong>: only the new message and the answer, with words highlighted by action (blue anonymised, red blocked, orange logged). Toggle between the anonymised view and the original view.</li>
+        <li><strong>Full context</strong>, collapsed: system prompt and history sent back by the client.</li>
+        <li><strong>Global view</strong>: everything detected in the archive, to spot recurring false positives.</li>
+      </ul>
+      <p class="note warn"><strong>This mode stores values in clear text.</strong> Automatic purge (24 hours by default), « DEBUG on » banner in the dashboard and a button to empty the archive.</p>
+    </section>
+
+    <section id="fichiers">
+      <h2><span class="n">11</span>Images and files</h2>
+      <p>Images and attached files follow their own policy, set <strong>per profile</strong> and, for files, <strong>per extension</strong>. It applies to files sent through the API (OpenAI and Anthropic formats), to documents attached in the chat and to images.</p>
+      <h3>Images</h3>
+      <div class="tw"><table>
+        <thead><tr><th>Setting</th><th>Effect on the LLM side (untrusted zone)</th><th>Log</th></tr></thead>
+        <tbody>
+          <tr><td><span class="pill off">unchanged</span></td><td>the image is sent as is</td><td>no</td></tr>
+          <tr><td><span class="pill anon">white square</span></td><td>replaced by a white square: the LLM knows there was an image, without seeing its content</td><td>no</td></tr>
+          <tr><td><span class="pill block">blocked + log</span></td><td>request refused, nothing is sent</td><td>yes</td></tr>
+        </tbody>
+      </table></div>
+      <h3>Files, per extension</h3>
+      <div class="tw"><table>
+        <thead><tr><th>Setting</th><th>Effect on the LLM side</th><th>Log</th><th>Email alert</th></tr></thead>
+        <tbody>
+          <tr><td><span class="pill log">sent + log</span></td><td>the file goes out as is</td><td>yes</td><td>no</td></tr>
+          <tr><td><span class="pill anon">white square</span></td><td>replaced by a white square; for a chat document, its text is replaced by « [contenu remplacé par le gateway] » (content replaced by the gateway)</td><td>no</td><td>no</td></tr>
+          <tr><td><span class="pill block">blocked + log</span></td><td>request refused (FILE violation)</td><td>yes</td><td>no</td></tr>
+          <tr><td><span class="pill block">blocked + alert + log</span></td><td>request refused</td><td>yes</td><td>yes, to the profile's « Alert » recipients</td></tr>
+        </tbody>
+      </table></div>
+      <p>An extension without a rule follows the profile's <strong>default</strong> action for other files (sent + log, unless set otherwise). An image without an extension rule follows the profile's « Images » setting.</p>
+      <h3>File log</h3>
+      <p>« Log » means that a record is kept for <strong>30 days, even without Debug mode</strong>: date, user, profile, LLM, type, <strong>file name</strong>, extension, size, SHA-256 fingerprint and action. The file content is never stored. Clients send the whole conversation at each call: the same file (same fingerprint, same user, same action) is recorded only once per 12-hour period.</p>
+      <p class="note">A file name can itself be sensitive data (« Dossier_Dupont.pdf »): access to the log is restricted to Admin and Support accounts.</p>
+    </section>
+
+    <section id="administration">
+      <h2><span class="n">12</span>Administration accounts and audit</h2>
+      <p>The dashboard has two roles. An account is identified by the email address of its SSO sign-in; the admin token remains an emergency access with the Admin role.</p>
+      <div class="tw"><table>
+        <thead><tr><th>Screen</th><th>Admin</th><th>Support</th></tr></thead>
+        <tbody>
+          <tr><td class="k">Overview, Reporting, File log</td><td>yes</td><td>read-only</td></tr>
+          <tr><td class="k">Users</td><td>yes</td><td>create, block, generate a key, change the profile</td></tr>
+          <tr><td class="k">Access requests</td><td>yes</td><td>approve, refuse, resend the key link (settings: read-only)</td></tr>
+          <tr><td class="k">Profiles, Quotas</td><td>yes</td><td>read-only</td></tr>
+          <tr><td class="k">Debug (clear-text data)</td><td>yes</td><td>if granted; every view is logged</td></tr>
+          <tr><td class="k">Target LLMs, Filtering, Alerts and SSO, Web security, Accounts, Audit</td><td>yes</td><td>no</td></tr>
+        </tbody>
+      </table></div>
+      <p>The <strong>audit log</strong> records sign-ins, configuration saves (with the list of changes, without any secret), views and purges of the Debug archive, alert tests, access requests and their decisions, banned and unbanned addresses, and the closing of all sessions. It is kept for 400 days.</p>
+    </section>
+
+    <section id="langues">
+      <h2><span class="n">13</span>Interface languages</h2>
+      <p>The dashboard and the chat are shown in <strong>English</strong> (default), <strong>French</strong> or <strong>Dutch</strong>. The choice is made in the list at the bottom of the dashboard menu, in the chat header and on the sign-in screens; it is remembered per browser. Data (names, descriptions, prompts, LLM answers) is never translated. This documentation is available in English (this page) and in <a href="../index.html" hreflang="fr">French</a>.</p>
+    </section>
+
+    <section id="securite">
+      <h2><span class="n">14</span>Security and confidentiality</h2>
+      <ul>
+        <li>Provider keys stay in the gateway; users never know them. The dashboard does not display them.</li>
+        <li>Each user or application has its own key, revocable without affecting the others.</li>
+        <li>SSO: authorisation code with PKCE, <code>state</code> and <code>nonce</code>; ID token signature checked against the keys published by Microsoft or Google; session in a signed cookie, <code>HttpOnly</code>, <code>SameSite=Lax</code>, <code>Secure</code> over HTTPS; a mandatory header blocks cross-site requests.</li>
+        <li>Logs and statistics without sensitive values; name memory stored as encrypted fingerprints; file log without content.</li>
+        <li>Admin and Support roles checked on the server side; 400-day audit log.</li>
+        <li>Versioned configuration: the last 10 versions are kept, and a save is refused if the file has changed in the meantime.</li>
+        <li>Deployment: a single binary (macOS, Linux), local SQLite database (permissions 600), no external dependency.</li>
+      </ul>
+      <h3>Web protection (exposure on the Internet)</h3>
+      <p>Section <code>[security]</code> and <a href="#page-security">Web security</a> page of the dashboard. On by default; local calls (Mac app, SSH tunnel) and exempt networks are never limited.</p>
+      <ul>
+        <li><strong>Per-address limits</strong>: 600 requests per minute and 32 concurrent requests by default (IPv6: per /64). Anonymisation work is also capped at twice the number of cores: beyond that, requests wait, then receive a 503 error.</li>
+        <li><strong>Temporary ban</strong> of an address after 10 refused sign-ins in 10 minutes: invalid gateway key or admin token, forged cookie, invented link. 30 minutes, doubled at each repeat (24 hours at most). Each ban is written to the audit log and reported by email (<code>on_security</code>).</li>
+        <li><strong>Administration</strong> restricted to the addresses in <code>admin_allow</code> (dashboard and administration API).</li>
+        <li><strong>Real client address</strong> behind a trusted proxy (<code>trusted_proxies</code>, the local machine by default): it is used for limits, bans and the audit log. An <code>X-Forwarded-For</code> sent directly by a client is ignored.</li>
+        <li><strong>Security headers</strong> on all responses: Content-Security-Policy, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, and HSTS over HTTPS.</li>
+        <li><strong>Built-in HTTPS</strong> (<code>tls_cert</code>, <code>tls_key</code>) for exposure without a proxy; Caddy is still recommended (automatic certificates).</li>
+        <li><strong>Secrets</strong>: a key already stored is kept only for the address it was intended for. Changing a target's address requires re-entering its key, and an environment variable that feeds a target cannot be sent elsewhere from the dashboard. Targets' HTTP headers are no longer sent back to the browser.</li>
+        <li><strong>Web sessions</strong>: role recomputed at every request, sign-out that revokes the session, « Close all sessions » button (new signing key). The redirect after sign-in only leads to the chat or the dashboard.</li>
+        <li><strong>Debug archive</strong> purged every hour, even if nobody views it; erased data is overwritten in the database (<code>secure_delete</code>).</li>
+      </ul>
+    </section>
+
+    <div class="part">Setup</div>
+
+    <section id="prerequis">
+      <h2><span class="n">15</span>Requirements</h2>
+      <ul>
+        <li><strong>Server</strong>: macOS or Linux (x86-64 or ARM). Modest resources: 1 to 2 vCPU and 1 to 2 GB of memory. The gateway adds less than one millisecond per KB of new text (10 KB: about 4 ms; 100 KB: 15 ms in parallel on several cores); the history an agent sends back at each turn is cached (100 KB: 4 ms). On 2 cores, throughput exceeds 1,700 requests of 2 KB per second: the latency of the LLM providers remains by far the dominant factor.</li>
+        <li><strong>Network</strong>: outbound HTTPS access from the server to the chosen providers; inbound access from workstations to the gateway.</li>
+        <li><strong>Provider keys</strong> (Mistral, Anthropic, OpenAI, DeepSeek…), held by the gateway only.</li>
+        <li><strong>To build</strong>: Go 1.25 or later. <code>./build.sh</code> produces the Mac app and the Linux archives in <code>dist/</code> (see Installation).</li>
+      </ul>
+    </section>
+
+    <section id="installation">
+      <h2><span class="n">16</span>Installation</h2>
+      <ol class="steps">
+        <li>Get the code (private repository <code>VulpointLLMGw</code>):
+<pre>git clone https://github.com/jsopdebeeck/VulpointLLMGw.git
+cd VulpointLLMGw</pre></li>
+        <li>Build (<code>./llmgw -version</code> shows the version):
+<pre>go build -o llmgw .                      <span class="c"># current machine</span>
+./build.sh                               <span class="c"># tests, then Mac app + DMG and Linux archives in dist/</span>
+./build.sh --linux-only --skip-tests     <span class="c"># Linux archives only</span></pre>
+          <code>dist/</code> then contains <code>LLMGW.app</code> and <code>LLMGW-&lt;version&gt;.dmg</code> (Mac, Apple Silicon and Intel), <code>llmgw-&lt;version&gt;-linux-amd64.tar.gz</code> and <code>-arm64.tar.gz</code> (binary, <code>setup.sh</code>, systemd service, Caddyfile, <code>LISEZMOI.txt</code>) and <code>SHA256SUMS</code>.</li>
+        <li>Prepare the configuration:
+<pre>cp config.example.toml config.toml
+./llmgw -config config.toml -check     <span class="c"># validates the configuration and exits</span></pre></li>
+      </ol>
+      <p>The binary contains everything: the dashboard, the chat, this documentation, the SQLite database and the dictionaries. No other installation is needed.</p>
+
+      <h3>Fresh Linux server (Ubuntu 22.04 / 24.04, Debian 12)</h3>
+      <p><code>setup.sh</code>, shipped in the Linux archive, installs or updates the gateway on a freshly installed server. It is safe to run again: an update keeps the configuration, the database and the Caddyfile.</p>
+<pre>scp dist/llmgw-&lt;version&gt;-linux-amd64.tar.gz admin@server:
+ssh admin@server
+tar xzf llmgw-&lt;version&gt;-linux-amd64.tar.gz &amp;&amp; cd llmgw-&lt;version&gt;
+sudo ./setup.sh --domain gateway.example.com --email it@example.com --admin-ip 203.0.113.7</pre>
+      <ul>
+        <li>Packages and automatic security updates (unattended-upgrades), fail2ban for SSH, ufw firewall (SSH first, then 80 and 443).</li>
+        <li>System user <code>llmgw</code>, folder <code>/opt/llmgw</code> (700), hardened systemd service, <code>secrets.env</code> (600) for the provider keys.</li>
+        <li>First installation: <code>config.toml</code> generated with an admin token and random example keys, listening on the local machine, trusted proxies and administration addresses. The token is shown once and kept in <code>/opt/llmgw/admin_token.txt</code> (root, 600).</li>
+        <li>With <code>--domain</code>: Caddy and its Let's Encrypt certificate; the dashboard can only be reached from the <code>--admin-ip</code> addresses (otherwise through an SSH tunnel).</li>
+        <li>The new binary validates the configuration before replacing the old one; if it does not start, the previous version is restored.</li>
+        <li>Daily backup of the database and the configuration in <code>/var/backups/llmgw</code>, kept for 14 days.</li>
+      </ul>
+      <p>From the Mac, <code>deploy/deploy.sh</code> does everything in one command: build, copy of the archive, run of <code>setup.sh</code>.</p>
+<pre>deploy/deploy.sh --domain gateway.example.com --email it@example.com --admin-ip 203.0.113.7 admin@server
+deploy/deploy.sh admin@server            <span class="c"># update</span></pre>
+      <p class="note"><code>setup.sh</code> does not change SSH: disable password sign-in yourself (<code>PasswordAuthentication no</code>) once your SSH key is in place.</p>
+    </section>
+
+    <section id="configuration">
+      <h2><span class="n">17</span>Configuration</h2>
+      <p>The whole configuration lives in <code>config.toml</code>. The file is reloaded automatically at each change; an invalid configuration is refused and the previous one stays active. Most settings are then made from the dashboard.</p>
+      <div class="tw"><table>
+        <thead><tr><th>Section</th><th>Content</th></tr></thead>
+        <tbody>
+          <tr><td class="k"><code>[server]</code></td><td>listen address, database, admin token, data retention (30 days of detail, about 6 months of aggregates)</td></tr>
+          <tr><td class="k"><code>[targets.&lt;name&gt;]</code></td><td>an LLM: API format, address, key (preferably through the environment variable <code>api_key_env</code>; if it is not set, <code>api_key</code> is used as the key), models, aliases, quota</td></tr>
+          <tr><td class="k"><code>[profiles.&lt;name&gt;]</code></td><td>allowed LLMs in order, default action, actions per type, <code>images</code> (pass, blank, block), <code>files</code> per extension (pass_log, blank, block, block_alert) and <code>files_default</code>, behaviour prompt, alerts, quota</td></tr>
+          <tr><td class="k"><code>[users.&lt;name&gt;]</code></td><td>person or application: gateway key, profile, individual quota, email (link with the SSO identity)</td></tr>
+          <tr><td class="k"><code>[auth]</code></td><td>SSO: public address, session duration, Entra ID / Google / OIDC providers, group and role → profile rules, administrators</td></tr>
+          <tr><td class="k"><code>[[admins]]</code></td><td>administration accounts: email, name, role (admin or support), Debug access, deactivation</td></tr>
+          <tr><td class="k"><code>[[detectors]]</code></td><td>detectors: built-in (email, NISS, IBAN, names, addresses…), patterns, term lists</td></tr>
+          <tr><td class="k"><code>[privacy]</code></td><td>terms never anonymised</td></tr>
+          <tr><td class="k"><code>[alerts]</code></td><td>SMTP server, recipients, triggers, frequency</td></tr>
+          <tr><td class="k"><code>[debug]</code></td><td>activation and retention period of the archive</td></tr>
+          <tr><td class="k"><code>[security]</code></td><td>web protection: trusted proxies, administration addresses, exempt networks, per-address limits, bans, built-in HTTPS</td></tr>
+          <tr><td class="k"><code>[access]</code></td><td>access requests: activation, trusted domains, default profile, people notified, link validity, automatic refusal</td></tr>
+        </tbody>
+      </table></div>
+      <p>Minimal example of a target and a user:</p>
+<pre>[targets.mistral]
+api = "openai"
+base_url = "https://api.mistral.ai/v1"
+api_key_env = "MISTRAL_API_KEY"
+models = ["mistral-*"]
+
+[users.alice]
+key = "gw-alice-…"          <span class="c"># key generated from the dashboard</span>
+profile = "anonymisation"
+
+[profiles.anonymisation]
+images = "blank"                                   <span class="c"># white square</span>
+files = { zip = "block", exe = "block_alert", csv = "pass_log", pdf = "blank" }
+files_default = "pass_log"                         <span class="c"># other extensions</span></pre>
+      <p class="note warn"><strong>Before going live</strong>: set a long, random <code>admin_token</code> (for example <code>openssl rand -hex 24</code>). Without it, the dashboard is open to anyone who can reach the gateway.</p>
+    </section>
+
+    <section id="demarrage">
+      <h2><span class="n">18</span>Startup and service</h2>
+      <h3>Manual start</h3>
+<pre>export MISTRAL_API_KEY=… ANTHROPIC_API_KEY=…
+./llmgw -config config.toml
+<span class="c"># LLMGW 1.5.5 listening on http://127.0.0.1:8088 (dashboard: /dashboard, documentation: /docs)</span></pre>
+      <p>One instance per port. Stop with Ctrl+C: pending metrics are saved before exiting.</p>
+
+      <h3>macOS menu bar app</h3>
+      <p><code>macapp/build.sh</code> builds a <strong>self-contained LLMGW.app</strong> in <code>dist/</code>, and <code>dist/LLMGW-&lt;version&gt;.dmg</code> to install it by drag and drop into Applications; <code>macapp/build.sh --install</code> installs it directly in Applications (and restarts the app if it was running). Go and the Xcode Command Line Tools are only needed for the build: the app embeds the gateway (universal binary for Apple Silicon and Intel, no dependency outside macOS) and needs nothing else to run.</p>
+      <p>The data lives in <code>~/Library/Application Support/LLMGW</code>: <code>config.toml</code>, <code>secrets.env</code>, the database and the log. At first launch, the app creates a starter configuration there, with a <strong>random admin token</strong>, and a <code>secrets.env</code> template (permissions 600). An existing installation (a folder that already contains <code>config.toml</code>) is taken over as is through « Data folder… ».</p>
+      <p>Double-clicking the app shows an icon in the menu bar:</p>
+      <ul>
+        <li>a <strong>status dot</strong>: green when running, orange while starting, red when stopped, grey if the gateway folder cannot be found;</li>
+        <li><strong>Start</strong>, <strong>Stop</strong>, <strong>Restart</strong>; a gateway started elsewhere is recognised and can be stopped;</li>
+        <li><strong>Open the dashboard</strong>, <strong>Open the chat</strong>, <strong>Documentation</strong>;</li>
+        <li><strong>Copy the admin token</strong>, to sign in to the dashboard;</li>
+        <li><strong>Edit the configuration</strong> and <strong>Edit the secrets</strong> (API keys, SSO secrets) in TextEdit; the configuration can also be edited from the dashboard;</li>
+        <li><strong>Show the log</strong> (<code>llmgw.log</code>, in Console), the data folder, and <strong>Data folder…</strong> to choose another one;</li>
+        <li><strong>Open at login</strong>, for a gateway available as soon as you sign in to the Mac;</li>
+        <li>menu in English, French or Dutch.</li>
+      </ul>
+      <p>The app loads <code>secrets.env</code>, starts the gateway when it opens and stops it when you quit. Without the app, <code>start.command</code> starts the gateway in Terminal with a double-click and opens the dashboard.</p>
+
+      <h3>Permanent service on Linux (systemd)</h3>
+      <p><code>setup.sh</code> installs this service (<code>deploy/llmgw.service</code>, with additional systemd hardening). For a manual installation:</p>
+<pre><span class="c"># /etc/systemd/system/llmgw.service</span>
+[Unit]
+Description=LLMGW, AI gateway
+After=network-online.target
+
+[Service]
+User=llmgw
+WorkingDirectory=/opt/llmgw
+EnvironmentFile=/opt/llmgw/secrets.env    <span class="c"># MISTRAL_API_KEY=… (permissions 600)</span>
+ExecStart=/opt/llmgw/llmgw -config /opt/llmgw/config.toml
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target</pre>
+<pre>sudo systemctl enable --now llmgw
+journalctl -u llmgw -f        <span class="c"># request log</span></pre>
+
+      <h3>Permanent service on macOS (launchd)</h3>
+<pre><span class="c">&lt;!-- ~/Library/LaunchAgents/local.llmgw.plist --&gt;</span>
+&lt;plist version="1.0"&gt;&lt;dict&gt;
+  &lt;key&gt;Label&lt;/key&gt;&lt;string&gt;local.llmgw&lt;/string&gt;
+  &lt;key&gt;ProgramArguments&lt;/key&gt;&lt;array&gt;
+    &lt;string&gt;/path/llmgw&lt;/string&gt;&lt;string&gt;-config&lt;/string&gt;&lt;string&gt;/path/config.toml&lt;/string&gt;
+  &lt;/array&gt;
+  &lt;key&gt;WorkingDirectory&lt;/key&gt;&lt;string&gt;/path&lt;/string&gt;
+  &lt;key&gt;RunAtLoad&lt;/key&gt;&lt;true/&gt;
+  &lt;key&gt;KeepAlive&lt;/key&gt;&lt;true/&gt;
+  &lt;key&gt;StandardErrorPath&lt;/key&gt;&lt;string&gt;/path/llmgw.log&lt;/string&gt;
+&lt;/dict&gt;&lt;/plist&gt;</pre>
+<pre>launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/local.llmgw.plist</pre>
+    </section>
+
+    <section id="clients">
+      <h2><span class="n">19</span>Connecting clients</h2>
+      <p>With SSO, people have nothing to request: their profile comes from the directory. For an application, or a person without SSO, first create a user in the dashboard (Users page): the gateway key is generated and shown in full until the page is reloaded, so copy it at that moment.</p>
+      <div class="tw"><table>
+        <thead><tr><th>Client</th><th>Setting</th></tr></thead>
+        <tbody>
+          <tr><td class="k">Web portal</td><td>open <code>https://&lt;gateway&gt;/chat</code>, then « Sign in with Microsoft / Google » (see <a href="#sso-setup">Enabling SSO</a>) or enter the personal key; instructions in the <a href="chat.html">user guide</a></td></tr>
+          <tr><td class="k">OpenAI SDKs and tools</td><td>base address <code>https://&lt;gateway&gt;/v1</code>, API key = gateway key</td></tr>
+          <tr><td class="k">Anthropic SDKs and tools</td><td>base address <code>https://&lt;gateway&gt;</code>, API key = gateway key</td></tr>
+          <tr><td class="k">Claude Code</td><td>variables <code>ANTHROPIC_BASE_URL</code> and <code>ANTHROPIC_AUTH_TOKEN</code> (below); <code>/status</code> confirms the address</td></tr>
+          <tr><td class="k">Hermes Agent</td><td><code>integrations/hermes/</code> kit: installation script and plugin (below)</td></tr>
+          <tr><td class="k">Claude Cowork</td><td>connection validated internally in September 2026; detailed procedure to be completed</td></tr>
+        </tbody>
+      </table></div>
+      <p>Claude Code, in <code>~/.claude/settings.json</code>:</p>
+<pre>{
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://&lt;gateway&gt;",
+    "ANTHROPIC_AUTH_TOKEN": "gw-claude-code-…"
+  }
+}</pre>
+      <h3>Hermes Agent: connection kit</h3>
+      <p>The repository's <code>integrations/hermes/</code> folder connects Hermes in one command, on each workstation (Hermes 0.21.6 or later):</p>
+<pre>integrations/hermes/install.sh --url https://&lt;gateway&gt; --key gw-hermes-…
+integrations/hermes/install.sh --url https://&lt;gateway&gt; --key gw-hermes-… --dry-run   <span class="c"># preview, nothing is written</span>
+integrations/hermes/uninstall.sh                                                            <span class="c"># back to the original configuration</span></pre>
+      <ul>
+        <li><strong>Configuration</strong> (through <code>hermes config set</code>, after a backup of <code>config.yaml</code>): <code>llmgw</code> provider with the models the gateway allows, main model, auxiliary tasks (compression, vision, titles…), delegation, scheduled tasks and mixture of agents (MoA) routed through the gateway; fallbacks outside the gateway removed. The key goes into Hermes's <code>.env</code> (permissions 600), never into <code>config.yaml</code>.</li>
+        <li><strong><code>llmgw</code> plugin</strong>: in strict mode, refuses a main-model call that does not go through the gateway (<code>--warn</code>: report only); reports to the gateway the auxiliary tasks that bypass it (audit log, <a href="#page-overview">overview</a>); <code>/llmgw</code> command: gateway, profile, quotas, consumption and pseudonymised values of the conversation.</li>
+        <li><strong>Stable pseudonyms</strong>: Hermes sends the conversation identifier (<code>X-LLMGW-Session</code>) to the gateway only, auxiliary tasks included; the gateway keeps the same token numbering for the whole conversation (see <a href="#filtrage">Conversation memory</a>).</li>
+        <li><strong>Outside the gateway, by decision</strong>: web search, the browser, voice and image or video generation are not OpenAI-format LLM calls: the script lists them, with the command to turn them off, without changing them.</li>
+      </ul>
+      <p class="note">The key's profile must allow at least one model. <code>/v1/models</code> lists the named models (<code>"mistral-large-latest"</code>) and, for a target described by a pattern (<code>"grok-*"</code>), the provider's models that match it (list requested from the provider and kept for 10 minutes). A narrower pattern (<code>"grok-4*"</code>) excludes image and video models. Details (modes, troubleshooting, limitations) are in <code>integrations/hermes/README.md</code>.</p>
+    </section>
+
+    <section id="sso-setup">
+      <h2><span class="n">20</span>Enabling SSO</h2>
+      <p class="note warn"><strong>HTTPS required in production</strong>: Microsoft and Google refuse an <code>http://</code> redirect address, except <code>localhost</code> for testing. Set <code>base_url</code> to the gateway's public address.</p>
+      <h3>Microsoft Entra ID</h3>
+      <ol class="steps">
+        <li>Azure portal → Entra ID → <strong>App registrations</strong> → New registration, <strong>Web</strong> platform, redirect URI <code>https://&lt;gateway&gt;/auth/callback/entra</code>.</li>
+        <li>Note the <strong>Tenant ID</strong> and the <strong>Client ID</strong>; create a <strong>client secret</strong>, to be placed in the server's <code>ENTRA_CLIENT_SECRET</code> variable.</li>
+        <li>Profiles by group: <strong>Token configuration</strong> → add the groups claim, preferably « groups assigned to the application » (the token is limited to 200 groups).</li>
+        <li>Administration: declare an <strong>app role</strong> <code>LLMGW.Admin</code>, then assign it to administrators in <strong>Enterprise applications</strong>.</li>
+      </ol>
+      <h3>Google</h3>
+      <ol class="steps">
+        <li>Google Cloud Console → APIs &amp; Services → Credentials → <strong>OAuth client ID</strong>, type « Web application », redirect URI <code>https://&lt;gateway&gt;/auth/callback/google</code>.</li>
+        <li><strong>Internal</strong> consent screen for a Google Workspace; secret in <code>GOOGLE_CLIENT_SECRET</code>.</li>
+      </ol>
+      <h3>Configuration</h3>
+<pre>[auth]
+base_url = "https://gateway.example.com"
+session_hours = 12
+
+[[auth.providers]]
+id = "entra"
+type = "entra"
+label = "Microsoft"
+tenant_id = "…"
+client_id = "…"
+client_secret_env = "ENTRA_CLIENT_SECRET"
+allowed_domains = ["example.com"]
+admin_roles = ["LLMGW.Admin"]
+  [[auth.providers.mappings]]
+  group = "&lt;Entra group object ID&gt;"
+  profile = "restricted"
+  [[auth.providers.mappings]]
+  role = "LLMGW.User"
+  profile = "anonymisation"
+
+[[auth.providers]]
+id = "google"
+type = "google"
+client_id = "….apps.googleusercontent.com"
+client_secret_env = "GOOGLE_CLIENT_SECRET"
+allowed_domains = ["example.com"]
+default_profile = "anonymisation"</pre>
+      <p>At startup, the log shows each provider's redirect address; the Alerts and SSO page of the dashboard shows it too. To make the portal SSO-only: <code>disable_keys = true</code> (keys remain valid for the API).</p>
+    </section>
+
+    <section id="reseau">
+      <h2><span class="n">21</span>Network and HTTPS</h2>
+      <ul>
+        <li>The gateway listens on the <code>[server] listen</code> address. When exposed on the Internet, it sits behind an HTTPS reverse proxy (Caddy, installed by <code>setup.sh --domain</code>), or uses the built-in HTTPS (<code>[security] tls_cert</code> and <code>tls_key</code>).</li>
+        <li>Behind a proxy, declare its address in <code>[security] trusted_proxies</code> (the local machine by default): the gateway then reads the client address from <code>X-Forwarded-For</code>, for limits, bans and the audit log.</li>
+        <li>Set <code>[auth] base_url</code> to the public address: SSO redirects and access request links.</li>
+        <li>Firewall and Umbrella: allow only the gateway server to reach the LLM providers' domains; block those domains for all workstations.</li>
+        <li>Workstations and agents: allow the gateway's address.</li>
+      </ul>
+      <p>With Caddy (<code>deploy/Caddyfile</code>), streaming requires <code>flush_interval -1</code> and no compression; the dashboard can be restricted to certain addresses with a <code>remote_ip</code>. nginx example, where streaming requires buffering to be disabled:</p>
+<pre>location / {
+    proxy_pass http://127.0.0.1:8080;
+    proxy_http_version 1.1;
+    proxy_buffering off;            <span class="c"># streaming responses</span>
+    proxy_read_timeout 600s;        <span class="c"># long generations</span>
+    client_max_body_size 50m;       <span class="c"># attached documents</span>
+    proxy_set_header X-Forwarded-For $remote_addr;   <span class="c"># client address (replaces the received value)</span>
+    proxy_set_header X-Forwarded-Proto $scheme;
+}</pre>
+    </section>
+
+    <div class="part">Dashboard pages</div>
+    <p class="note" style="margin-top:20px">Screenshots taken on a demonstration instance, with the interface in French (the English interface has the same layout): users, figures and sensitive data are fictitious. The bottom of the menu holds the theme, the language, the <strong>Documentation</strong> button (this page) and the version.</p>
+
+    <section id="page-dash-login">
+      <h2><span class="n">22</span>Sign-in</h2>
+      <p>Address <code>/dashboard</code>. SSO sign-in restricted to administration accounts (Admin or Support) and to the providers' rules, or admin token. A signed-in person without rights is told so. The language can be chosen from this screen.</p>
+      <figure class="shot"><div class="frame"><img src="../img/dash-login.jpg" width="1600" height="894" alt="Dashboard sign-in: Vulpoint logo, Microsoft and Google buttons, token field, language choice" loading="lazy"></div><figcaption class="bar"><span>Dashboard, sign-in screen</span><a href="../img/dash-login.jpg">Full size</a></figcaption></figure>
+    </section>
+
+    <section id="page-overview">
+      <h2><span class="n">23</span>Overview</h2>
+      <ul>
+        <li><strong>Indicators for the last 48 hours</strong>: requests and errors, tokens, average LLM response time, conversions, violations, active users.</li>
+        <li><strong>Points of attention</strong> sorted by severity, each with a button to the page concerned: DEBUG mode, blocked requests, errors, alerts, targets without a key, administration protection, quotas close to the limit.</li>
+        <li><strong>Recent activity</strong> and <strong>Most active users</strong>.</li>
+      </ul>
+      <figure class="shot"><div class="frame"><img src="../img/dash-overview.jpg" width="1600" height="1764" alt="Overview: indicators, points of attention, recent activity" loading="lazy"></div><figcaption class="bar"><span>Dashboard, Overview</span><a href="../img/dash-overview.jpg">Full size</a></figcaption></figure>
+    </section>
+
+    <section id="page-report">
+      <h2><span class="n">24</span>Reporting</h2>
+      <ul>
+        <li>Period: 48 h, 60 d, 6 weeks, 6 months (maximum depth).</li>
+        <li><strong>Indicators</strong>: requests, tokens, volume, total time, LLM and gateway time (median, p95), conversions, violations.</li>
+        <li><strong>Charts</strong>: requests per LLM, tokens per user, IN / Gateway / LLM response times, conversions and violations.</li>
+        <li><strong>Tables</strong> per user, per LLM and per application (Hermes, Claude Code, chat…, recognised by the <code>X-LLMGW-Client</code> header or the User-Agent, over the detail period), detections per type, recent requests with the application and the reason for errors.</li>
+      </ul>
+      <figure class="shot"><div class="frame"><img src="../img/dash-report.jpg" width="1600" height="2470" alt="Reporting over 60 days: indicators, charts and tables" loading="lazy"></div><figcaption class="bar"><span>Dashboard, Reporting over 60 days (scroll the image)</span><a href="../img/dash-report.jpg">Full size</a></figcaption></figure>
+    </section>
+
+    <section id="page-users">
+      <h2><span class="n">25</span>Users</h2>
+      <p>One row per person or application: type, description, profile, accessible LLMs, key preview and generation of a new key (shown in full until the page is reloaded), blocking, today's consumption. People who sign in with SSO do not need to be listed: their profile comes from the directory. Every change goes through the « Save » bar at the bottom of the screen.</p>
+      <figure class="shot"><div class="frame"><img src="../img/dash-users.jpg" width="1600" height="1011" alt="Users page: table of users and applications" loading="lazy"></div><figcaption class="bar"><span>Dashboard, Users</span><a href="../img/dash-users.jpg">Full size</a></figcaption></figure>
+    </section>
+
+    <section id="page-access">
+      <h2><span class="n">26</span>Access requests</h2>
+      <p>Requests made from the portal (see <a href="#demandes">Access requests</a>). Filters: Pending, Not confirmed, Handled, All. For each request: date, name and email, domain (trusted or external), reason, status, and who handled it. A pending request is approved with the chosen profile or refused; an approved request can be sent a new link to its key. The counter in the menu gives the number of pending requests, also shown in the overview. At the bottom, the settings (Admin): activation, trusted domains, default profile, people notified, link validity, automatic refusal. Available to the Admin and Support roles.</p>
+    </section>
+
+    <section id="page-profiles">
+      <h2><span class="n">27</span>Profiles</h2>
+      <p>One collapsible card per profile; clicking the title opens it. The title is <strong>green</strong> if the profile is in use (user or SSO rule), <strong>grey</strong> otherwise. An open card shows the allowed LLMs in fallback order, the behaviour prompt, the alert emails, the image policy, a summary of the file, data and quota rules, and the list of users.</p>
+      <figure class="shot"><div class="frame"><img src="../img/dash-profiles.jpg" width="1600" height="1279" alt="Profiles page: collapsible cards, anonymisation card open" loading="lazy"></div><figcaption class="bar"><span>Dashboard, Profiles</span><a href="../img/dash-profiles.jpg">Full size</a></figcaption></figure>
+    </section>
+
+    <section id="page-targets">
+      <h2><span class="n">28</span>Target LLMs</h2>
+      <ul>
+        <li>One collapsible card per LLM, with a <strong>status light</strong>: green connected (with the response time), red unreachable or key refused, grey disabled or not tested. « Retest all » runs the tests again.</li>
+        <li>Open card: API format, address, allowed models, aliases, key (environment variable or masked value), HTTP headers, options, profiles that use it.</li>
+        <li><strong>Test</strong> queries the LLM with the saved key and lists its models.</li>
+      </ul>
+      <figure class="shot"><div class="frame"><img src="../img/dash-targets.jpg" width="1600" height="1362" alt="Target LLMs page: cards with connection light, Mistral card open" loading="lazy"></div><figcaption class="bar"><span>Dashboard, Target LLMs</span><a href="../img/dash-targets.jpg">Full size</a></figcaption></figure>
+    </section>
+
+    <section id="page-quotas">
+      <h2><span class="n">29</span>Quotas</h2>
+      <ul>
+        <li>Three tables: <strong>per profile</strong>, <strong>per user</strong> (override, −1 = unlimited) and <strong>per LLM</strong> (shared budget).</li>
+        <li>Action when exceeded: block or alert.</li>
+        <li>Live gauges: current minute, today's requests and tokens, this month's tokens; orange at 80%, red at 100%.</li>
+      </ul>
+      <figure class="shot"><div class="frame"><img src="../img/dash-quotas.jpg" width="1600" height="1714" alt="Quotas page: limits and consumption gauges" loading="lazy"></div><figcaption class="bar"><span>Dashboard, Quotas</span><a href="../img/dash-quotas.jpg">Full size</a></figcaption></figure>
+    </section>
+
+    <section id="page-privacy">
+      <h2><span class="n">30</span>Filtering and privacy</h2>
+      <p>Five tabs:</p>
+      <ul>
+        <li><strong>Detectors</strong>: token type, method (built-in, regular expression, term list), parameter, priority order.</li>
+        <li><strong>Rules per profile</strong>: a data type × profile table, with the action in each cell, the image policy and the « tokens » instruction given to the LLMs. In bold, what differs from the default action; in red, blocks.</li>
+        <li><strong>Files</strong>: an extension × profile table. Two header rows set images without an extension rule and other files; each extension can then get its own action. In brackets and grey, the action inherited from the default. « + Extension » adds an extension missing from the list.</li>
+        <li><strong>Exceptions and memory</strong>: « Never anonymise » list and name memory (number of entries, « Forget all » button).</li>
+        <li><strong>Test</strong>: a text, a profile, and the result with the tokens and the mapping table. Nothing is sent to an LLM.</li>
+      </ul>
+      <figure class="shot"><div class="frame"><img src="../img/dash-privacy.jpg" width="1600" height="1764" alt="Detectors tab" loading="lazy"></div><figcaption class="bar"><span>Filtering and privacy, Detectors tab</span><a href="../img/dash-privacy.jpg">Full size</a></figcaption></figure>
+      <figure class="shot"><div class="frame"><img src="../img/dash-rules.jpg" width="1600" height="1419" alt="Rules per profile tab: data type × profile table" loading="lazy"></div><figcaption class="bar"><span>Filtering and privacy, Rules per profile tab</span><a href="../img/dash-rules.jpg">Full size</a></figcaption></figure>
+      <figure class="shot"><div class="frame"><img src="../img/dash-files.jpg" width="1600" height="1588" alt="Files tab: action per extension and per profile" loading="lazy"></div><figcaption class="bar"><span>Filtering and privacy, Files tab</span><a href="../img/dash-files.jpg">Full size</a></figcaption></figure>
+      <figure class="shot"><div class="frame"><img src="../img/dash-test.jpg" width="1600" height="1016" alt="Test tab: anonymised text and mappings" loading="lazy"></div><figcaption class="bar"><span>Filtering and privacy, Test tab</span><a href="../img/dash-test.jpg">Full size</a></figcaption></figure>
+    </section>
+
+    <section id="page-filelog">
+      <h2><span class="n">31</span>File log</h2>
+      <p>Files and images sent with log, blocked, or blocked with alert, over 30 days: date, user, profile, LLM, type, file name, size, action and beginning of the SHA-256 fingerprint (full fingerprint on hover). A filter searches all columns. Available to the Admin and Support roles.</p>
+      <figure class="shot"><div class="frame"><img src="../img/dash-filelog.jpg" width="1600" height="1011" alt="File log: table of events with name, size, action and fingerprint" loading="lazy"></div><figcaption class="bar"><span>Dashboard, File log</span><a href="../img/dash-filelog.jpg">Full size</a></figcaption></figure>
+    </section>
+
+    <section id="page-debug">
+      <h2><span class="n">32</span>Debug</h2>
+      <ul>
+        <li><strong>DEBUG mode</strong>: activation, retention period, number of archived exchanges, Empty button.</li>
+        <li><strong>Archived exchanges</strong>: one row per request with the detections coloured by action.</li>
+        <li><strong>Exchange detail</strong>: what was detected in the new message and in the answer, the message as received by the LLM, the raw response, then the full context, collapsed. Toggle between anonymised view and original view.</li>
+        <li><strong>Global view</strong>: all values detected in the archive, with a filter.</li>
+      </ul>
+      <figure class="shot"><div class="frame"><img src="../img/dash-debug.jpg" width="1600" height="2353" alt="Debug page: list of exchanges and detail of one exchange" loading="lazy"></div><figcaption class="bar"><span>Dashboard, Debug (scroll the image)</span><a href="../img/dash-debug.jpg">Full size</a></figcaption></figure>
+    </section>
+
+    <section id="page-settings">
+      <h2><span class="n">33</span>Alerts and SSO</h2>
+      <ul>
+        <li><strong>Email alerts</strong>: activation, triggers (violation, quota, LLM error), default recipients, summary frequency, SMTP server, sending a test. « Blocked + alert + log » files are reported in addition.</li>
+        <li><strong>Authentication (SSO)</strong>: configured providers, redirect address to declare, domains, assigned profile, administrators.</li>
+      </ul>
+      <figure class="shot"><div class="frame"><img src="../img/dash-settings.jpg" width="1600" height="1182" alt="Alerts and SSO page" loading="lazy"></div><figcaption class="bar"><span>Dashboard, Alerts and SSO</span><a href="../img/dash-settings.jpg">Full size</a></figcaption></figure>
+    </section>
+
+    <section id="page-security">
+      <h2><span class="n">34</span>Web security</h2>
+      <ul>
+        <li><strong>Web protection</strong>: your address as the gateway sees it (direct or behind a trusted proxy), per-address limits, ban after refused sign-ins, addresses allowed for administration, trusted proxies, exempt networks, built-in HTTPS. Check that your address is in « Administration from » before saving.</li>
+        <li><strong>Banned addresses</strong>: address, end of the ban, number of bans, reason; button to unban.</li>
+        <li><strong>Web sessions</strong>: « Close all sessions » signs everyone out (new session signing key).</li>
+      </ul>
+    </section>
+
+    <section id="page-accounts">
+      <h2><span class="n">35</span>Administration accounts</h2>
+      <p>The list of people allowed in the dashboard: email, name, role (Admin or Support), Debug access for a Support account, deactivation (cuts access immediately), last sign-in. A table recalls the rights per role, then the other ways in: SSO provider rules and admin token.</p>
+      <figure class="shot"><div class="frame"><img src="../img/dash-accounts.jpg" width="1600" height="1106" alt="Administration accounts page" loading="lazy"></div><figcaption class="bar"><span>Dashboard, Administration accounts</span><a href="../img/dash-accounts.jpg">Full size</a></figcaption></figure>
+    </section>
+
+    <section id="page-audit">
+      <h2><span class="n">36</span>Audit log</h2>
+      <p>Who did what, and when: date, actor, role, action, target and detail of the changes. A filter searches all fields. No sensitive value appears in it.</p>
+      <figure class="shot"><div class="frame"><img src="../img/dash-audit.jpg" width="1600" height="1011" alt="Audit log: sign-ins and changes" loading="lazy"></div><figcaption class="bar"><span>Dashboard, Audit log</span><a href="../img/dash-audit.jpg">Full size</a></figcaption></figure>
+    </section>
+
+    <div class="part">Chat</div>
+
+    <section id="page-chat">
+      <h2><span class="n">37</span>Chat (overview)</h2>
+      <p>Address <code>/chat</code>. The complete instructions, intended for users, are in the <a href="chat.html">chat user guide</a> (« ? Help » button in the chat header).</p>
+      <figure class="shot"><div class="frame"><img src="../img/chat-conversation.jpg" width="1600" height="1011" alt="Conversation in the chat: name, email and case number pseudonymised then restored" loading="lazy"></div><figcaption class="bar"><span>Chat, conversation with pseudonymisation</span><a href="../img/chat-conversation.jpg">Full size</a></figcaption></figure>
+    </section>
+
+    <section id="limites">
+      <h2><span class="n">38</span>Limitations and open points</h2>
+      <div class="tw"><table>
+        <thead><tr><th>Topic</th><th>Situation</th><th>Way forward</th></tr></thead>
+        <tbody>
+          <tr><td class="k">Names without a clue</td><td>a name without a title, without a known first name, never seen before (« Keizer est malade », Keizer is ill), a name in a form without a recognised label (« Nom : Vandamme »), or a first name that is also a common word (Max, Jan, Hugo) is not detected the first time; « Claude Dubois » without a title stays in clear text (otherwise « Claude Haiku » would be pseudonymised)</td><td>named-entity recognition model (Presidio, spaCy)</td></tr>
+          <tr><td class="k">Numbering across the conversation</td><td>without a conversation identifier (clients other than Hermes with the plugin and Claude Code), each request is numbered on its own; a name learnt in a given turn is also replaced in the previous messages, which therefore change in the next turn; an « «EMAIL_1» » token typed by the user themselves is restored like a real token</td><td><code>X-LLMGW-Session</code> header for other clients</td></tr>
+          <tr><td class="k">Decomposed accents</td><td>text in decomposed Unicode (NFD, common in copy-paste from macOS) can slip past the lists</td><td>NFC normalisation</td></tr>
+          <tr><td class="k">Logos and text in images</td><td>no image analysis: images and files are sent, replaced by a white square or refused as a whole</td><td>OCR and logo detection</td></tr>
+          <tr><td class="k">Format translation</td><td>an Anthropic client only reaches Anthropic targets (and vice versa)</td><td>OpenAI ↔ Anthropic translation in the gateway</td></tr>
+          <tr><td class="k">High availability</td><td>a single instance</td><td>two instances and a shared database</td></tr>
+          <tr><td class="k">Agents and SSO</td><td>agents and applications identify themselves with a gateway key, not yet with an Entra token</td><td>Entra OAuth tokens for the API; personal keys generated after SSO sign-in</td></tr>
+          <tr><td class="k">Google groups</td><td>Google does not send groups in the ID token</td><td>profiles by domain or email; reading groups through the Directory API</td></tr>
+          <tr><td class="k">Tokens altered by the LLM</td><td>a token rephrased by the model (translated, without guillemets) is not restored</td><td>instruction added to requests; check in the Debug tab</td></tr>
+          <tr><td class="k">Files as white squares</td><td>an LLM without image support may refuse the request that contains the white square</td><td>choose « blocked » for these profiles, or a text replacement</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <section id="versions">
+      <h2><span class="n">39</span>Release notes</h2>
+      <p>The current version is shown at the bottom of the dashboard menu, on the chat sign-in screen, on <code>GET /version</code> and with <code>./llmgw -version</code>. The full log is kept in <code>RELEASE_NOTES.md</code>, at the root of the repository.</p>
+      <div class="rel">
+        <h3>1.5.5, 25 October 2026</h3>
+        <ul>
+          <li>Source code published on GitHub under the Apache 2.0 license; documentation in English at <code>/docs/en/</code>; examples in <code>examples/</code>: keyless demo, minimal configuration, curl, Python, Node.js and Claude Code clients, anonymisation preview.</li>
+        </ul>
+        <h3>1.5.4, 23 October 2026</h3>
+        <ul>
+          <li><code>GET /v1/models</code> also lists the models of targets described by a pattern (<code>"grok-*"</code>): Hermes and other clients finally see Grok in their model picker.</li>
+        </ul>
+        <h3>1.5.3, 23 October 2026</h3>
+        <ul>
+          <li>A target that names an undefined environment variable now uses its <code>api_key</code> key instead of sending an empty key (Grok calls were refused).</li>
+        </ul>
+        <h3>1.5.2, 21 October 2026</h3>
+        <ul>
+          <li>The reasoning of previous answers, sent back by the agent in the history, is now pseudonymised: it used to go to the provider in clear text.</li>
+          <li>Fewer false addresses and false phone numbers in file listings, dates and technical texts; a short number next to a word is no longer propagated through the conversation.</li>
+        </ul>
+        <h3>1.5.1, 20 October 2026</h3>
+        <ul>
+          <li>End of cascading false positives with agents: ordinary words, acronyms and products are no longer learnt or propagated through the conversation (4,224 replacements brought down to 79 on real exchanges).</li>
+        </ul>
+        <h3>1.5.0, 19 October 2026</h3>
+        <ul>
+          <li>Hermes Agent kit: one-command connection, control plugin (blocking outside the gateway, reporting of bypasses, <code>/llmgw</code> command).</li>
+          <li>Conversation memory: stable token numbering over the whole conversation (Hermes, Claude Code).</li>
+          <li>Reporting per application; bypasses reported in the overview and the audit log.</li>
+        </ul>
+        <h3>1.4.0, 19 October 2026</h3>
+        <ul>
+          <li>Web protection: per-address limits, ban after refused sign-ins, administration by address, security headers, built-in HTTPS.</li>
+          <li>Access requests from the portal, confirmed by email, approved automatically for trusted domains.</li>
+          <li>Revocable web sessions, roles recomputed at every request; SSO limited to verified email addresses.</li>
+          <li>More thorough anonymisation (JSON in tool results, non-breaking spaces, text documents…) and about 5 times faster, with parallel detectors and history caching.</li>
+          <li><code>build.sh</code> (Mac app, Linux archives) and <code>setup.sh</code> (fresh Ubuntu / Debian server).</li>
+        </ul>
+        <h3>1.3.0, 9 October 2026</h3>
+        <ul>
+          <li>Built-in detector for INAMI / RIZIV numbers of healthcare providers, with check-digit verification.</li>
+        </ul>
+      </div>
+      <div class="rel">
+        <h3>1.2.1, 8 October 2026</h3>
+        <ul>
+          <li>LLMGW.app stops its gateway however it is quit.</li>
+          <li><code>macapp/build.sh --install</code>: installation in Applications.</li>
+        </ul>
+      </div>
+      <div class="rel">
+        <h3>1.2.0, 7 October 2026</h3>
+        <ul>
+          <li>Self-contained LLMGW.app: embedded gateway (universal binary, no dependency), installation DMG.</li>
+          <li>Data in Application Support, starter configuration and random admin token at first launch.</li>
+          <li>Menu: edit the configuration and the secrets, copy the admin token, choose the data folder.</li>
+        </ul>
+      </div>
+      <div class="rel">
+        <h3>1.1.0, 7 October 2026</h3>
+        <ul>
+          <li>LLMGW.app macOS menu bar app: status, start, stop, restart, access to the dashboard, the chat, the documentation and the log, open at login.</li>
+          <li><code>start.command</code>: double-click start in Terminal.</li>
+        </ul>
+      </div>
+      <div class="rel">
+        <h3>1.0.1, 7 October 2026</h3>
+        <ul>
+          <li>PDFs with a badly encoded font: names in which letters have turned into symbols (« J@an S©basti@ ») are detected and masked.</li>
+          <li>Chat: « ⚠ damaged extracted text » warning on a poor-quality document.</li>
+        </ul>
+      </div>
+      <div class="rel">
+        <h3>1.0.0, 7 October 2026</h3>
+        <p>First reference version.</p>
+        <ul>
+          <li>OpenAI and Anthropic proxy with streaming, routing by profile, fallback, model aliases.</li>
+          <li>Bidirectional pseudonymisation, built-in and custom detectors, name memory, false-positive reduction.</li>
+          <li>Images (unchanged, white square, blocked + log) and files by extension (sent + log, white square, blocked + log, blocked + alert + log), 30-day file log.</li>
+          <li>Entra ID, Google and OIDC SSO; Admin and Support accounts; audit log.</li>
+          <li>Quotas, reporting up to 6 months, email alerts, DEBUG mode.</li>
+          <li>Interface in English, French and Dutch; LLMGW by Vulpoint.com branding; built-in documentation and chat user guide.</li>
+        </ul>
+      </div>
+    </section>
+
+    <footer class="doc"><img src="../img/vulpoint-logo.jpg" alt=""><span>LLMGW 1.5.5 by <a href="https://vulpoint.com" target="_blank" rel="noopener">Vulpoint.com</a></span></footer>
+  </main>
+</div>
+</body>
+</html>

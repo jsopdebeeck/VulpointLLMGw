@@ -2,6 +2,13 @@
 
 Le numéro suit le schéma `majeur.mineur.correctif`. La version en cours s'affiche en bas du menu du dashboard, dans l'en-tête de connexion du chat, sur `GET /version` et avec `./llmgw -version`.
 
+## 1.5.5 (25 octobre 2026)
+
+### Projet public
+- **Le code est publié sur GitHub sous licence Apache 2.0** (`LICENSE`, `NOTICE` : la marque et le logo Vulpoint restent réservés). Nouveaux fichiers `SECURITY.md` (signalement privé des vulnérabilités) et `CONTRIBUTING.md` (jamais de vraies données personnelles dans les tickets et les tests).
+- **Documentation en anglais** : guide d'administration et guide utilisateur du chat sur `/docs/en/`, avec un lien entre les versions française et anglaise de chaque page. Le README anglais présente le projet et une démo d'une minute.
+- **Exemples** (`examples/`) : démo sans clé de fournisseur (la passerelle devant un faux LLM qui renvoie ce qu'il reçoit, pour voir ce que le LLM reçoit et ce que le client récupère), configuration minimale commentée en anglais, clients curl, SDK OpenAI et Anthropic (Python, Node.js), Claude Code, et un script qui affiche ce qu'un profil enverrait au LLM pour un texte donné, sans appeler de LLM.
+
 ## 1.5.4 (23 octobre 2026)
 
 ### Corrections

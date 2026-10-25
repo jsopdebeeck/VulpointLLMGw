@@ -12,3 +12,4 @@ _archive/
 LLMGW.app/
 llmgw.log
 .claude/worktrees/
+examples/demo/demo.log

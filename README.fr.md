@@ -2,7 +2,7 @@
 
 [English version](README.md)
 
-Version **1.5.1** · notes de version dans [RELEASE_NOTES.md](RELEASE_NOTES.md) · documentation intégrée sur `/docs/` (administration) et `/docs/chat.html` (guide utilisateur du chat), sources dans [docs/](docs/).
+Version **1.5.5** · [licence Apache 2.0](LICENSE) · [exemples](examples/) (en anglais) · notes de version dans [RELEASE_NOTES.md](RELEASE_NOTES.md) · documentation intégrée sur `/docs/` (administration) et `/docs/chat.html` (guide utilisateur du chat), en anglais sur `/docs/en/`, sources dans [docs/](docs/).
 
 <p align="center"><img src="docs/img/architecture-fr.svg" alt="Architecture de LLMGW : utilisateurs, agents et applications de la zone de confiance ne joignent les LLM que par la passerelle, en bordure de zone ; les accès directs vers Internet sont bloqués" width="100%"></p>
 
@@ -190,7 +190,8 @@ Un cœur de VPS d'entrée de gamme est plus lent qu'un cœur M5 : comptez la moi
 | `alerts.go` | alertes email |
 | `store.go` | SQLite, agrégation, statistiques |
 | `dashboard.html`, `chat.html`, `i18n.js` | dashboard, chat et traductions EN/FR/NL (embarqués) |
-| `docs/` | documentation intégrée : administration, guide utilisateur du chat, captures |
+| `docs/` | documentation intégrée : administration et guide utilisateur du chat en français (`docs/`) et en anglais (`docs/en/`), captures |
+| `examples/` | démo sans clé, configuration minimale, exemples de clients, aperçu de l'anonymisation |
 | `RELEASE_NOTES.md` | notes de version |
 | `gateway_test.go` | tests de bout en bout avec faux LLM : `go test ./...` |
 | `anon_test.go` | tests de non-régression et mesures de l'anonymisation (`go test -bench Anon`) |
@@ -205,3 +206,9 @@ Un cœur de VPS d'entrée de gamme est plus lent qu'un cœur M5 : comptez la moi
 | `deploy/deploy.sh` | compilation, copie et `setup.sh` sur un VPS en une commande (`--help`) |
 | `deploy/llmgw.service` | service systemd durci |
 | `deploy/Caddyfile` | HTTPS, streaming SSE et accès admin restreint |
+
+## Contribuer, sécurité et licence
+
+- Contributions : voir [CONTRIBUTING.md](CONTRIBUTING.md) (en anglais). Jamais de vraies données personnelles dans les tickets, les tests ou les journaux.
+- Vulnérabilités : à signaler en privé, voir [SECURITY.md](SECURITY.md).
+- Licence : [Apache 2.0](LICENSE). « Vulpoint » et son logo sont des marques de Vulpoint.com, non couvertes par la licence (voir [NOTICE](NOTICE)).

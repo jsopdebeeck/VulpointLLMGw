@@ -1,0 +1,105 @@
+# LLMGW: minimal configuration to get started.
+# Copy it next to the binary as config.toml, then:  ./llmgw -config config.toml -check
+# The full reference, with every option commented, is config.example.toml (French comments)
+# and the English documentation at /docs/en/ once the gateway runs.
+# The file is reloaded on every save (except listen, db and upstream_timeout_sec).
+
+[server]
+listen = "127.0.0.1:8080"
+db = "gateway.db"                 # SQLite, relative to this file
+admin_token = "change-me"         # dashboard + /admin/api; use a long random value
+
+# ---------------------------------------------------------------- target LLMs
+# api = "openai"    → base_url ends with /v1   (POST {base_url}/chat/completions)
+# api = "anthropic" → base_url without /v1      (POST {base_url}/v1/messages)
+# models accepts globs ("claude-*", "*"). Keys come from environment variables.
+
+[targets.local]
+api = "openai"
+base_url = "http://localhost:11434/v1"    # Ollama on this machine
+models = ["*"]
+
+[targets.mistral]
+api = "openai"
+base_url = "https://api.mistral.ai/v1"
+api_key_env = "MISTRAL_API_KEY"
+models = ["mistral-*"]
+stream_usage = true                       # counts tokens in streaming too
+
+[targets.anthropic]
+api = "anthropic"
+base_url = "https://api.anthropic.com"
+api_key_env = "ANTHROPIC_API_KEY"
+models = ["claude-*"]
+
+# ---------------------------------------------------------------- what gets pseudonymised
+# Each detector's name becomes the placeholder type: «EMAIL_1», «PERSON_2»…
+
+[[detectors]]
+name = "EMAIL"
+builtin = "email"
+
+[[detectors]]
+name = "PHONE"
+builtin = "phone"
+
+[[detectors]]
+name = "IBAN"
+builtin = "iban"
+
+[[detectors]]
+name = "CARD"
+builtin = "card"
+
+[[detectors]]
+name = "PERSON"
+builtin = "person_title"          # "Mrs Dubois", "patient Peeters"
+
+[[detectors]]
+name = "PERSON"
+builtin = "person_firstname"      # known first name + surname
+
+[[detectors]]
+name = "PERSON"
+builtin = "person_learned"        # names already seen (HMAC fingerprints only)
+
+[[detectors]]
+name = "COMPANY"
+words = ["ACME SA", "ACME"]       # your own lists: clients, projects, code names
+
+[[detectors]]
+name = "TICKET"
+regex = '\bTCK-\d{6}\b'           # any regular expression
+
+[privacy]
+allow = ["Claude", "Mistral", "OpenAI", "GitHub"]   # never pseudonymised
+
+# ---------------------------------------------------------------- profiles
+# targets: allowed LLMs in order of preference (fallback on network error, 5xx or 429)
+# default_action: anonymize | block | log | off
+
+[profiles.standard]
+description = "Cloud LLMs allowed, personal data pseudonymised"
+targets = ["mistral", "anthropic", "local"]
+default_action = "anonymize"
+images = "blank"
+placeholder_hint = true
+actions = { CARD = "block" }      # a card number is refused outright (403)
+
+[profiles.internal]
+description = "Sensitive data allowed, local LLM only"
+targets = ["local"]
+default_action = "log"
+images = "pass"
+
+# ---------------------------------------------------------------- users
+# Clients send their gateway key as "Authorization: Bearer <key>" or "x-api-key: <key>".
+# ${VAR} reads an environment variable.
+
+[users.alice]
+key = "gw-alice-change-me"
+profile = "standard"
+
+[users.lab]
+key = "${LLMGW_LAB_KEY}"
+profile = "internal"

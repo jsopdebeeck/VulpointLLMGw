@@ -2,7 +2,9 @@
 
 [Version française](README.fr.md)
 
-Version **1.5.1** · release notes in [RELEASE_NOTES.md](RELEASE_NOTES.md) (French) · built-in documentation at `/docs/` (administration) and `/docs/chat.html` (chat user guide), sources in [docs/](docs/) (French).
+Version **1.5.5** · [Apache-2.0 license](LICENSE) · [examples](examples/) · documentation in English: [administration](docs/en/index.html) and [chat user guide](docs/en/chat.html), also built in at `/docs/en/` once the gateway runs (French at `/docs/`) · release notes in [RELEASE_NOTES.md](RELEASE_NOTES.md) (French).
+
+LLMGW is a single point of entry between your users, agents and applications and the language models. It applies your AI policy: who may use which model, which data may leave, and with what traceability. Personal data (names, emails, phones, IBANs, national numbers, addresses, your own client and project lists…) is replaced by placeholders such as `«PERSON_1»` before the request leaves, and put back in the answer, streaming included. Clients keep their usual OpenAI or Anthropic SDK: only the URL and the key change.
 
 <p align="center"><img src="docs/img/architecture-en.svg" alt="LLMGW architecture: users, agents and applications in the trusted zone reach the LLMs only through the gateway, on the zone boundary; direct access to the Internet is blocked" width="100%"></p>
 
@@ -15,10 +17,32 @@ clients (OpenAI / Anthropic API)  →  llmgw  →  target LLMs (OpenAI, Anthropi
           SQLite metrics → /dashboard
 ```
 
+## Try it in one minute
+
+No provider key needed: the demo puts the gateway in front of a fake LLM that echoes what it receives (Go and Python 3 required).
+
+```bash
+git clone https://github.com/jsopdebeeck/VulpointLLMGw.git && cd VulpointLLMGw
+examples/demo/run.sh
+```
+
+```
+=== the client sends:
+Please answer Mrs Claire Dubois (claire.dubois@acme.be, +32 470 12 34 56) about ticket TCK-104233 for ACME SA.
+
+--- the LLM receives:
+Please answer Mrs «PERSON_1» («EMAIL_1», «PHONE_1») about ticket «TICKET_1» for «COMPANY_1».
+=== the client receives:
+You wrote: Please answer Mrs Claire Dubois (claire.dubois@acme.be, +32 470 12 34 56) about ticket TCK-104233 for ACME SA.
+```
+
+[examples/](examples/) also has a minimal English-commented configuration, client code for curl, the OpenAI and Anthropic SDKs (Python, Node.js) and Claude Code, and a script that previews what a profile would send to the LLM.
+
 ## Getting started
 
 ```bash
-cp config.example.toml config.toml     # then adapt targets, profiles and users
+go build -o llmgw .                    # Go 1.25+, or take a release archive
+cp examples/config.minimal.toml config.toml   # or config.example.toml (every option, French comments)
 export MISTRAL_API_KEY=… ANTHROPIC_API_KEY=… OPENAI_API_KEY=…
 ./llmgw -config config.toml -check     # validates the configuration
 ./llmgw -config config.toml            # http://127.0.0.1:8080/dashboard
@@ -241,7 +265,8 @@ An entry-level VPS core is slower than an M5 core: count on half these figures. 
 | `alerts.go` | email alerts |
 | `store.go` | SQLite, aggregation, statistics |
 | `dashboard.html`, `chat.html`, `i18n.js` | dashboard, chat and EN/FR/NL translations (embedded) |
-| `docs/` | built-in documentation (French): administration, chat user guide, screenshots |
+| `docs/` | built-in documentation: administration and chat user guide in French (`docs/`) and English (`docs/en/`), screenshots |
+| `examples/` | keyless demo, minimal configuration, client examples, anonymisation preview |
 | `RELEASE_NOTES.md` | release notes (French) |
 | `gateway_test.go` | end-to-end tests with fake LLMs: `go test ./...` |
 | `anon_test.go` | anonymisation regression tests and benchmarks (`go test -bench Anon`) |
@@ -256,3 +281,9 @@ An entry-level VPS core is slower than an M5 core: count on half these figures. 
 | `deploy/deploy.sh` | build, copy and `setup.sh` on a VPS in one command (`--help`) |
 | `deploy/llmgw.service` | hardened systemd unit |
 | `deploy/Caddyfile` | HTTPS, SSE streaming and restricted admin access |
+
+## Contributing, security and license
+
+- Contributions: see [CONTRIBUTING.md](CONTRIBUTING.md). Never post real personal data in issues, tests or logs.
+- Vulnerabilities: report them privately, see [SECURITY.md](SECURITY.md).
+- License: [Apache License 2.0](LICENSE). « Vulpoint » and its logo are trademarks of Vulpoint.com, not covered by the license (see [NOTICE](NOTICE)).
