@@ -333,7 +333,6 @@
     [/^Par défaut : (.+)$/, (m, a) => `Default: ${tr(a)}`, (m, a) => `Standaard: ${tr(a)}`],
     [/^images : (.+)$/, (m, a) => `images: ${tr(a)}`, (m, a) => `afbeeldingen: ${tr(a)}`],
     [/^(\d+) événement\(s\), conservés 30 jours, même sans mode Debug\. Le contenu des fichiers n'est jamais stocké\.$/, "$1 event(s), kept 30 days, even without Debug mode. File content is never stored.", "$1 gebeurtenis(sen), 30 dagen bewaard, ook zonder Debug-modus. De inhoud van bestanden wordt nooit opgeslagen."],
-    [/^([\d.]+) (o|ko|Mo)$/, (m, n, u) => `${n} ${{ o: "B", ko: "KB", Mo: "MB" }[u]}`, (m, n, u) => `${n} ${{ o: "B", ko: "kB", Mo: "MB" }[u]}`],
     [/^(.+) · LLMGW$/, (m, a) => `${tr(a)} · LLMGW`, (m, a) => `${tr(a)} · LLMGW`],
     [/^(:\s*)?rôle (.+)$/, "$1role $2", "$1rol $2"], [/^(:\s*)?groupe (.+)$/, "$1group $2", "$1groep $2"],
     [/^sinon (.+)$/, (m, a) => `otherwise ${tr(a)}`, (m, a) => `anders ${tr(a)}`],

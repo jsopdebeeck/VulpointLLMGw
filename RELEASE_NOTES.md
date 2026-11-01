@@ -2,6 +2,12 @@
 
 Le numéro suit le schéma `majeur.mineur.correctif`. La version en cours s'affiche en bas du menu du dashboard, dans l'en-tête de connexion du chat, sur `GET /version` et avec `./llmgw -version`.
 
+## 1.5.6 (1er novembre 2026)
+
+### Corrections
+- **Quantités et volumes se confondaient dans le dashboard.** « 10.6 M » (millions de tokens) et « 75.0 Mo » (mégaoctets) se ressemblaient. Les quantités s'écrivent maintenant en toutes lettres (« 10,6 millions », « 107,8 mille »), les volumes gardent leur unité d'octets (« 75 Mo »). Le séparateur décimal et les unités suivent la langue de l'interface (FR : Mo, EN et NL : MB).
+- **Volumes en base 1000.** Ils étaient calculés en base 1024 sous le libellé « Mo » : 1 Mo vaut désormais 1 000 000 d'octets. Les valeurs affichées augmentent de 2,4 % (ko) à 7,4 % (Go) selon l'unité, sans changement des données enregistrées. Le journal des fichiers utilise le même calcul.
+
 ## 1.5.5 (25 octobre 2026)
 
 ### Projet public

@@ -261,8 +261,10 @@ if (!["48h", "60d", "6w", "6m"].includes(range)) range = "6m"; // former 12-mont
 const S = { cfg: null, orig: "", meta: null, usage: null, tab: store.get("gwtab") || "overview", privTab: store.get("gwpriv") || "detectors", tgtOpen: new Set((() => { try { return JSON.parse(store.get("gwtgtopen") || "[]"); } catch { return []; } })()), profOpen: new Set((() => { try { return JSON.parse(store.get("gwprofopen") || "[]"); } catch { return []; } })()), newKeys: {}, tests: {}, testOut: "" };
 
 const nf = new Intl.NumberFormat(I18N.loc);
-const fmt = n => { n = +n || 0; const a = Math.abs(n); return a >= 1e9 ? (n / 1e9).toFixed(1) + " G" : a >= 1e6 ? (n / 1e6).toFixed(1) + " M" : a >= 1e4 ? (n / 1e3).toFixed(1) + " k" : nf.format(Math.round(n)); };
-const fmtB = n => { n = +n || 0; const u = ["o", "Ko", "Mo", "Go", "To"]; let i = 0; while (n >= 1024 && i < 4) { n /= 1024; i++; } return (i ? n.toFixed(1) : n) + " " + u[i]; };
+const nfLong = new Intl.NumberFormat(I18N.loc, { notation: "compact", compactDisplay: "long", maximumFractionDigits: 1 });
+const fmt = n => { n = +n || 0; return Math.abs(n) >= 1e4 ? nfLong.format(n) : nf.format(Math.round(n)); };
+const nfBytes = ["byte", "kilobyte", "megabyte", "gigabyte", "terabyte"].map(unit => new Intl.NumberFormat(I18N.loc, { style: "unit", unit, unitDisplay: "short", maximumFractionDigits: 1 }));
+const fmtB = n => { n = +n || 0; let i = 0; while (n >= 1000 && i < 4) { n /= 1000; i++; } return nfBytes[i].format(n); };
 const fmtMs = n => n >= 10000 ? (n / 1000).toFixed(1) + " s" : Math.round(n) + " ms";
 const SLOTS = ["--s1", "--s2", "--s3", "--s4", "--s5", "--s6", "--s7", "--s8"];
 const color = i => `var(${SLOTS[i % 8]})`;
@@ -698,7 +700,7 @@ async function loadFileLog() { try { S.fileLog = await api("/admin/api/files-log
 const FILE_ACT_CLS = { pass_log: "", blank: "", block: "color:var(--critical)", block_alert: "color:var(--critical);font-weight:700" };
 function viewFileLog() {
   const q = (S.fileFilter || "").toLowerCase(), A = (S.fileLog || []).filter(e => !q || [e.User, e.Profile, e.Target, e.Name, e.Ext, e.Action, L.file[e.Action] || ""].join(" ").toLowerCase().includes(q));
-  const size = n => n ? (n < 1024 ? n + " o" : n < 1048576 ? (n / 1024).toFixed(1) + " ko" : (n / 1048576).toFixed(1) + " Mo") : "—";
+  const size = n => n ? fmtB(n) : "—";
   const actLabel = e => e.Kind === "IMAGE" && e.Action === "block" ? L.img.block : L.file[e.Action] || e.Action;
   return `<section class="card"><div class="chead"><div><h2>Fichiers et images</h2><div class="sub">${(S.fileLog || []).length} événement(s), conservés 30 jours, même sans mode Debug. Le contenu des fichiers n'est jamais stocké.</div></div>
       <input id="filefilter" placeholder="filtrer…" value="${esc(S.fileFilter || "")}" style="width:200px"><button class="btn" data-act="filelog-refresh">Rafraîchir</button></div>
