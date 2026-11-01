@@ -150,7 +150,7 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
 
 <div class="page">
   <nav class="toc" aria-label="Sommaire">
-    <a class="toc-brand" href="https://vulpoint.com" target="_blank" rel="noopener"><img src="img/vulpoint-logo.jpg" alt="Vulpoint"><div><b>LLMGW</b><small>by Vulpoint.com · v1.5.6</small></div></a>
+    <a class="toc-brand" href="https://vulpoint.com" target="_blank" rel="noopener"><img src="img/vulpoint-logo.jpg" alt="Vulpoint"><div><b>LLMGW</b><small>by Vulpoint.com · v1.5.7</small></div></a>
     <ol>
       <li><a href="en/index.html" hreflang="en" lang="en"><span>EN</span>English version</a></li>
     </ol>
@@ -214,7 +214,7 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
       <div class="eyebrow">Documentation fonctionnelle, technique et d'administration</div>
       <h1>LLMGW, la passerelle IA de l'organisation</h1>
       <p class="lede">Un point de connexion unique entre les utilisateurs, les agents et les modèles de langage. Il applique la politique IA : qui peut utiliser quel modèle, quelles données peuvent sortir, et avec quelle traçabilité.</p>
-      <div class="meta"><span><b>Version</b> 1.5.6 (1er novembre 2026)</span><span><b>Composant</b> llmgw (binaire unique Go, macOS et Linux)</span><span><b>Formats d'API</b> OpenAI et Anthropic</span><span><b>Interface</b> anglais, français, néerlandais</span></div>
+      <div class="meta"><span><b>Version</b> 1.5.7 (1er novembre 2026)</span><span><b>Composant</b> llmgw (binaire unique Go, macOS et Linux)</span><span><b>Formats d'API</b> OpenAI et Anthropic</span><span><b>Interface</b> anglais, français, néerlandais</span></div>
       <a class="crosslink" href="chat.html">Guide utilisateur du chat ↗</a>
     </header>
 
@@ -714,7 +714,7 @@ files_default = "pass_log"                         <span class="c"># autres exte
       <h3>Lancement manuel</h3>
 <pre>export MISTRAL_API_KEY=… ANTHROPIC_API_KEY=…
 ./llmgw -config config.toml
-<span class="c"># LLMGW 1.5.6 à l'écoute sur http://127.0.0.1:8088 (dashboard : /dashboard, documentation : /docs)</span></pre>
+<span class="c"># LLMGW 1.5.7 à l'écoute sur http://127.0.0.1:8088 (dashboard : /dashboard, documentation : /docs)</span></pre>
       <p>Une seule instance par port. Arrêt avec Ctrl+C : les métriques en attente sont enregistrées avant la sortie.</p>
 
       <h3>App macOS dans la barre des menus</h3>
@@ -1030,6 +1030,14 @@ default_profile = "anonymisation"</pre>
       <h2><span class="n">39</span>Notes de version</h2>
       <p>La version en cours s'affiche en bas du menu du dashboard, sur l'écran de connexion du chat, sur <code>GET /version</code> et avec <code>./llmgw -version</code>. Le journal complet est tenu dans <code>RELEASE_NOTES.md</code>, à la racine du dépôt.</p>
       <div class="rel">
+        <h3>1.5.7, 1er novembre 2026</h3>
+        <ul>
+          <li>Noms : un « M. » collé à un chiffre (« 205M. So ») n'est plus un titre, un mot du dictionnaire n'est plus lu comme une faute de frappe (« Master System »), un titre abrégé en capitales demande un nom en capitales (« PR Newswire »), et les contractions et possessifs (« I'd », « Dupont's ») ne font plus partie du nom. C'était la source de remplacements en cascade dans la conversation.</li>
+          <li>Prénoms : « Les », « Sem » et « Ela » ne commencent plus un nom complet, « Jan » suivi ou précédé d'un nombre est un mois, Starlink, Mini et Rio rejoignent les termes jamais anonymisés.</li>
+          <li>Lieux : un indice de résidence doit être un mot entier (« Assine a Folha » contenait « ne a »), et « Forest » demande une préposition dans le texte (« à Forest »).</li>
+          <li>Numéros : un DOI, une référence bibliographique ou un horodatage ne sont plus pris pour une carte ou un téléphone, une liste comme « 96/63/90/94 » n'est plus une référence, et un nom d'image (« Asset@2x.png ») n'est plus une adresse e-mail.</li>
+          <li>Type des listes : un terme d'une liste configurée garde son type même s'il figure dans la mémoire des noms, et seuls les noms de personnes alimentent cette mémoire. Une entreprise ne reçoit plus deux jetons selon sa casse. Les entrées déjà mémorisées restent, mais la liste passe devant.</li>
+        </ul>
         <h3>1.5.6, 1er novembre 2026</h3>
         <ul>
           <li>Dashboard : les quantités s'écrivent en toutes lettres (« 10,6 millions », « 107,8 mille ») et ne se confondent plus avec les volumes en octets (« 75 Mo »). Unités traduites selon la langue de l'interface ; volumes calculés en base 1000.</li>
@@ -1117,7 +1125,7 @@ default_profile = "anonymisation"</pre>
       </div>
     </section>
 
-    <footer class="doc"><img src="img/vulpoint-logo.jpg" alt=""><span>LLMGW 1.5.6 by <a href="https://vulpoint.com" target="_blank" rel="noopener">Vulpoint.com</a> · <a href="en/index.html" hreflang="en" lang="en">English version</a></span></footer>
+    <footer class="doc"><img src="img/vulpoint-logo.jpg" alt=""><span>LLMGW 1.5.7 by <a href="https://vulpoint.com" target="_blank" rel="noopener">Vulpoint.com</a> · <a href="en/index.html" hreflang="en" lang="en">English version</a></span></footer>
   </main>
 </div>
 </body>

@@ -62,7 +62,7 @@ type builtin struct {
 }
 
 var builtins = map[string]builtin{
-	"email":            {re: `[\p{L}\p{N}._%+\-]+@[\p{L}\p{N}\-]+(?:\.[\p{L}\p{N}\-]+)*\.[A-Za-z]{2,}`},
+	"email":            {re: `[\p{L}\p{N}._%+\-]+@[\p{L}\p{N}\-]+(?:\.[\p{L}\p{N}\-]+)*\.[A-Za-z]{2,}`, valid: validEmail},
 	"phone":            {find: findPhones},
 	"iban":             {find: findIBAN},
 	"niss":             {re: `\b\d{2}[ ./-]?\d{2}[ ./-]?\d{2}[-./\s]?\d{3}[-.\s]?\d{2}\b`, valid: validNISS},
@@ -345,6 +345,9 @@ func (d *Detector) Find(s string) []span {
 		if (d.builtin == "niss" || d.builtin == "card") && afterDecimal(s, a) {
 			continue
 		}
+		if d.builtin == "card" && (inDOI(s, a) || afterCitation(s, a)) {
+			continue
+		}
 		k := d.Kind
 		if d.kinds != nil {
 			lk := learnKey(s[a:b])
@@ -361,6 +364,27 @@ func (d *Detector) Find(s string) []span {
 }
 
 // ---------- validators ----------
+
+var fileExtTLD = map[string]bool{"png": true, "jpg": true, "jpeg": true, "gif": true, "webp": true, "svg": true, "ico": true, "css": true, "js": true, "pdf": true}
+
+// validEmail: "Asset-46@2x.png" is an image name.
+func validEmail(v string) bool {
+	return !fileExtTLD[strings.ToLower(v[strings.LastIndexByte(v, '.')+1:])]
+}
+
+var reDOI = regexp.MustCompile(`\b10\.\d{4,9}/`)
+
+// inDOI: the number at a belongs to a DOI ("10.1177/2470547020939564").
+func inDOI(s string, a int) bool {
+	lo := max(0, a-128)
+	if i := strings.LastIndexAny(s[lo:a], " \t\r\n\"'()[]<>"); i >= 0 {
+		lo += i + 1
+	}
+	return reDOI.MatchString(s[lo:a])
+}
+
+// afterCitation: "2020;4:2470547020939564": volume:article number of a bibliography entry.
+func afterCitation(s string, a int) bool { return a >= 2 && s[a-1] == ':' && isDigitByte(s[a-2]) }
 
 func onlyDigits(s string) string {
 	var b strings.Builder
@@ -466,6 +490,9 @@ func findPhones(s string) [][2]int {
 			continue
 		}
 		if afterDecimal(s, m[0]) { // 0.0012345678: a decimal number
+			continue
+		}
+		if m[0] >= 2 && s[m[0]-1] == '-' && isDigitByte(s[m[0]-2]) || inDOI(s, m[0]) { // "2026-07-07 18.01.22", "s41591-021-01336-3"
 			continue
 		}
 		out = append(out, [2]int{m[0], m[1]})
@@ -846,7 +873,8 @@ type Session struct {
 	active       []*Detector
 	cache        *spanCache
 	toLearn      []string
-	learnOn      bool // a person_learned detector is configured
+	learnOn      bool   // a person_learned detector is configured
+	learnKind    string // its kind: the only one the persistent memory can give back
 	NoLearn      bool
 	Stats        map[string]map[string]int // kind -> action -> count
 	Debug        bool                      // record every detected value (debug archive)
@@ -865,7 +893,9 @@ func NewSession(cfg *Config, prof *Profile) *Session {
 		learn: map[string]string{}, fwd: map[string]string{}, rev: map[string]string{}, cnt: map[string]int{}, fuzzy: map[string]string{},
 		nameKinds: map[string]bool{}, found: map[string]*detected{}, cache: detCache, Stats: map[string]map[string]int{}}
 	for _, d := range cfg.dets {
-		s.learnOn = s.learnOn || d.builtin == "person_learned"
+		if d.builtin == "person_learned" {
+			s.learnOn, s.learnKind = true, d.Kind
+		}
 		if d.names {
 			s.nameKinds[d.Kind] = true
 		}
@@ -1160,6 +1190,10 @@ func (s *Session) resolve(d *detected, all []span) []span {
 		if a.e-a.s != b.e-b.s {
 			return a.e-a.s > b.e-b.s
 		}
+		// same value: the kind of a configured list beats the memory, which only knows PERSON ("Vulpoint")
+		if va, vb := a.det != nil && a.det.volatile(), b.det != nil && b.det.volatile(); va != vb {
+			return vb
+		}
 		return a.prio < b.prio
 	})
 	// per severity level, from the strictest: the earliest and longest spans that overlap
@@ -1266,7 +1300,7 @@ func (s *Session) learnFrom(text string) string {
 				}
 			}
 		}
-		if sp.det != nil && sp.det.strong() && sp.det.kinds == nil { // guesses from a first name are not persisted
+		if sp.det != nil && sp.det.strong() && sp.det.kinds == nil && sp.kind == s.learnKind { // guesses from a first name are not persisted, nor other kinds
 			s.toLearn = append(s.toLearn, nameTokens(v)...)
 		}
 	}

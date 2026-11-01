@@ -150,7 +150,7 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
 
 <div class="page">
   <nav class="toc" aria-label="Contents">
-    <a class="toc-brand" href="https://vulpoint.com" target="_blank" rel="noopener"><img src="../img/vulpoint-logo.jpg" alt="Vulpoint"><div><b>LLMGW</b><small>by Vulpoint.com · v1.5.6</small></div></a>
+    <a class="toc-brand" href="https://vulpoint.com" target="_blank" rel="noopener"><img src="../img/vulpoint-logo.jpg" alt="Vulpoint"><div><b>LLMGW</b><small>by Vulpoint.com · v1.5.7</small></div></a>
     <ol>
       <li><a href="../index.html" hreflang="fr" lang="fr"><span>FR</span>Version française</a></li>
     </ol>
@@ -214,7 +214,7 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
       <div class="eyebrow">Functional, technical and administration documentation</div>
       <h1>LLMGW, the organisation's AI gateway</h1>
       <p class="lede">A single connection point between users, agents and language models. It enforces the AI policy: who may use which model, which data may leave, and with what traceability.</p>
-      <div class="meta"><span><b>Version</b> 1.5.6 (1 November 2026)</span><span><b>Component</b> llmgw (single Go binary, macOS and Linux)</span><span><b>API formats</b> OpenAI and Anthropic</span><span><b>Interface</b> English, French, Dutch</span></div>
+      <div class="meta"><span><b>Version</b> 1.5.7 (1 November 2026)</span><span><b>Component</b> llmgw (single Go binary, macOS and Linux)</span><span><b>API formats</b> OpenAI and Anthropic</span><span><b>Interface</b> English, French, Dutch</span></div>
       <a class="crosslink" href="chat.html">Chat user guide ↗</a>
     </header>
 
@@ -714,7 +714,7 @@ files_default = "pass_log"                         <span class="c"># other exten
       <h3>Manual start</h3>
 <pre>export MISTRAL_API_KEY=… ANTHROPIC_API_KEY=…
 ./llmgw -config config.toml
-<span class="c"># LLMGW 1.5.6 listening on http://127.0.0.1:8088 (dashboard: /dashboard, documentation: /docs)</span></pre>
+<span class="c"># LLMGW 1.5.7 listening on http://127.0.0.1:8088 (dashboard: /dashboard, documentation: /docs)</span></pre>
       <p>One instance per port. Stop with Ctrl+C: pending metrics are saved before exiting.</p>
 
       <h3>macOS menu bar app</h3>
@@ -1030,6 +1030,14 @@ default_profile = "anonymisation"</pre>
       <h2><span class="n">39</span>Release notes</h2>
       <p>The current version is shown at the bottom of the dashboard menu, on the chat sign-in screen, on <code>GET /version</code> and with <code>./llmgw -version</code>. The full log is kept in <code>RELEASE_NOTES.md</code>, at the root of the repository.</p>
       <div class="rel">
+        <h3>1.5.7, 1 November 2026</h3>
+        <ul>
+          <li>Names: an "M." attached to a number ("205M. So") is no longer a title, a dictionary word is no longer read as a typo ("Master System"), an all-caps short title needs an all-caps name ("PR Newswire"), and contractions and possessives ("I'd", "Dupont's") are no longer part of the name. These were a source of cascading replacements across the conversation.</li>
+          <li>First names: "Les", "Sem" and "Ela" no longer start a full name, "Jan" next to a number is a month, and Starlink, Mini and Rio join the never-anonymized terms.</li>
+          <li>Places: a residence cue must be a whole word ("Assine a Folha" contained "ne a"), and "Forest" needs a preposition in the text ("à Forest").</li>
+          <li>Numbers: a DOI, a bibliography reference or a timestamp is no longer taken for a card or a phone number, a list such as "96/63/90/94" is no longer a reference, and an image name ("Asset@2x.png") is no longer an email address.</li>
+          <li>List kinds: a term of a configured list keeps its kind even when it is in the name memory, and only person names feed that memory. A company no longer gets two tokens depending on its case. Existing memory entries stay, but the list takes precedence.</li>
+        </ul>
         <h3>1.5.6, 1 November 2026</h3>
         <ul>
           <li>Dashboard: quantities are spelled out ("10.6 million", "107.8 thousand") and can no longer be mistaken for byte volumes ("75 MB"). Units follow the interface language; volumes are computed in base 1000.</li>
@@ -1117,7 +1125,7 @@ default_profile = "anonymisation"</pre>
       </div>
     </section>
 
-    <footer class="doc"><img src="../img/vulpoint-logo.jpg" alt=""><span>LLMGW 1.5.6 by <a href="https://vulpoint.com" target="_blank" rel="noopener">Vulpoint.com</a></span></footer>
+    <footer class="doc"><img src="../img/vulpoint-logo.jpg" alt=""><span>LLMGW 1.5.7 by <a href="https://vulpoint.com" target="_blank" rel="noopener">Vulpoint.com</a></span></footer>
   </main>
 </div>
 </body>

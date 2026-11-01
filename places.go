@@ -107,10 +107,21 @@ func findAddresses(s string) [][2]int {
 var placeCues = []string{"domicilie a", "domiciliee a", "habite a", "habite au", "reside a", "residant a", "residente a", "ne a", "nee a",
 	"originaire de", "demeurant a", "woont in", "wonende te", "geboren in", "geboren te", "lives in", "born in", "resident of"}
 
+// ambiguousPlace: localities that are also ordinary words: only after a preposition ("à Forest").
+var ambiguousPlace = map[string]bool{"forest": true}
+
+var placePrep = map[string]bool{"a": true, "de": true, "vers": true, "sur": true, "in": true, "te": true, "uit": true, "at": true, "from": true}
+
 // findPlaces: localities of the list, and capitalized words after a residence cue.
 func findPlaces(s string) [][2]int {
 	var out [][2]int
 	ts := tokenize(s)
+	prepBefore := map[string]bool{} // ambiguous localities confirmed once in this text
+	for i := 1; i < len(ts); i++ {
+		if f := fold(ts[i].w); ambiguousPlace[f] && isCap(ts[i].w) && placePrep[fold(ts[i-1].w)] && gapOK(ts[i-1].w, s[ts[i-1].e:ts[i].s]) {
+			prepBefore[f] = true
+		}
+	}
 	for i := 0; i < len(ts); i++ {
 		// multi-word localities ("Montignies-sur-Sambre" is one token; "La Louvière" two)
 		for n := 3; n >= 1; n-- {
@@ -119,6 +130,9 @@ func findPlaces(s string) [][2]int {
 			}
 			v := s[ts[i].s:ts[i+n-1].e]
 			if isCap(ts[i].w) && placeSet[fold(v)] && (n == 1 || gapOK(ts[i].w, s[ts[i].e:ts[i+1].s])) {
+				if n == 1 && ambiguousPlace[fold(v)] && !prepBefore[fold(v)] {
+					continue
+				}
 				out = append(out, [2]int{ts[i].s, ts[i+n-1].e})
 				i += n - 1
 				break
@@ -132,8 +146,12 @@ func findPlaces(s string) [][2]int {
 			if k < 0 {
 				break
 			}
-			start := off + k + len(c) + 1
+			at := off + k
+			start := at + len(c) + 1
 			off = start
+			if r, _ := utf8.DecodeLastRuneInString(low[:at]); at > 0 && isWordRune(r) { // "Assine a Folha" holds "ne a"
+				continue
+			}
 			// map the folded offset back: fold keeps byte lengths for most accents only approximately,
 			// so re-tokenize the original text from the same rune position
 			pos := byteOffsetForFolded(s, start)
@@ -213,7 +231,19 @@ var ambiguousFirst = map[string]bool{"rose": true, "olive": true, "victoire": tr
 	"dee": true, "flo": true, "ike": true, "nan": true, "norm": true, "rod": true, "russ": true, "tad": true, "len": true,
 	"lee": true, "ken": true, "gene": true, "dean": true, "chase": true, "frank": true, "rich": true, "dawn": true, "faith": true,
 	// first names that are also technical words
-	"max": true, "neo": true, "ruby": true, "rust": true, "kai": true, "ada": true, "nova": true, "echo": true}
+	"max": true, "neo": true, "ruby": true, "rust": true, "kai": true, "ada": true, "nova": true, "echo": true,
+	// first names that are also Portuguese words
+	"sem": true, "ela": true, "mae": true}
+
+// notFirstWord: mostly a function word ("Les Brésiliens", "Sem Luz"): does not start a full name either.
+var notFirstWord = map[string]bool{"les": true, "sem": true, "ela": true}
+
+// dateNext: the word stands next to a number ("Jan 14", "3 Jan"): a month, not a first name.
+func dateNext(s string, t tok) bool {
+	after := strings.TrimLeft(s[t.e:], " ")
+	before := strings.TrimRight(s[:t.s], " ")
+	return after != "" && isDigitByte(after[0]) || before != "" && isDigitByte(before[len(before)-1])
+}
 
 // findFirstnameAlone: a known first name on its own ("Luc a rappelé"), unless it is also an ordinary word.
 func findFirstnameAlone(s string) [][2]int {
@@ -222,6 +252,9 @@ func findFirstnameAlone(s string) [][2]int {
 		f := fold(t.w)
 		// dictionary words of 4+ letters (Will, Mark, Hope…) are left alone; short names (Tom, Max, Jan) are kept
 		if isCap(t.w) && !isAllCaps(t.w) && firstnames[f] && !ambiguousFirst[f] && !defaultAllow[f] && !(commonWord(t.w) && utf8.RuneCountInString(f) >= 4) {
+			if monthWord[f] && dateNext(s, t) {
+				continue
+			}
 			out = append(out, [2]int{t.s, t.e})
 		}
 	}

@@ -19,7 +19,7 @@ var refKeywords = map[string]bool{"dossier": true, "patient": true, "patiente": 
 
 // looksLikeRef: 5+ digits, or 3+ digits in a structured form (AB-123, 2025/77).
 func looksLikeRef(t string) bool {
-	if !reIdent.MatchString(t) || isDate(t) {
+	if !reIdent.MatchString(t) || isDate(t) || reNumList.MatchString(t) {
 		return false
 	}
 	d := digits(t)
@@ -38,6 +38,7 @@ func inCode(s string, a, b int) bool {
 var (
 	reWordTok = regexp.MustCompile(`[^\s,;:()\[\]{}"«»]+`)
 	reIdent   = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9\-/._]*[A-Za-z0-9]$`)
+	reNumList = regexp.MustCompile(`^\d{1,3}(?:/\d{1,3}){2,}$`) // scores or a list ("96/63/90/94"), not "2025/77"
 )
 
 func digits(s string) int {

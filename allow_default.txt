@@ -81,3 +81,7 @@ CSV
 README
 TODO
 FAQ
+# Mots qui ne désignent pas une personne (repérés dans les logs de Debug)
+Starlink
+Mini
+Rio

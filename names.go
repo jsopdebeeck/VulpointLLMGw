@@ -97,7 +97,7 @@ var firstnames = func() map[string]bool {
 
 var (
 	// titles are matched with one typo allowed when they have 5+ letters (Moniseur, Madmae, Doctuer…)
-	titles = []string{"monsieur", "madame", "mademoiselle", "docteur", "maitre", "professeur", "messieurs", "mesdames",
+	titles = []string{"monsieur", "madame", "madam", "mademoiselle", "docteur", "maitre", "professeur", "messieurs", "mesdames",
 		"mister", "missis", "doctor", "professor", "mevrouw", "meneer", "juffrouw", "dokter", "herr", "frau"}
 	shortTitles = map[string]bool{"m": true, "mr": true, "mrs": true, "ms": true, "mme": true, "mmes": true, "mlle": true,
 		"dr": true, "pr": true, "prof": true, "me": true, "dhr": true, "mevr": true, "sr": true, "sra": true}
@@ -185,7 +185,21 @@ func emailAt(s string, i int) bool {
 func trimTok(s string, a, b int) tok {
 	w := strings.Trim(s[a:b], "-'’")
 	a += strings.Index(s[a:b], w)
+	for _, p := range []string{"'s", "’s", "'S", "’S"} { // possessive: "Dupont's" is Dupont
+		w = strings.TrimSuffix(w, p)
+	}
 	return tok{a, a + len(w), w}
+}
+
+// isContraction: "I'd", "We'll", "They've", "Don't": never part of a name.
+func isContraction(w string) bool {
+	f := strings.ReplaceAll(strings.ToLower(w), "’", "'")
+	for _, suf := range []string{"'d", "'ll", "'ve", "'re", "'m", "n't"} {
+		if strings.HasSuffix(f, suf) {
+			return true
+		}
+	}
+	return false
 }
 
 func isCap(w string) bool { r, _ := utf8.DecodeRuneInString(w); return unicode.IsUpper(r) }
@@ -261,7 +275,7 @@ func isTitle(w string) bool {
 		if d := n - len(t); d < -1 || d > 1 { // titles are ASCII: len is their letter count
 			continue
 		}
-		if f == t || editWithin1(f, t) {
+		if f == t || editWithin1(f, t) && !commonWord(w) { // "Master" is a word, not a typo of Mister
 			// lowercase is only a title for forms of address ("bonjour monsieur Keizer");
 			// "maître", "docteur", "professeur" are also ordinary nouns ("le fichier maître Portugal")
 			return isCap(w) || addressForms[t]
@@ -270,7 +284,7 @@ func isTitle(w string) bool {
 	return false
 }
 
-var addressForms = map[string]bool{"monsieur": true, "madame": true, "mademoiselle": true, "messieurs": true, "mesdames": true,
+var addressForms = map[string]bool{"monsieur": true, "madame": true, "madam": true, "mademoiselle": true, "messieurs": true, "mesdames": true,
 	"mevrouw": true, "meneer": true, "juffrouw": true}
 
 // nameAfter returns the end of the name that starts at token i (1 to 3 capitalized
@@ -288,7 +302,7 @@ func nameAfterMode(s string, ts []tok, i int, strict bool) (int, int) {
 		}
 		w := ts[j].w
 		al := defaultAllow[fold(w)]
-		if isCap(w) && utf8.RuneCountInString(w) >= 2 && !notNames[fold(w)] && !isTitle(w) && !(al && (strict || real)) && !(strict && commonWord(w)) {
+		if isCap(w) && utf8.RuneCountInString(w) >= 2 && !notNames[fold(w)] && !isContraction(w) && !isTitle(w) && !(al && (strict || real)) && !(strict && commonWord(w)) {
 			last, n, real = j, n+1, real || !al
 			continue
 		}
@@ -318,10 +332,24 @@ func findTitled(s string) [][2]int {
 		if !gapOK(ts[i].w, s[ts[i].e:ts[i+1].s]) {
 			continue
 		}
+		if r, _ := utf8.DecodeLastRuneInString(s[:ts[i].s]); ts[i].s > 0 && isWordRune(r) { // "205M. So": a unit, not "M."
+			continue
+		}
+		next := ts[i+1].w
+		if shortTitles[f] && isAllCaps(ts[i].w) && !isAllCaps(next) && !particles[fold(next)] { // "PR Newswire", but "MME DUPONT"
+			continue
+		}
+		if !isTitle(ts[i].w) && (next == "du" || next == "des" || next == "le" || next == "la") { // "candidat du Parti": a noun phrase, but "patient de Smet"
+			continue
+		}
 		// "Me" (Maître) and "called" are ordinary words too: the name after them must not be
 		// made of ordinary words ("Follow Me Camera Drone", "it is called GROOVE OS")
 		strict := f == "me" || f == "called" || f == "named"
 		if last, _ := nameAfterMode(s, ts, i+1, strict); last >= 0 && !(strict && ordinaryName(ts[i+1:last+1])) {
+			if e := ts[last].e; e+1 < len(s) && s[e] == '-' && isDigitByte(s[e+1]) { // "candidat FM-1": a model number
+				i = last
+				continue
+			}
 			out = append(out, [2]int{ts[i+1].s, ts[last].e})
 			i = last
 		}
@@ -366,10 +394,10 @@ func findFirstnames(s string) [][2]int {
 	ts := tokenize(s)
 	var out [][2]int
 	isFirst := func(w string) bool {
-		if !isCap(w) || defaultAllow[fold(w)] {
+		f := fold(w)
+		if !isCap(w) || defaultAllow[f] || notFirstWord[f] {
 			return false
 		}
-		f := fold(w)
 		if firstnames[f] {
 			return true
 		}

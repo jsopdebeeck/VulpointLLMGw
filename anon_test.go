@@ -993,3 +993,101 @@ func TestHermesDebugCases(t *testing.T) {
 		}
 	}
 }
+
+// Cases found in the debug archive; the values are synthetic.
+func TestDebugFalsePositives(t *testing.T) {
+	cfg := anonConfig(t)
+	std := cfg.Profiles["standard"]
+	for _, in := range []string{
+		"total loose = 205M. Contradiction here. And 130M. So pack is small. Then 4K = 207M. That's the disk usage.",
+		"the Sega Master System sound chips",
+		"Complete Response Letter. PR Newswire. August 9, 2024.",
+		"environnement mesuré, projet candidat FM-1 retenu",
+		"Le candidat du Parti libéral arrive en tête.",
+		"I already told him I'd report. And he said I'd wait.",
+		"Les Décodeurs et Les Brésiliens ont voté. Sem perder tempo. Ela se completa.",
+		"9 months ago: Jan 14, 2026 and 3 Jan 2019",
+		"Assine a Folha agora.",
+		"Forest, psytrance and hitech groovebox",
+		"![](https://example.org/uploads/Asset-46@2x.png)",
+		"Stress 2020;4:2470547020939564. doi: 10.1177/2470547020939564.",
+		"Library [2026-07-07 18.01.22].musiclibrary and doi: 10.1038/s41591-021-01336-3",
+		"(référence pré-update : 96/63/90/94)",
+		"Depois de receber o Kit Starlink e o Kit Mini.",
+	} {
+		s := NewSession(cfg, std)
+		out := s.AnonymizeText(in)
+		if out != in {
+			t.Errorf("faux positif :\n in  %q\n out %q", in, out)
+		}
+	}
+}
+
+func TestDebugStillDetected(t *testing.T) {
+	cfg := anonConfig(t)
+	std := cfg.Profiles["standard"]
+	for in, secret := range map[string]string{
+		"M. Dupont a appelé.":                 "Dupont",
+		"Madam Peeters called.":               "Peeters",
+		"Moniseur Keizer a appelé.":           "Keizer",
+		"MME DUPONT est absente.":             "DUPONT",
+		"Le patient de Smet est sorti.":       "Smet",
+		"Madame de Smet est sortie.":          "Smet",
+		"Le rapport de Gérald Keizer's team.": "Keizer",
+		"Jan Peeters arrive.":                 "Peeters",
+		"Luc a rappelé.":                      "Luc",
+		"Il habite à Forest.":                 "Forest",
+		"Écrire à jean.dupont@example.org":    "jean.dupont@example.org",
+		"Carte 4111 1111 1111 1111 expirée":   "4111 1111 1111 1111",
+		"Appeler le 0470 12 34 56 demain":     "0470 12 34 56",
+		"Dossier patient AB-1234 clos":        "AB-1234",
+	} {
+		s := NewSession(cfg, std)
+		if out := s.AnonymizeText(in); strings.Contains(out, secret) {
+			t.Errorf("non détecté : %q → %q", in, out)
+		}
+	}
+}
+
+// A possessive is not part of the name: same token with and without it.
+func TestPossessiveSameToken(t *testing.T) {
+	cfg := anonConfig(t)
+	s := NewSession(cfg, cfg.Profiles["standard"])
+	out := s.AnonymizeText("Gérald Keizer's team. Gérald Keizer est là.")
+	if !strings.Contains(out, "»'s team") || strings.Count(out, "«PERSON_1»") != 2 {
+		t.Errorf("possessif : %q", out)
+	}
+}
+
+// A company of a configured list keeps its kind and is not fed to the memory of person names.
+func TestListKindBeatsLearned(t *testing.T) {
+	st, _ := OpenStore(filepath.Join(t.TempDir(), "m.db"))
+	learner, _ = NewLearner(st.db)
+	defer func() { learner = nil }()
+	learner.Learn([]string{"Acmeroad"})
+	for i := 0; !learner.Match("Acmeroad"); i++ {
+		if i > 200 {
+			t.Fatal("mémoire non alimentée")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	cfg := anonConfig(t)
+	for _, c := range []*DetectorCfg{{Name: "COMPANY", Words: []string{"Acmeroad", "Zorglub"}}} {
+		d, err := buildDetector(c, "", 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		d.prio = len(cfg.dets)
+		cfg.dets = append(cfg.dets, d)
+	}
+	s := NewSession(cfg, cfg.Profiles["standard"])
+	body := map[string]any{"messages": []any{map[string]any{"role": "user", "content": "Acmeroad et Zorglub signent."}}}
+	s.Process(body, "openai")
+	out := lastMessage(body)["content"].(string)
+	if strings.Contains(out, "PERSON") || strings.Count(out, "«COMPANY_") != 2 {
+		t.Errorf("type : %q", out)
+	}
+	if len(s.toLearn) != 0 {
+		t.Errorf("appris : %v", s.toLearn)
+	}
+}

@@ -2,6 +2,17 @@
 
 Le numéro suit le schéma `majeur.mineur.correctif`. La version en cours s'affiche en bas du menu du dashboard, dans l'en-tête de connexion du chat, sur `GET /version` et avec `./llmgw -version`.
 
+## 1.5.7 (1er novembre 2026)
+
+Corrections tirées de l'analyse d'une archive Debug réelle. Aucun réglage à changer.
+
+### Moins de faux positifs
+- Noms : un « M. » collé à un chiffre (« 205M. So ») n'est plus un titre, un mot du dictionnaire n'est plus lu comme une faute de frappe (« Master System »), un titre abrégé en capitales demande un nom en capitales (« PR Newswire »), et les contractions et possessifs (« I'd », « Dupont's ») ne font plus partie du nom. C'était la source de remplacements en cascade dans la conversation.
+- Prénoms : « Les », « Sem » et « Ela » ne commencent plus un nom complet, « Jan » suivi ou précédé d'un nombre est un mois, Starlink, Mini et Rio rejoignent les termes jamais anonymisés.
+- Lieux : un indice de résidence doit être un mot entier (« Assine a Folha » contenait « ne a »), et « Forest » demande une préposition dans le texte (« à Forest »).
+- Numéros : un DOI, une référence bibliographique ou un horodatage ne sont plus pris pour une carte ou un téléphone, une liste comme « 96/63/90/94 » n'est plus une référence, et un nom d'image (« Asset@2x.png ») n'est plus une adresse e-mail.
+- Type des listes : un terme d'une liste configurée garde son type même s'il figure dans la mémoire des noms, et seuls les noms de personnes alimentent cette mémoire. Une entreprise ne reçoit plus deux jetons selon sa casse. Les entrées déjà mémorisées restent, mais la liste passe devant.
+
 ## 1.5.6 (1er novembre 2026)
 
 ### Corrections
