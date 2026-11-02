@@ -1091,3 +1091,91 @@ func TestListKindBeatsLearned(t *testing.T) {
 		t.Errorf("appris : %v", s.toLearn)
 	}
 }
+
+// Cases of the Debug archive of 2 November 2026; the values are synthetic.
+func TestDebugReview159(t *testing.T) {
+	cfg := anonConfig(t)
+	std := cfg.Profiles["standard"]
+	for _, in := range []string{
+		"Manuel INCRA, puis le portail INCRA.",
+		"Manuel de sécurité, chapitre 2",
+		"Kit ROUGE puis le Kit Mini est prêt.",
+		"> Méthode : mesure du fichier",
+		"MÉTHODE TEST. Méthode : mesure simple.",
+		"Les autres Bots répondent vite.",
+		"Mae Terra protege",
+		"Vol vers São Paulo puis San Diego et Saint Pierre.",
+		"Dossier mis à jour le 11/10 et le 08/10.",
+		"Le dossier (v1.22) est à jour.",
+		"client : lignes 46-50",
+		"Dossier empreinte c41f09ab27d3e815 vérifiée",
+		"commande ad6f0b4 archivée",
+		"Note consignée ci-dessous.\n**Créé** : 03/03/2026",
+		"voir le chemin ligne 36 du fichier",
+		"repointe le chemin page 12",
+		"**Clos le 20** : sujet fermé",
+		"Né le 02/01/2199 selon une erreur de saisie",
+	} {
+		s := NewSession(cfg, std)
+		if out := s.AnonymizeText(in); out != in {
+			t.Errorf("faux positif :\n in  %q\n out %q", in, out)
+		}
+	}
+	for in, secret := range map[string]string{
+		"Paulo Mendes a signé le dossier.":              "Mendes",
+		"João a rappelé.":                               "João",
+		"Site de Marc, Zaliya, Sophie et Hugo à 700 m.": "Zaliya",
+		"Marc, Sophie et Zaliya, puis Hugo.":            "Zaliya",
+		"Manuel Dupont a appelé.":                       "Dupont",
+		"Manuel a rappelé.":                             "Manuel",
+		"Madame Kit Durand est sortie.":                 "Durand",
+		"Dossier patient AB-1234 clos":                  "AB-1234",
+		"Dossier 676888-67":                             "676888-67",
+		"Dossier 2025/77":                               "2025/77",
+		"Patient abc1234":                               "abc1234",
+		"Née le 19/10/2020 à Namur":                     "19/10/2020",
+		"Date de naissance : 30/12/2006":                "30/12/2006",
+		"Rue Haute 12, Bruxelles":                       "Rue Haute 12",
+		"Chemin du Moulin 36":                           "Chemin du Moulin 36",
+		"Clos des Lilas 20":                             "Clos des Lilas 20",
+	} {
+		s := NewSession(cfg, std)
+		if out := s.AnonymizeText(in); strings.Contains(out, secret) {
+			t.Errorf("non détecté : %q → %q", in, out)
+		}
+	}
+}
+
+// The example configuration has no IP detector.
+func TestFindIPv4Versions(t *testing.T) {
+	for in, want := range map[string]int{
+		"LibreOffice 25.2.4.3 installé":           0,
+		"kMDItemVersion = \"25.2.4.3\"":           0,
+		"as up to 1.0.5.2 (`firmware/src/usb.c`)": 0,
+		"Chrome 120.0.6099.109":                   0,
+		"Serveur 88.1.2.3 joignable":              1,
+		"Connexion depuis 88.1.2.3":               1,
+		"Hetzner 88.1.2.3":                        1,
+		"Build 192.168.1.20 en panne":             1,
+		"LibreOffice 10.1.2.3":                    1,
+		"version 2\nhôte 88.1.2.3":                1,
+	} {
+		if got := len(findIPv4(in)); got != want {
+			t.Errorf("%q : %d adresse(s), attendu %d", in, got, want)
+		}
+	}
+}
+
+// A full name on the allow list keeps its first name too, and only there.
+func TestAllowedNameShieldsItsWords(t *testing.T) {
+	cfg := anonConfig(t)
+	cfg.allow = map[string]bool{"paul testeur": true}
+	s := NewSession(cfg, cfg.Profiles["standard"])
+	in := "Selon Paul Testeur, la méthode tient."
+	if out := s.AnonymizeText(in); out != in {
+		t.Errorf("%q → %q", in, out)
+	}
+	if out := NewSession(cfg, cfg.Profiles["standard"]).AnonymizeText("Paul a rappelé."); strings.Contains(out, "Paul") {
+		t.Errorf("prénom seul non détecté : %q", out)
+	}
+}

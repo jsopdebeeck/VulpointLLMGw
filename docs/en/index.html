@@ -150,7 +150,7 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
 
 <div class="page">
   <nav class="toc" aria-label="Contents">
-    <a class="toc-brand" href="https://vulpoint.com" target="_blank" rel="noopener"><img src="../img/vulpoint-logo.jpg" alt="Vulpoint"><div><b>LLMGW</b><small>by Vulpoint.com · v1.5.7</small></div></a>
+    <a class="toc-brand" href="https://vulpoint.com" target="_blank" rel="noopener"><img src="../img/vulpoint-logo.jpg" alt="Vulpoint"><div><b>LLMGW</b><small>by Vulpoint.com · v1.5.9</small></div></a>
     <ol>
       <li><a href="../index.html" hreflang="fr" lang="fr"><span>FR</span>Version française</a></li>
     </ol>
@@ -214,7 +214,7 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
       <div class="eyebrow">Functional, technical and administration documentation</div>
       <h1>LLMGW, the organisation's AI gateway</h1>
       <p class="lede">A single connection point between users, agents and language models. It enforces the AI policy: who may use which model, which data may leave, and with what traceability.</p>
-      <div class="meta"><span><b>Version</b> 1.5.7 (1 November 2026)</span><span><b>Component</b> llmgw (single Go binary, macOS and Linux)</span><span><b>API formats</b> OpenAI and Anthropic</span><span><b>Interface</b> English, French, Dutch</span></div>
+      <div class="meta"><span><b>Version</b> 1.5.9 (2 November 2026)</span><span><b>Component</b> llmgw (single Go binary, macOS and Linux)</span><span><b>API formats</b> OpenAI and Anthropic</span><span><b>Interface</b> English, French, Dutch</span></div>
       <a class="crosslink" href="chat.html">Chat user guide ↗</a>
     </header>
 
@@ -714,12 +714,12 @@ files_default = "pass_log"                         <span class="c"># other exten
       <h3>Manual start</h3>
 <pre>export MISTRAL_API_KEY=… ANTHROPIC_API_KEY=…
 ./llmgw -config config.toml
-<span class="c"># LLMGW 1.5.7 listening on http://127.0.0.1:8088 (dashboard: /dashboard, documentation: /docs)</span></pre>
+<span class="c"># LLMGW 1.5.9 listening on http://127.0.0.1:8088 (dashboard: /dashboard, documentation: /docs)</span></pre>
       <p>One instance per port. Stop with Ctrl+C: pending metrics are saved before exiting.</p>
 
       <h3>macOS menu bar app</h3>
       <p><code>macapp/build.sh</code> builds a <strong>self-contained LLMGW.app</strong> in <code>dist/</code>, and <code>dist/LLMGW-&lt;version&gt;.dmg</code> to install it by drag and drop into Applications; <code>macapp/build.sh --install</code> installs it directly in Applications (and restarts the app if it was running). Go and the Xcode Command Line Tools are only needed for the build: the app embeds the gateway (universal binary for Apple Silicon and Intel, no dependency outside macOS) and needs nothing else to run.</p>
-      <p>The data lives in <code>~/Library/Application Support/LLMGW</code>: <code>config.toml</code>, <code>secrets.env</code>, the database and the log. At first launch, the app creates a starter configuration there, with a <strong>random admin token</strong>, and a <code>secrets.env</code> template (permissions 600). An existing installation (a folder that already contains <code>config.toml</code>) is taken over as is through « Data folder… ».</p>
+      <p>The data lives in <code>~/Library/Application Support/LLMGW</code>: <code>config.toml</code>, <code>secrets.env</code>, the database and the log. At first launch, the app creates a starter configuration there, with a <strong>random admin token</strong>, and a <code>secrets.env</code> template (permissions 600). An existing installation (a folder that already contains <code>config.toml</code>) is taken over as is through « Data folder… ». The app follows this folder when it is renamed or moved; when it cannot be found, its menu says so and it retries, without creating an empty configuration.</p>
       <p>Double-clicking the app shows an icon in the menu bar:</p>
       <ul>
         <li>a <strong>status dot</strong>: green when running, orange while starting, red when stopped, grey if the gateway folder cannot be found;</li>
@@ -1030,6 +1030,16 @@ default_profile = "anonymisation"</pre>
       <h2><span class="n">39</span>Release notes</h2>
       <p>The current version is shown at the bottom of the dashboard menu, on the chat sign-in screen, on <code>GET /version</code> and with <code>./llmgw -version</code>. The full log is kept in <code>RELEASE_NOTES.md</code>, at the root of the repository.</p>
       <div class="rel">
+        <h3>1.5.9, 2 November 2026</h3>
+        <ul>
+          <li>Names: Portuguese and Brazilian first names added, an unknown word between first names in a list is treated as a name, and Iberian surnames (Mendes, Gomes…) are no longer read as English plurals.</li>
+          <li>Fewer false positives: the word after São, San or Saint is no longer a first name, "Kit" and "Mae" no longer start a name, "Manuel de…" means a handbook, and Bots, Méthode, Cercle and INCRA join the never-anonymized terms.</li>
+          <li>Numbers: a version is no longer an IP address or a reference, a day and month, a range or a hexadecimal checksum are no longer references, a future date is no longer a date of birth, and "Clos le 20" or "chemin ligne 36" are no longer addresses.</li>
+        </ul>
+        <h3>1.5.8, 2 November 2026</h3>
+        <ul>
+          <li>The macOS app follows its data folder when it is renamed or moved. When the folder cannot be found (for example a cloud drive not mounted yet at login), it says so and retries, without starting over on an empty configuration.</li>
+        </ul>
         <h3>1.5.7, 1 November 2026</h3>
         <ul>
           <li>Names: an "M." attached to a number ("205M. So") is no longer a title, a dictionary word is no longer read as a typo ("Master System"), an all-caps short title needs an all-caps name ("PR Newswire"), and contractions and possessives ("I'd", "Dupont's") are no longer part of the name. These were a source of cascading replacements across the conversation.</li>
@@ -1125,7 +1135,7 @@ default_profile = "anonymisation"</pre>
       </div>
     </section>
 
-    <footer class="doc"><img src="../img/vulpoint-logo.jpg" alt=""><span>LLMGW 1.5.7 by <a href="https://vulpoint.com" target="_blank" rel="noopener">Vulpoint.com</a></span></footer>
+    <footer class="doc"><img src="../img/vulpoint-logo.jpg" alt=""><span>LLMGW 1.5.9 by <a href="https://vulpoint.com" target="_blank" rel="noopener">Vulpoint.com</a></span></footer>
   </main>
 </div>
 </body>

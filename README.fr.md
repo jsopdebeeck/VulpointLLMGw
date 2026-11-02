@@ -2,7 +2,7 @@
 
 [English version](README.md)
 
-Version **1.5.7** · [licence Apache 2.0](LICENSE) · [exemples](examples/) (en anglais) · notes de version dans [RELEASE_NOTES.md](RELEASE_NOTES.md) · documentation intégrée sur `/docs/` (administration) et `/docs/chat.html` (guide utilisateur du chat), en anglais sur `/docs/en/`, sources dans [docs/](docs/).
+Version **1.5.9** · [licence Apache 2.0](LICENSE) · [exemples](examples/) (en anglais) · notes de version dans [RELEASE_NOTES.md](RELEASE_NOTES.md) · documentation intégrée sur `/docs/` (administration) et `/docs/chat.html` (guide utilisateur du chat), en anglais sur `/docs/en/`, sources dans [docs/](docs/).
 
 <p align="center"><img src="docs/img/architecture-fr.svg" alt="Architecture de LLMGW : utilisateurs, agents et applications de la zone de confiance ne joignent les LLM que par la passerelle, en bordure de zone ; les accès directs vers Internet sont bloqués" width="100%"></p>
 

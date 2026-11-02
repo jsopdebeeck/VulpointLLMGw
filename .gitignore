@@ -1,4 +1,4 @@
-llmgw
+/llmgw
 dist/
 *.db
 *.db-*

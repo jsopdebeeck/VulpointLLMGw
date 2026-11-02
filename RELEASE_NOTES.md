@@ -2,6 +2,27 @@
 
 Le numéro suit le schéma `majeur.mineur.correctif`. La version en cours s'affiche en bas du menu du dashboard, dans l'en-tête de connexion du chat, sur `GET /version` et avec `./llmgw -version`.
 
+## 1.5.9 (2 novembre 2026)
+
+Corrections tirées de la revue d'une archive Debug. Aucun réglage à changer.
+
+### Moins de noms manqués
+- Prénoms portugais et brésiliens ajoutés au dictionnaire. Un mot inconnu placé entre des prénoms d'une liste (« Marc, Zaliya, Sophie et Hugo ») est traité comme un nom.
+- Noms de famille ibériques (Mendes, Gomes, Lopes…) : ils ne sont plus lus comme des pluriels anglais.
+
+### Moins de faux positifs
+- Lieux : le mot qui suit São, Santa, San ou Saint n'est plus un prénom (« São Paulo »).
+- Noms : « Kit » et « Mae » ne commencent plus un nom complet, « Manuel de… » et « Manuel INCRA » désignent un manuel, et Bots, Méthode, Cercle et INCRA rejoignent les termes jamais anonymisés.
+- Adresses IP : un numéro lu comme une version (« LibreOffice 26.8.1.1 », « firmware 1.0.5.2 ») n'est plus une adresse. Une adresse privée reste toujours détectée.
+- Références : une version (v1.22), un jour et un mois (11/10), une plage (46-50) ou une empreinte hexadécimale ne sont plus des références.
+- Dates de naissance : la fenêtre de contexte coupait les mots (« consignée » se lisait « née »), et une date à venir n'est plus une date de naissance.
+- Adresses : « Clos le 20 » et « chemin ligne 36 » ne sont plus des adresses.
+
+## 1.5.8 (2 novembre 2026)
+
+### Correction
+- **L'app macOS suit son dossier de données.** Si le dossier était renommé ou déplacé, l'app repartait sans prévenir sur une configuration vide dans Application Support, avec une nouvelle base. Elle retrouve maintenant le dossier par un signet macOS, y compris pendant qu'elle tourne. Si le dossier reste introuvable (disque en ligne pas encore monté à l'ouverture de session, par exemple), elle le signale dans son menu et réessaie, sans rien créer. Application Support ne sert plus qu'au tout premier lancement.
+
 ## 1.5.7 (1er novembre 2026)
 
 Corrections tirées de l'analyse d'une archive Debug réelle. Aucun réglage à changer.

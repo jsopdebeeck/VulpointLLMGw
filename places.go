@@ -78,10 +78,27 @@ func notAddressEnd(s string, e int) bool {
 	return (c == '/' || c == ':' || c == '.' || c == ',') && isDigitByte(d) || c == '.' && isWordRune(rune(d))
 }
 
+// notStreetWord: lowercase words that follow "chemin", "route" or "place" in technical text
+// ("chemin ligne 36").
+var notStreetWord = map[string]bool{"ligne": true, "line": true, "page": true, "etape": true, "section": true, "version": true,
+	"option": true, "numero": true, "partie": true, "point": true, "colonne": true, "item": true, "tableau": true, "chapitre": true,
+	"annexe": true, "article": true, "paragraphe": true}
+
+// noStreetName: the only word between the street type and the number is a particle or a
+// technical word ("Clos le 20", "chemin ligne 36").
+func noStreetName(v string) bool {
+	f := strings.Fields(v)
+	if len(f) != 3 || isCap(f[1]) {
+		return false
+	}
+	w := fold(f[1])
+	return particles[w] || notStreetWord[w]
+}
+
 func findAddresses(s string) [][2]int {
 	var out [][2]int
 	for _, m := range append(streetList.find(s), reStreetNL.FindAllStringIndex(s, -1)...) {
-		if m[0] > 0 && s[m[0]-1] == '-' || notAddressEnd(s, m[1]) { // "Trop-plein à 2", "Clos le 20/10"
+		if m[0] > 0 && s[m[0]-1] == '-' || notAddressEnd(s, m[1]) || noStreetName(s[m[0]:m[1]]) { // "Trop-plein à 2", "Clos le 20/10"
 			continue
 		}
 		out = append(out, [2]int{m[0], m[1]})
@@ -236,7 +253,41 @@ var ambiguousFirst = map[string]bool{"rose": true, "olive": true, "victoire": tr
 	"sem": true, "ela": true, "mae": true}
 
 // notFirstWord: mostly a function word ("Les Brésiliens", "Sem Luz"): does not start a full name either.
-var notFirstWord = map[string]bool{"les": true, "sem": true, "ela": true}
+var notFirstWord = map[string]bool{"les": true, "sem": true, "ela": true, "kit": true, "mae": true}
+
+// toponymPrefix: the next word belongs to a place ("São Paulo", "San Diego", "Saint Pierre").
+var toponymPrefix = map[string]bool{"sao": true, "santa": true, "santo": true, "san": true, "saint": true, "sainte": true, "sint": true}
+
+func afterToponym(s string, ts []tok, i int) bool {
+	return i > 0 && toponymPrefix[fold(ts[i-1].w)] && isCap(ts[i-1].w) && gapOK(ts[i-1].w, s[ts[i-1].e:ts[i].s])
+}
+
+// handbook: "Manuel de sécurité", "Manuel INCRA": the French word, not the first name.
+func handbook(s string, ts []tok, i int) bool {
+	if fold(ts[i].w) != "manuel" || i+1 >= len(ts) || !gapOK(ts[i].w, s[ts[i].e:ts[i+1].s]) {
+		return false
+	}
+	return particles[fold(ts[i+1].w)] || isAllCaps(ts[i+1].w)
+}
+
+var listConj = map[string]bool{"et": true, "e": true, "and": true, "en": true, "ou": true}
+
+// listedName: an unknown capitalized word between two first names ("Marc, Zaliya, Sophie et Hugo").
+func listedName(s string, ts []tok, i int) bool {
+	w := ts[i].w
+	f := fold(w)
+	if !isCap(w) || isAllCaps(w) || utf8.RuneCountInString(w) < 3 || firstnames[f] || particles[f] || commonWord(w) || notPersonWord[f] {
+		return false
+	}
+	known := func(j int) bool { return j >= 0 && j < len(ts) && isCap(ts[j].w) && firstnames[fold(ts[j].w)] }
+	comma := func(j int) bool { return strings.TrimSpace(s[ts[j].e:ts[j+1].s]) == "," }
+	conj := func(j int) bool { return j >= 0 && j < len(ts) && listConj[fold(ts[j].w)] }
+	left := i >= 1 && known(i-1) && comma(i-1) || i >= 2 && conj(i-1) && known(i-2)
+	right := i+1 < len(ts) && known(i+1) && comma(i) || i+2 < len(ts) && conj(i+1) && known(i+2)
+	// the last of a list ("Marc, Sophie et Zaliya"): two names before it, not one ("Marc et Facture")
+	last := i >= 3 && conj(i-1) && known(i-2) && known(i-3) && comma(i-3)
+	return left && right || last
+}
 
 // dateNext: the word stands next to a number ("Jan 14", "3 Jan"): a month, not a first name.
 func dateNext(s string, t tok) bool {
@@ -248,13 +299,16 @@ func dateNext(s string, t tok) bool {
 // findFirstnameAlone: a known first name on its own ("Luc a rappelé"), unless it is also an ordinary word.
 func findFirstnameAlone(s string) [][2]int {
 	var out [][2]int
-	for _, t := range tokenize(s) {
+	ts := tokenize(s)
+	for i, t := range ts {
 		f := fold(t.w)
 		// dictionary words of 4+ letters (Will, Mark, Hope…) are left alone; short names (Tom, Max, Jan) are kept
 		if isCap(t.w) && !isAllCaps(t.w) && firstnames[f] && !ambiguousFirst[f] && !defaultAllow[f] && !(commonWord(t.w) && utf8.RuneCountInString(f) >= 4) {
-			if monthWord[f] && dateNext(s, t) {
+			if monthWord[f] && dateNext(s, t) || afterToponym(s, ts, i) || handbook(s, ts, i) {
 				continue
 			}
+			out = append(out, [2]int{t.s, t.e})
+		} else if listedName(s, ts, i) {
 			out = append(out, [2]int{t.s, t.e})
 		}
 	}

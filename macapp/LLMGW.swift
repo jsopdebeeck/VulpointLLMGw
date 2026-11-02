@@ -35,6 +35,7 @@ let strings: [String: [String: String]] = [
     "quit": ["en": "Quit (stops the gateway)", "fr": "Quitter (arrête la passerelle)", "nl": "Stoppen (stopt de gateway)"],
     "pick": ["en": "Choose the folder that contains config.toml (or an empty folder to start a new configuration)", "fr": "Choisissez le dossier qui contient config.toml (ou un dossier vide pour une nouvelle configuration)", "nl": "Kies de map met config.toml (of een lege map voor een nieuwe configuratie)"],
     "loginerr": ["en": "The login item could not be changed: ", "fr": "Impossible de modifier l'ouverture à la session : ", "nl": "Het aanmeldonderdeel kon niet worden gewijzigd: "],
+    "lost": ["en": "Data folder not found (renamed, moved or not mounted yet). Choose it with Data folder…", "fr": "Dossier de données introuvable (renommé, déplacé ou pas encore monté). Choisissez-le avec Dossier de données…", "nl": "Gegevensmap niet gevonden (hernoemd, verplaatst of nog niet gekoppeld). Kies ze via Gegevensmap…"],
     "exited": ["en": "The gateway stopped. See the log for the reason.", "fr": "La passerelle s'est arrêtée. Le motif est dans le journal.", "nl": "De gateway is gestopt. Zie het logboek voor de reden."],
 ]
 
@@ -62,11 +63,12 @@ final class Gateway: ObservableObject {
         let sys = Locale.preferredLanguages.first?.prefix(2).lowercased() ?? "en"
         lang = saved ?? (["fr", "nl"].contains(sys) ? String(sys) : "en")
         folder = Gateway.findFolder()
+        if folder == nil { lastError = t("lost") }
         readConfig()
         timer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { _ in Task { @MainActor in await self.poll() } }
         Task {
             await poll()
-            if state == .stopped { start() }
+            if state == .stopped && folder != nil { start() }
         }
     }
 
@@ -88,20 +90,57 @@ final class Gateway: ObservableObject {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("LLMGW")
     }
 
-    // Data folder: the one chosen earlier, the app's own folder (repository), otherwise Application Support.
+    // Data folder: the one chosen earlier, followed if it was renamed or moved (bookmark), then the
+    // app's own folder (repository). Application Support on a first launch only: a folder that is gone
+    // or not mounted yet (cloud drive at login) never restarts on an empty configuration.
     static func findFolder() -> URL? {
         let fm = FileManager.default
+        let defaults = UserDefaults.standard
         let hasConfig = { (u: URL) in fm.fileExists(atPath: u.appendingPathComponent("config.toml").path) }
-        if let p = UserDefaults.standard.string(forKey: "folder"), hasConfig(URL(fileURLWithPath: p)) { return URL(fileURLWithPath: p) }
+        let saved = defaults.string(forKey: "folder")
+        if let p = saved, hasConfig(URL(fileURLWithPath: p)) {
+            let u = URL(fileURLWithPath: p)
+            remember(u)
+            return u
+        }
+        if let data = defaults.data(forKey: "folderBookmark") {
+            var stale = false
+            if let u = try? URL(resolvingBookmarkData: data, options: [.withoutUI, .withoutMounting], relativeTo: nil, bookmarkDataIsStale: &stale),
+               !u.path.contains("/.Trash/"), hasConfig(u) {
+                remember(u)
+                return u
+            }
+        }
         let beside = Bundle.main.bundleURL.deletingLastPathComponent()
         if hasConfig(beside) {
-            UserDefaults.standard.set(beside.path, forKey: "folder")
+            remember(beside)
             return beside
         }
+        if saved != nil { return nil }
         let d = appSupport
         guard initFolder(d) else { return nil }
-        UserDefaults.standard.set(d.path, forKey: "folder")
+        remember(d)
         return d
+    }
+
+    static func remember(_ u: URL) {
+        UserDefaults.standard.set(u.path, forKey: "folder")
+        if let b = try? u.bookmarkData() { UserDefaults.standard.set(b, forKey: "folderBookmark") }
+    }
+
+    // Follows the data folder if it moved; true when it has just been found again.
+    @discardableResult
+    func refreshFolder() -> Bool {
+        if let f = folder, FileManager.default.fileExists(atPath: f.appendingPathComponent("config.toml").path) { return false }
+        let wasLost = folder == nil
+        folder = Gateway.findFolder()
+        guard folder != nil else {
+            lastError = t("lost")
+            return false
+        }
+        readConfig()
+        if lastError == t("lost") { lastError = "" }
+        return wasLost
     }
 
     // First launch: a starting configuration with a random admin token, and a secrets.env template (600).
@@ -153,6 +192,7 @@ final class Gateway: ObservableObject {
     var ours: Bool { proc?.isRunning ?? false }
 
     func poll() async {
+        let found = refreshFolder()
         var ok = false
         if let u = URL(string: base + "/version") {
             var req = URLRequest(url: u)
@@ -164,9 +204,11 @@ final class Gateway: ObservableObject {
             }
         }
         state = ok ? (ours ? .running : .external) : (ours ? .starting : .stopped)
+        if found && state == .stopped { start() }
     }
 
     func start() {
+        refreshFolder()
         guard let f = folder else { chooseFolder(); return }
         guard state == .stopped else { return }
         guard let bin = binary else { lastError = t("nobin"); return }
@@ -259,8 +301,9 @@ final class Gateway: ObservableObject {
         NSApp.activate(ignoringOtherApps: true)
         guard panel.runModal() == .OK, let u = panel.url else { return }
         guard Gateway.initFolder(u) else { return }
-        UserDefaults.standard.set(u.path, forKey: "folder")
+        Gateway.remember(u)
         folder = u
+        if lastError == t("lost") { lastError = "" }
         readConfig()
         Task { await poll() }
     }

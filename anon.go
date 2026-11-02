@@ -68,7 +68,7 @@ var builtins = map[string]builtin{
 	"niss":             {re: `\b\d{2}[ ./-]?\d{2}[ ./-]?\d{2}[-./\s]?\d{3}[-.\s]?\d{2}\b`, valid: validNISS},
 	"inami":            {find: findINAMI},
 	"card":             {re: `\b(?:\d[ -]?){12,18}\d\b`, valid: validCard},
-	"ipv4":             {re: `\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b`},
+	"ipv4":             {find: findIPv4},
 	"person_title":     {find: findTitled, names: true},
 	"person_firstname": {find: findFirstnames, names: true},
 	"person_learned":   {find: func(s string) [][2]int { return learner.Find(s) }, names: true},
@@ -1160,9 +1160,23 @@ var severity = map[string]int{"block": 3, "anonymize": 2, "log": 1}
 func (s *Session) resolve(d *detected, all []span) []span {
 	tv := &d.tv
 	rank := map[string]int{}
+	var kept []span // allowed values: a word inside one is allowed too ("Dave" of "Dave Elman")
+	for _, sp := range all {
+		if sp.kind != "" && sp.e > sp.s && s.allowed(tv.s[sp.s:sp.e], sp.kind) {
+			kept = append(kept, sp)
+		}
+	}
+	inAllowed := func(sp span) bool {
+		for _, k := range kept {
+			if sp.s >= k.s && sp.e <= k.e && s.nameKinds[sp.kind] {
+				return true
+			}
+		}
+		return false
+	}
 	cand := all[:0]
 	for _, sp := range all {
-		if sp.kind == "" || sp.e <= sp.s || s.allowed(tv.s[sp.s:sp.e], sp.kind) {
+		if sp.kind == "" || sp.e <= sp.s || s.allowed(tv.s[sp.s:sp.e], sp.kind) || inAllowed(sp) {
 			continue
 		}
 		if d.json != nil { // encrypted blobs of a JSON document are never touched
@@ -1282,7 +1296,7 @@ func (s *Session) learnFrom(text string) string {
 		}
 		for _, t := range strings.FieldsFunc(v, func(r rune) bool { return unicode.IsSpace(r) || r == '-' }) {
 			t = strings.Trim(t, trimPunct)
-			if r, _ := utf8.DecodeRuneInString(t); utf8.RuneCountInString(t) >= 3 && unicode.IsUpper(r) && !particles[fold(t)] && !commonWord(t) {
+			if r, _ := utf8.DecodeRuneInString(t); utf8.RuneCountInString(t) >= 3 && unicode.IsUpper(r) && !particles[fold(t)] && !commonWord(t) && !toponymPrefix[fold(t)] {
 				lt := strings.ToLower(t)
 				if _, ok := s.learn[lt]; !ok {
 					s.learn[lt] = sp.kind

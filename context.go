@@ -4,11 +4,13 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
+	"unicode/utf8"
 )
 
-// Context detectors: identifiers introduced by a keyword ("Dossier patient 676888-67")
-// and dates (all of them, or birth dates only: "né le 30/12/2006").
+// Context detectors: identifiers introduced by a keyword ("Dossier patient 676888-67"),
+// dates (all of them, or birth dates only: "né le 30/12/2006") and IP addresses.
 
 // French/Dutch business keywords only: English "id", "no", "file", "case"… are everywhere in technical text.
 var refKeywords = map[string]bool{"dossier": true, "patient": true, "patiente": true, "client": true, "cliente": true,
@@ -19,7 +21,7 @@ var refKeywords = map[string]bool{"dossier": true, "patient": true, "patiente": 
 
 // looksLikeRef: 5+ digits, or 3+ digits in a structured form (AB-123, 2025/77).
 func looksLikeRef(t string) bool {
-	if !reIdent.MatchString(t) || isDate(t) || reNumList.MatchString(t) {
+	if !reIdent.MatchString(t) || isDate(t) || reNumList.MatchString(t) || notARef(t) {
 		return false
 	}
 	d := digits(t)
@@ -39,7 +41,44 @@ var (
 	reWordTok = regexp.MustCompile(`[^\s,;:()\[\]{}"«»]+`)
 	reIdent   = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9\-/._]*[A-Za-z0-9]$`)
 	reNumList = regexp.MustCompile(`^\d{1,3}(?:/\d{1,3}){2,}$`) // scores or a list ("96/63/90/94"), not "2025/77"
+	reVersion = regexp.MustCompile(`^[vV]\d+(?:\.\d+)+$`)       // "v1.22"
+	reDayMon  = regexp.MustCompile(`^(\d{1,2})/(\d{1,2})$`)     // "11/10", not "2025/77"
+	reSpan    = regexp.MustCompile(`^(\d{1,2})-(\d{1,2})$`)     // lines "46-50", not "676888-67"
+	reHexID   = regexp.MustCompile(`^[0-9a-f]{7,64}$`)
 )
+
+// notARef: a version, a day and month, a range, or a commit or checksum.
+func notARef(t string) bool {
+	if reVersion.MatchString(t) || hexDigest(t) {
+		return true
+	}
+	if m := reDayMon.FindStringSubmatch(t); m != nil {
+		d, _ := strconv.Atoi(m[1])
+		mo, _ := strconv.Atoi(m[2])
+		return d >= 1 && d <= 31 && mo >= 1 && mo <= 12
+	}
+	if m := reSpan.FindStringSubmatch(t); m != nil {
+		a, _ := strconv.Atoi(m[1])
+		b, _ := strconv.Atoi(m[2])
+		return a < b
+	}
+	return false
+}
+
+// hexDigest: lowercase hexadecimal where letters and digits alternate ("ad6f0b4"); a code such
+// as "abc1234" stays a reference.
+func hexDigest(t string) bool {
+	if !reHexID.MatchString(t) {
+		return false
+	}
+	n := 0
+	for i := 1; i < len(t); i++ {
+		if isDigitByte(t[i]) != isDigitByte(t[i-1]) {
+			n++
+		}
+	}
+	return n >= 3
+}
 
 func digits(s string) int {
 	n := 0
@@ -140,9 +179,104 @@ func birthCue(before string) bool {
 func findBirthdates(s string) [][2]int {
 	var out [][2]int
 	for _, m := range findDates(s) {
-		if birthCue(strings.ToValidUTF8(s[max(0, m[0]-30):m[0]], "")) {
+		if !afterToday(s[m[0]:m[1]]) && birthCue(s[wordStart(s, max(0, m[0]-30), m[0]-94):m[0]]) {
 			out = append(out, m)
 		}
 	}
 	return out
+}
+
+// wordStart moves a text window back to the start of the word it cuts: the end of "consignée"
+// reads as the cue "née". It stops at limit.
+func wordStart(s string, a, limit int) int {
+	for a > 0 && a > limit {
+		r, _ := utf8.DecodeLastRuneInString(s[:a])
+		if utf8.RuneStart(s[a]) && notAlnum(r) {
+			break
+		}
+		a--
+	}
+	return a
+}
+
+// afterToday: a date to come is not a date of birth.
+func afterToday(t string) bool {
+	m := reDate.FindStringSubmatch(t)
+	if m == nil {
+		return false
+	}
+	y, mo, d := m[3], m[2], m[1]
+	if m[4] != "" {
+		y, mo, d = m[4], m[5], m[6]
+	}
+	now := time.Now()
+	if y == "" { // written month: only the year is compared
+		yr, _ := strconv.Atoi(t[len(t)-4:])
+		return yr > now.Year()
+	}
+	if len(y) != 4 {
+		return false
+	}
+	yr, _ := strconv.Atoi(y)
+	mm, _ := strconv.Atoi(mo)
+	dd, _ := strconv.Atoi(d)
+	return time.Date(yr, time.Month(mm), dd, 0, 0, 0, 0, now.Location()).After(now)
+}
+
+var reIPv4 = regexp.MustCompile(`\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b`)
+
+var (
+	reLocalIP = regexp.MustCompile(`^(?:10\.|127\.|192\.168\.|169\.254\.|172\.(?:1[6-9]|2\d|3[01])\.)`)
+	// software shown with a four-part version; a provider's name ("Hetzner 88.1.2.3") is not listed
+	versionedSoftware = map[string]bool{"chrome": true, "chromium": true, "edge": true, "firefox": true, "safari": true, "office": true,
+		"windows": true, "android": true, "java": true, "python": true, "node": true, "openssl": true, "ios": true, "macos": true}
+)
+
+// findIPv4: dotted numbers, except where they read as a version ("LibreOffice 26.8.1.1",
+// "firmware 1.0.5.2"). A private address is always an address.
+func findIPv4(s string) [][2]int {
+	var out [][2]int
+	for _, m := range reIPv4.FindAllStringIndex(s, -1) {
+		if reLocalIP.MatchString(s[m[0]:m[1]]) || !versionNumber(s, m[0], m[1]) {
+			out = append(out, [2]int{m[0], m[1]})
+		}
+	}
+	return out
+}
+
+func versionNumber(s string, a, b int) bool {
+	before := strings.ToValidUTF8(s[wordStart(s, max(0, a-30), a-94):a], "")
+	if i := strings.LastIndexByte(before, '\n'); i >= 0 {
+		before = before[i+1:]
+	}
+	after := strings.ToValidUTF8(s[b:min(len(s), b+25)], "")
+	lb, la := strings.ToLower(before), strings.ToLower(after)
+	for _, c := range []string{"version", "build", "release", "firmware", "patch"} {
+		if strings.Contains(lb, c) {
+			return true
+		}
+	}
+	if strings.Contains(la, "firmware") {
+		return true
+	}
+	ws := strings.FieldsFunc(before, notAlnum)
+	if len(ws) == 0 || !strings.HasSuffix(before, ws[len(ws)-1]+" ") {
+		return false
+	}
+	w := ws[len(ws)-1]
+	return versionedSoftware[strings.ToLower(w)] || camelCase(w)
+}
+
+// camelCase: a capital inside a word ("LibreOffice", "PowerShell"), not an all-caps word.
+func camelCase(w string) bool {
+	rs := []rune(w)
+	lower := false
+	for i, r := range rs {
+		if unicode.IsLower(r) {
+			lower = true
+		} else if i > 0 && unicode.IsUpper(r) && lower {
+			return true
+		}
+	}
+	return false
 }

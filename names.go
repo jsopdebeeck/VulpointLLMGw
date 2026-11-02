@@ -53,9 +53,17 @@ var surnameWords = []string{"martin", "rose", "baker", "smith", "miller", "carpe
 	"king", "bishop", "fisher", "mason", "turner", "walker", "white", "black", "brown", "green", "gray", "grey", "bell",
 	"hill", "noble", "blanc", "petit", "lambert", "roland", "vincent", "marchand", "baron", "prince", "page", "gentil"}
 
+// iberianSurnames: read as English plurals by the check below ("Mendes" as "mend" + "es").
+var iberianSurnames = map[string]bool{"mendes": true, "gomes": true, "lopes": true, "marques": true, "nunes": true, "rodrigues": true,
+	"fernandes": true, "goncalves": true, "alves": true, "moraes": true, "soares": true, "tavares": true, "guimaraes": true,
+	"peres": true, "pires": true, "reis": true, "dias": true, "neves": true}
+
 // commonWord: dictionary word, acronym, product or all-caps token: not a name without strong evidence.
 func commonWord(w string) bool {
 	f := fold(w)
+	if iberianSurnames[f] {
+		return false
+	}
 	if lexicon[f] || defaultAllow[f] || notNames[f] {
 		return true
 	}
@@ -409,7 +417,7 @@ func findFirstnames(s string) [][2]int {
 		return strings.Contains(f, "-")
 	}
 	for i := 0; i < len(ts); i++ {
-		if !isFirst(ts[i].w) {
+		if !isFirst(ts[i].w) || afterToponym(s, ts, i) {
 			continue
 		}
 		if i > 0 && isAllCaps(ts[i-1].w) && utf8.RuneCountInString(ts[i-1].w) >= 4 && !commonWord(ts[i-1].w) && // not "DJI Neo", "FPV Kit"

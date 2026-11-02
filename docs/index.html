@@ -150,7 +150,7 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
 
 <div class="page">
   <nav class="toc" aria-label="Sommaire">
-    <a class="toc-brand" href="https://vulpoint.com" target="_blank" rel="noopener"><img src="img/vulpoint-logo.jpg" alt="Vulpoint"><div><b>LLMGW</b><small>by Vulpoint.com · v1.5.7</small></div></a>
+    <a class="toc-brand" href="https://vulpoint.com" target="_blank" rel="noopener"><img src="img/vulpoint-logo.jpg" alt="Vulpoint"><div><b>LLMGW</b><small>by Vulpoint.com · v1.5.9</small></div></a>
     <ol>
       <li><a href="en/index.html" hreflang="en" lang="en"><span>EN</span>English version</a></li>
     </ol>
@@ -214,7 +214,7 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
       <div class="eyebrow">Documentation fonctionnelle, technique et d'administration</div>
       <h1>LLMGW, la passerelle IA de l'organisation</h1>
       <p class="lede">Un point de connexion unique entre les utilisateurs, les agents et les modèles de langage. Il applique la politique IA : qui peut utiliser quel modèle, quelles données peuvent sortir, et avec quelle traçabilité.</p>
-      <div class="meta"><span><b>Version</b> 1.5.7 (1er novembre 2026)</span><span><b>Composant</b> llmgw (binaire unique Go, macOS et Linux)</span><span><b>Formats d'API</b> OpenAI et Anthropic</span><span><b>Interface</b> anglais, français, néerlandais</span></div>
+      <div class="meta"><span><b>Version</b> 1.5.9 (2 novembre 2026)</span><span><b>Composant</b> llmgw (binaire unique Go, macOS et Linux)</span><span><b>Formats d'API</b> OpenAI et Anthropic</span><span><b>Interface</b> anglais, français, néerlandais</span></div>
       <a class="crosslink" href="chat.html">Guide utilisateur du chat ↗</a>
     </header>
 
@@ -714,12 +714,12 @@ files_default = "pass_log"                         <span class="c"># autres exte
       <h3>Lancement manuel</h3>
 <pre>export MISTRAL_API_KEY=… ANTHROPIC_API_KEY=…
 ./llmgw -config config.toml
-<span class="c"># LLMGW 1.5.7 à l'écoute sur http://127.0.0.1:8088 (dashboard : /dashboard, documentation : /docs)</span></pre>
+<span class="c"># LLMGW 1.5.9 à l'écoute sur http://127.0.0.1:8088 (dashboard : /dashboard, documentation : /docs)</span></pre>
       <p>Une seule instance par port. Arrêt avec Ctrl+C : les métriques en attente sont enregistrées avant la sortie.</p>
 
       <h3>App macOS dans la barre des menus</h3>
       <p><code>macapp/build.sh</code> construit une <strong>LLMGW.app autonome</strong> dans <code>dist/</code>, et <code>dist/LLMGW-&lt;version&gt;.dmg</code> pour l'installer par glisser-déposer dans Applications ; <code>macapp/build.sh --install</code> l'installe directement dans Applications (et relance l'app si elle tournait). Go et les Command Line Tools d'Xcode ne servent qu'à la construction : l'app embarque la passerelle (binaire universel Apple Silicon et Intel, sans dépendance hors macOS) et ne demande rien d'autre pour fonctionner.</p>
-      <p>Les données sont dans <code>~/Library/Application Support/LLMGW</code> : <code>config.toml</code>, <code>secrets.env</code>, la base et le journal. Au premier lancement, l'app y crée une configuration de départ, avec un <strong>jeton d'administration aléatoire</strong>, et un modèle <code>secrets.env</code> (droits 600). Une installation existante (dossier contenant déjà <code>config.toml</code>) est reprise telle quelle via « Dossier de données… ».</p>
+      <p>Les données sont dans <code>~/Library/Application Support/LLMGW</code> : <code>config.toml</code>, <code>secrets.env</code>, la base et le journal. Au premier lancement, l'app y crée une configuration de départ, avec un <strong>jeton d'administration aléatoire</strong>, et un modèle <code>secrets.env</code> (droits 600). Une installation existante (dossier contenant déjà <code>config.toml</code>) est reprise telle quelle via « Dossier de données… ». L'app suit ce dossier s'il est renommé ou déplacé ; s'il est introuvable, son menu le signale et elle réessaie, sans créer de configuration vide.</p>
       <p>Un double-clic sur l'app affiche une icône dans la barre des menus :</p>
       <ul>
         <li>une <strong>pastille d'état</strong> : verte en marche, orange au démarrage, rouge arrêtée, grise si le dossier de la passerelle est introuvable ;</li>
@@ -1030,6 +1030,16 @@ default_profile = "anonymisation"</pre>
       <h2><span class="n">39</span>Notes de version</h2>
       <p>La version en cours s'affiche en bas du menu du dashboard, sur l'écran de connexion du chat, sur <code>GET /version</code> et avec <code>./llmgw -version</code>. Le journal complet est tenu dans <code>RELEASE_NOTES.md</code>, à la racine du dépôt.</p>
       <div class="rel">
+        <h3>1.5.9, 2 novembre 2026</h3>
+        <ul>
+          <li>Noms : prénoms portugais et brésiliens ajoutés, un mot inconnu entre des prénoms d'une liste est traité comme un nom, et les noms de famille ibériques (Mendes, Gomes…) ne sont plus lus comme des pluriels anglais.</li>
+          <li>Moins de faux positifs : le mot qui suit São, San ou Saint n'est plus un prénom, « Kit » et « Mae » ne commencent plus un nom, « Manuel de… » désigne un manuel, Bots, Méthode, Cercle et INCRA rejoignent les termes jamais anonymisés.</li>
+          <li>Numéros : une version n'est plus une adresse IP ni une référence, un jour et un mois, une plage ou une empreinte hexadécimale ne sont plus des références, une date à venir n'est plus une date de naissance, et « Clos le 20 » ou « chemin ligne 36 » ne sont plus des adresses.</li>
+        </ul>
+        <h3>1.5.8, 2 novembre 2026</h3>
+        <ul>
+          <li>L'app macOS suit son dossier de données s'il est renommé ou déplacé. S'il est introuvable (par exemple un disque en ligne pas encore monté à l'ouverture de session), elle le signale et réessaie, sans repartir d'une configuration vide.</li>
+        </ul>
         <h3>1.5.7, 1er novembre 2026</h3>
         <ul>
           <li>Noms : un « M. » collé à un chiffre (« 205M. So ») n'est plus un titre, un mot du dictionnaire n'est plus lu comme une faute de frappe (« Master System »), un titre abrégé en capitales demande un nom en capitales (« PR Newswire »), et les contractions et possessifs (« I'd », « Dupont's ») ne font plus partie du nom. C'était la source de remplacements en cascade dans la conversation.</li>
@@ -1125,7 +1135,7 @@ default_profile = "anonymisation"</pre>
       </div>
     </section>
 
-    <footer class="doc"><img src="img/vulpoint-logo.jpg" alt=""><span>LLMGW 1.5.7 by <a href="https://vulpoint.com" target="_blank" rel="noopener">Vulpoint.com</a> · <a href="en/index.html" hreflang="en" lang="en">English version</a></span></footer>
+    <footer class="doc"><img src="img/vulpoint-logo.jpg" alt=""><span>LLMGW 1.5.9 by <a href="https://vulpoint.com" target="_blank" rel="noopener">Vulpoint.com</a> · <a href="en/index.html" hreflang="en" lang="en">English version</a></span></footer>
   </main>
 </div>
 </body>
