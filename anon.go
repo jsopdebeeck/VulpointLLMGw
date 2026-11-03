@@ -1436,13 +1436,24 @@ func (s *Session) Anonymize(text string) string {
 
 var phRe = regexp.MustCompile(`«[\s\x{00A0}\x{202F}]?([A-Z][A-Z0-9_]*_\d+)[\s\x{00A0}\x{202F}]?»`)
 
+// phOpenRe: a token the LLM did not close ("«PERSON_22 revient"). The character after it proves
+// the number is whole: at the end of a text, "«PERSON_2" may be a cut "«PERSON_22" and stays as is.
+var phOpenRe = regexp.MustCompile(`«[\s\x{00A0}\x{202F}]?([A-Z][A-Z0-9_]*_\d+)([^0-9A-Za-z_»])`)
+
 func (s *Session) Restore(t string) string {
 	if len(s.rev) == 0 || !strings.Contains(t, "«") {
 		return t
 	}
-	return phRe.ReplaceAllStringFunc(t, func(m string) string {
+	t = phRe.ReplaceAllStringFunc(t, func(m string) string {
 		if v, ok := s.rev[phRe.FindStringSubmatch(m)[1]]; ok {
 			return v
+		}
+		return m
+	})
+	return phOpenRe.ReplaceAllStringFunc(t, func(m string) string {
+		sm := phOpenRe.FindStringSubmatch(m)
+		if v, ok := s.rev[sm[1]]; ok {
+			return v + sm[2]
 		}
 		return m
 	})
@@ -1458,9 +1469,17 @@ func jsonSafe(fn func(string) string) func(string) string {
 		if !strings.Contains(t, "«") {
 			return t
 		}
-		return phRe.ReplaceAllStringFunc(t, func(m string) string {
+		t = phRe.ReplaceAllStringFunc(t, func(m string) string {
 			if r := fn(m); r != m {
 				return jsonEscape(r)
+			}
+			return m
+		})
+		return phOpenRe.ReplaceAllStringFunc(t, func(m string) string {
+			sm := phOpenRe.FindStringSubmatch(m)
+			closed := "«" + sm[1] + "»"
+			if r := fn(closed); r != closed {
+				return jsonEscape(r) + sm[2]
 			}
 			return m
 		})

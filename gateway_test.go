@@ -36,7 +36,8 @@ var secrets = []string{"Claire", "Dubois", "claire.dubois@acme.be", "470 12 34 5
 type mock struct {
 	mu     sync.Mutex
 	bodies []string
-	fail   int // status to return (0 = OK)
+	fail   int                                      // status to return (0 = OK)
+	reply  func(w http.ResponseWriter, stream bool) // answer of the test, instead of the echo
 }
 
 func (m *mock) last() string { m.mu.Lock(); defer m.mu.Unlock(); return m.bodies[len(m.bodies)-1] }
@@ -82,6 +83,11 @@ func (m *mock) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	raw, _ := io.ReadAll(r.Body)
 	m.mu.Lock()
 	m.bodies = append(m.bodies, string(raw))
+	if m.reply != nil {
+		m.mu.Unlock()
+		m.reply(w, strings.Contains(string(raw), `"stream":true`))
+		return
+	}
 	if strings.HasSuffix(r.URL.Path, "/count_tokens") {
 		m.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
@@ -221,6 +227,92 @@ func TestRestorerSplit(t *testing.T) {
 	got += r.Flush(rkey{})
 	if got != "écrire à jean@x.org" {
 		t.Errorf("got %q", got)
+	}
+}
+
+// A full exchange: what the LLM writes, well or badly formed, as the client receives it.
+func TestRestoreEndToEnd(t *testing.T) {
+	const addr = "claire.dubois@acme.be"
+	text := "Écrire à «EMAIL_1» puis « EMAIL_1 », et «EMAIL_1 sans fin, «EMAIL_1, «EMAIL_99 inconnu, «EMAIL_1"
+	wantText := "Écrire à " + addr + " puis " + addr + ", et " + addr + " sans fin, " + addr + ", «EMAIL_99 inconnu, «EMAIL_1"
+	args := `{"to":"«EMAIL_1","cc":"«EMAIL_1 copie","bcc":"«EMAIL_1»"}`
+	wantArgs := map[string]string{"to": addr, "cc": addr + " copie", "bcc": addr}
+
+	gw, oai, _, _ := setup(t)
+	oai.reply = func(w http.ResponseWriter, stream bool) {
+		if !stream {
+			json.NewEncoder(w).Encode(map[string]any{"id": "x", "object": "chat.completion", "choices": []any{map[string]any{"index": 0, "finish_reason": "stop",
+				"message": map[string]any{"role": "assistant", "content": text, "tool_calls": []any{map[string]any{"id": "c1", "type": "function",
+					"function": map[string]any{"name": "mail", "arguments": args}}}}}}})
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		send := func(delta map[string]any) {
+			b, _ := json.Marshal(map[string]any{"id": "x", "object": "chat.completion.chunk", "choices": []any{map[string]any{"index": 0, "delta": delta}}})
+			fmt.Fprintf(w, "data: %s\n\n", b)
+		}
+		for _, c := range chunks(text, 3) {
+			send(map[string]any{"content": c})
+		}
+		for _, c := range chunks(args, 3) {
+			send(map[string]any{"tool_calls": []any{map[string]any{"index": 0, "function": map[string]any{"arguments": c}}}})
+		}
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	}
+	for _, stream := range []bool{false, true} {
+		resp := post(t, gw.URL+"/v1/chat/completions", "gw-alice-remplace-moi", map[string]any{"model": "mistral-large", "stream": stream,
+			"messages": []any{map[string]any{"role": "user", "content": "Écrire à " + addr}}})
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != 200 || !strings.Contains(oai.last(), "«EMAIL_1»") {
+			t.Fatalf("stream=%v : status %d, amont %s", stream, resp.StatusCode, oai.last())
+		}
+		var gotText, gotArgs string
+		if stream {
+			for _, l := range strings.Split(string(body), "\n") {
+				if !strings.HasPrefix(l, "data: {") {
+					continue
+				}
+				var m struct {
+					Choices []struct {
+						Delta struct {
+							Content   string
+							ToolCalls []struct{ Function struct{ Arguments string } } `json:"tool_calls"`
+						}
+					}
+				}
+				json.Unmarshal([]byte(l[6:]), &m)
+				for _, c := range m.Choices {
+					gotText += c.Delta.Content
+					for _, tc := range c.Delta.ToolCalls {
+						gotArgs += tc.Function.Arguments
+					}
+				}
+			}
+		} else {
+			var m struct {
+				Choices []struct {
+					Message struct {
+						Content   string
+						ToolCalls []struct{ Function struct{ Arguments string } } `json:"tool_calls"`
+					}
+				}
+			}
+			json.Unmarshal(body, &m)
+			gotText, gotArgs = m.Choices[0].Message.Content, m.Choices[0].Message.ToolCalls[0].Function.Arguments
+		}
+		if gotText != wantText {
+			t.Errorf("stream=%v, texte :\n%q\n%q", stream, gotText, wantText)
+		}
+		got := map[string]string{}
+		if err := json.Unmarshal([]byte(gotArgs), &got); err != nil {
+			t.Fatalf("stream=%v, arguments invalides %q : %v", stream, gotArgs, err)
+		}
+		for k, v := range wantArgs {
+			if got[k] != v {
+				t.Errorf("stream=%v, %s = %q, attendu %q", stream, k, got[k], v)
+			}
+		}
 	}
 }
 

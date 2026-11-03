@@ -2,6 +2,13 @@
 
 Le numéro suit le schéma `majeur.mineur.correctif`. La version en cours s'affiche en bas du menu du dashboard, dans l'en-tête de connexion du chat, sur `GET /version` et avec `./llmgw -version`.
 
+## 1.5.11 (3 novembre 2026)
+
+Aucun réglage à changer.
+
+- Restauration : un jeton que le modèle n'a pas refermé (`«PERSON_2 revient`) est désormais restauré, dans le texte comme dans les arguments d'outils. En fin de texte, il reste tel quel, car son numéro peut être coupé (`«PERSON_2` pour `«PERSON_22`).
+- Un test rejoue un échange complet, avec et sans flux, jusqu'à ce que reçoit le client.
+
 ## 1.5.10 (3 novembre 2026)
 
 Corrections de faux positifs sur des éléments techniques. Aucun réglage à changer.
