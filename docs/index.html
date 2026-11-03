@@ -150,7 +150,7 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
 
 <div class="page">
   <nav class="toc" aria-label="Sommaire">
-    <a class="toc-brand" href="https://vulpoint.com" target="_blank" rel="noopener"><img src="img/vulpoint-logo.jpg" alt="Vulpoint"><div><b>LLMGW</b><small>by Vulpoint.com · v1.5.9</small></div></a>
+    <a class="toc-brand" href="https://vulpoint.com" target="_blank" rel="noopener"><img src="img/vulpoint-logo.jpg" alt="Vulpoint"><div><b>LLMGW</b><small>by Vulpoint.com · v1.5.10</small></div></a>
     <ol>
       <li><a href="en/index.html" hreflang="en" lang="en"><span>EN</span>English version</a></li>
     </ol>
@@ -214,7 +214,7 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
       <div class="eyebrow">Documentation fonctionnelle, technique et d'administration</div>
       <h1>LLMGW, la passerelle IA de l'organisation</h1>
       <p class="lede">Un point de connexion unique entre les utilisateurs, les agents et les modèles de langage. Il applique la politique IA : qui peut utiliser quel modèle, quelles données peuvent sortir, et avec quelle traçabilité.</p>
-      <div class="meta"><span><b>Version</b> 1.5.9 (2 novembre 2026)</span><span><b>Composant</b> llmgw (binaire unique Go, macOS et Linux)</span><span><b>Formats d'API</b> OpenAI et Anthropic</span><span><b>Interface</b> anglais, français, néerlandais</span></div>
+      <div class="meta"><span><b>Version</b> 1.5.10 (3 novembre 2026)</span><span><b>Composant</b> llmgw (binaire unique Go, macOS et Linux)</span><span><b>Formats d'API</b> OpenAI et Anthropic</span><span><b>Interface</b> anglais, français, néerlandais</span></div>
       <a class="crosslink" href="chat.html">Guide utilisateur du chat ↗</a>
     </header>
 
@@ -714,7 +714,7 @@ files_default = "pass_log"                         <span class="c"># autres exte
       <h3>Lancement manuel</h3>
 <pre>export MISTRAL_API_KEY=… ANTHROPIC_API_KEY=…
 ./llmgw -config config.toml
-<span class="c"># LLMGW 1.5.9 à l'écoute sur http://127.0.0.1:8088 (dashboard : /dashboard, documentation : /docs)</span></pre>
+<span class="c"># LLMGW 1.5.10 à l'écoute sur http://127.0.0.1:8088 (dashboard : /dashboard, documentation : /docs)</span></pre>
       <p>Une seule instance par port. Arrêt avec Ctrl+C : les métriques en attente sont enregistrées avant la sortie.</p>
 
       <h3>App macOS dans la barre des menus</h3>
@@ -1030,6 +1030,10 @@ default_profile = "anonymisation"</pre>
       <h2><span class="n">39</span>Notes de version</h2>
       <p>La version en cours s'affiche en bas du menu du dashboard, sur l'écran de connexion du chat, sur <code>GET /version</code> et avec <code>./llmgw -version</code>. Le journal complet est tenu dans <code>RELEASE_NOTES.md</code>, à la racine du dépôt.</p>
       <div class="rel">
+        <h3>1.5.10, 3 novembre 2026</h3>
+        <ul>
+          <li>Moins de faux positifs sur des éléments techniques : une unité systemd (<code>backup-bot@alpha.service</code>, <code>.timer</code>, <code>.socket</code>) n'est plus une adresse e-mail, un mot pris dans un chemin ou un nom composé n'annonce plus une date de naissance, et une date de l'année en cours ou de la précédente n'est plus lue comme une date de naissance, même après « né le ». Conséquence : les dates de naissance des moins de deux ans partent en clair, ce réglage ne convient pas à un usage hospitalier ou néonatal.</li>
+        </ul>
         <h3>1.5.9, 2 novembre 2026</h3>
         <ul>
           <li>Noms : prénoms portugais et brésiliens ajoutés, un mot inconnu entre des prénoms d'une liste est traité comme un nom, et les noms de famille ibériques (Mendes, Gomes…) ne sont plus lus comme des pluriels anglais.</li>
@@ -1135,7 +1139,7 @@ default_profile = "anonymisation"</pre>
       </div>
     </section>
 
-    <footer class="doc"><img src="img/vulpoint-logo.jpg" alt=""><span>LLMGW 1.5.9 by <a href="https://vulpoint.com" target="_blank" rel="noopener">Vulpoint.com</a> · <a href="en/index.html" hreflang="en" lang="en">English version</a></span></footer>
+    <footer class="doc"><img src="img/vulpoint-logo.jpg" alt=""><span>LLMGW 1.5.10 by <a href="https://vulpoint.com" target="_blank" rel="noopener">Vulpoint.com</a> · <a href="en/index.html" hreflang="en" lang="en">English version</a></span></footer>
   </main>
 </div>
 </body>

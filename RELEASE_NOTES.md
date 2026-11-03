@@ -2,6 +2,14 @@
 
 Le numéro suit le schéma `majeur.mineur.correctif`. La version en cours s'affiche en bas du menu du dashboard, dans l'en-tête de connexion du chat, sur `GET /version` et avec `./llmgw -version`.
 
+## 1.5.10 (3 novembre 2026)
+
+Corrections de faux positifs sur des éléments techniques. Aucun réglage à changer.
+
+- Adresses : une unité systemd (`backup-bot@alpha.service`, `.timer`, `.socket`) n'est plus une adresse e-mail.
+- Dates de naissance : un mot pris dans un chemin ou un nom composé (`archive/profil-alpha-naissance/`) n'annonce plus une date. « date-de-naissance » reste reconnu.
+- Dates de naissance : une date de l'année en cours ou de la précédente n'est plus lue comme une date de naissance, même après « né le ». Elle ne contamine donc plus les chemins et les journaux. **Conséquence : les dates de naissance des moins de deux ans partent en clair. Ce réglage ne convient pas à un usage hospitalier ou néonatal.**
+
 ## 1.5.9 (2 novembre 2026)
 
 Corrections tirées de la revue d'une archive Debug. Aucun réglage à changer.

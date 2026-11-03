@@ -365,9 +365,9 @@ func (d *Detector) Find(s string) []span {
 
 // ---------- validators ----------
 
-var fileExtTLD = map[string]bool{"png": true, "jpg": true, "jpeg": true, "gif": true, "webp": true, "svg": true, "ico": true, "css": true, "js": true, "pdf": true}
+var fileExtTLD = map[string]bool{"png": true, "jpg": true, "jpeg": true, "gif": true, "webp": true, "svg": true, "ico": true, "css": true, "js": true, "pdf": true, "service": true, "timer": true, "socket": true}
 
-// validEmail: "Asset-46@2x.png" is an image name.
+// validEmail: "Asset-46@2x.png" is an image name, "backup@alpha.service" a systemd unit.
 func validEmail(v string) bool {
 	return !fileExtTLD[strings.ToLower(v[strings.LastIndexByte(v, '.')+1:])]
 }

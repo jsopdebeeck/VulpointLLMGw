@@ -150,7 +150,7 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
 
 <div class="page">
   <nav class="toc" aria-label="Contents">
-    <a class="toc-brand" href="https://vulpoint.com" target="_blank" rel="noopener"><img src="../img/vulpoint-logo.jpg" alt="Vulpoint"><div><b>LLMGW</b><small>by Vulpoint.com · v1.5.9</small></div></a>
+    <a class="toc-brand" href="https://vulpoint.com" target="_blank" rel="noopener"><img src="../img/vulpoint-logo.jpg" alt="Vulpoint"><div><b>LLMGW</b><small>by Vulpoint.com · v1.5.10</small></div></a>
     <ol>
       <li><a href="../index.html" hreflang="fr" lang="fr"><span>FR</span>Version française</a></li>
     </ol>
@@ -214,7 +214,7 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
       <div class="eyebrow">Functional, technical and administration documentation</div>
       <h1>LLMGW, the organisation's AI gateway</h1>
       <p class="lede">A single connection point between users, agents and language models. It enforces the AI policy: who may use which model, which data may leave, and with what traceability.</p>
-      <div class="meta"><span><b>Version</b> 1.5.9 (2 November 2026)</span><span><b>Component</b> llmgw (single Go binary, macOS and Linux)</span><span><b>API formats</b> OpenAI and Anthropic</span><span><b>Interface</b> English, French, Dutch</span></div>
+      <div class="meta"><span><b>Version</b> 1.5.10 (3 November 2026)</span><span><b>Component</b> llmgw (single Go binary, macOS and Linux)</span><span><b>API formats</b> OpenAI and Anthropic</span><span><b>Interface</b> English, French, Dutch</span></div>
       <a class="crosslink" href="chat.html">Chat user guide ↗</a>
     </header>
 
@@ -714,7 +714,7 @@ files_default = "pass_log"                         <span class="c"># other exten
       <h3>Manual start</h3>
 <pre>export MISTRAL_API_KEY=… ANTHROPIC_API_KEY=…
 ./llmgw -config config.toml
-<span class="c"># LLMGW 1.5.9 listening on http://127.0.0.1:8088 (dashboard: /dashboard, documentation: /docs)</span></pre>
+<span class="c"># LLMGW 1.5.10 listening on http://127.0.0.1:8088 (dashboard: /dashboard, documentation: /docs)</span></pre>
       <p>One instance per port. Stop with Ctrl+C: pending metrics are saved before exiting.</p>
 
       <h3>macOS menu bar app</h3>
@@ -1030,6 +1030,10 @@ default_profile = "anonymisation"</pre>
       <h2><span class="n">39</span>Release notes</h2>
       <p>The current version is shown at the bottom of the dashboard menu, on the chat sign-in screen, on <code>GET /version</code> and with <code>./llmgw -version</code>. The full log is kept in <code>RELEASE_NOTES.md</code>, at the root of the repository.</p>
       <div class="rel">
+        <h3>1.5.10, 3 November 2026</h3>
+        <ul>
+          <li>Fewer false positives on technical items: a systemd unit (<code>backup-bot@alpha.service</code>, <code>.timer</code>, <code>.socket</code>) is no longer an email address, a word inside a path or a compound name no longer announces a date of birth, and a date in the current or previous year is no longer read as a date of birth, even after a cue such as “born on”. As a result, dates of birth of children under two are sent in clear: this setting does not suit hospital or neonatal use.</li>
+        </ul>
         <h3>1.5.9, 2 November 2026</h3>
         <ul>
           <li>Names: Portuguese and Brazilian first names added, an unknown word between first names in a list is treated as a name, and Iberian surnames (Mendes, Gomes…) are no longer read as English plurals.</li>
@@ -1135,7 +1139,7 @@ default_profile = "anonymisation"</pre>
       </div>
     </section>
 
-    <footer class="doc"><img src="../img/vulpoint-logo.jpg" alt=""><span>LLMGW 1.5.9 by <a href="https://vulpoint.com" target="_blank" rel="noopener">Vulpoint.com</a></span></footer>
+    <footer class="doc"><img src="../img/vulpoint-logo.jpg" alt=""><span>LLMGW 1.5.10 by <a href="https://vulpoint.com" target="_blank" rel="noopener">Vulpoint.com</a></span></footer>
   </main>
 </div>
 </body>

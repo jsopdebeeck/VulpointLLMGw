@@ -161,6 +161,7 @@ func notAlnum(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) 
 // birthCue: a cue word in the text before a date. "né", "née" need their accent or "le" after
 // them: a bare "ne" is the French negation.
 func birthCue(before string) bool {
+	before = withoutGlued(before)
 	ws := strings.FieldsFunc(fold(before), notAlnum)
 	for i, w := range ws {
 		if birthCues[w] || (w == "ne" || w == "nee") && i+1 < len(ws) && ws[i+1] == "le" {
@@ -176,14 +177,60 @@ func birthCue(before string) bool {
 	return false
 }
 
+// dateParts: what a cue may be joined to ("date-de-naissance", "date-of-birth").
+var dateParts = map[string]bool{"date": true, "de": true, "of": true}
+
+// withoutGlued drops the tokens where a cue is only part of a name: a path
+// ("archive/profil-naissance/export.tar") or a compound ("profil-alpha-naissance").
+func withoutGlued(before string) string {
+	toks := strings.FieldsFunc(before, func(r rune) bool { return unicode.IsSpace(r) || strings.ContainsRune("\"',;|()[]{}=<>:", r) })
+	kept := toks[:0]
+	for _, t := range toks {
+		if !pathLike(t) && !gluedCue(t) {
+			kept = append(kept, t)
+		}
+	}
+	return strings.Join(kept, " ")
+}
+
+// pathLike: "naissance/décès" is a label, "a/b/c", "x/y.tar" and "dir/" are paths.
+func pathLike(t string) bool {
+	return strings.Contains(t, `\`) || strings.ContainsAny(t[:1], "/~.") || strings.HasSuffix(t, "/") ||
+		strings.Count(t, "/") >= 2 || strings.Contains(t, "/") && strings.Contains(t, ".")
+}
+
+func gluedCue(t string) bool {
+	parts := strings.Split(fold(t), "-")
+	cue, other := false, false
+	for _, p := range parts {
+		p = strings.TrimFunc(p, notAlnum)
+		cue = cue || birthCues[p]
+		other = other || !birthCues[p] && !dateParts[p]
+	}
+	return cue && other
+}
+
 func findBirthdates(s string) [][2]int {
 	var out [][2]int
 	for _, m := range findDates(s) {
-		if !afterToday(s[m[0]:m[1]]) && birthCue(s[wordStart(s, max(0, m[0]-30), m[0]-94):m[0]]) {
+		if !recentDate(s[m[0]:m[1]]) && birthCue(s[tokenStart(s, wordStart(s, max(0, m[0]-30), m[0]-94), m[0]-94):m[0]]) {
 			out = append(out, m)
 		}
 	}
 	return out
+}
+
+// tokenStart moves a text window back to the space before the token it cuts, so that a compound
+// is read whole. It stops at limit.
+func tokenStart(s string, a, limit int) int {
+	for a > 0 && a > limit {
+		r, _ := utf8.DecodeLastRuneInString(s[:a])
+		if utf8.RuneStart(s[a]) && unicode.IsSpace(r) {
+			break
+		}
+		a--
+	}
+	return a
 }
 
 // wordStart moves a text window back to the start of the word it cuts: the end of "consignée"
@@ -199,28 +246,27 @@ func wordStart(s string, a, limit int) int {
 	return a
 }
 
-// afterToday: a date to come is not a date of birth.
-func afterToday(t string) bool {
+// recentDate: a date of this year or the last, or to come, reads as an ordinary date (logs, file
+// names). Not suited to neonatal records: their dates of birth are recent.
+func recentDate(t string) bool {
 	m := reDate.FindStringSubmatch(t)
 	if m == nil {
 		return false
 	}
-	y, mo, d := m[3], m[2], m[1]
+	y := m[3]
 	if m[4] != "" {
-		y, mo, d = m[4], m[5], m[6]
+		y = m[4]
 	}
-	now := time.Now()
-	if y == "" { // written month: only the year is compared
-		yr, _ := strconv.Atoi(t[len(t)-4:])
-		return yr > now.Year()
-	}
-	if len(y) != 4 {
-		return false
+	if y == "" { // written month: the year ends the date
+		y = t[len(t)-4:]
 	}
 	yr, _ := strconv.Atoi(y)
-	mm, _ := strconv.Atoi(mo)
-	dd, _ := strconv.Atoi(d)
-	return time.Date(yr, time.Month(mm), dd, 0, 0, 0, 0, now.Location()).After(now)
+	now := time.Now().Year()
+	if len(y) == 2 { // "03/11/26": 2026 rather than 1926
+		yr += now - now%100
+		return yr == now || yr == now-1
+	}
+	return yr >= now-1
 }
 
 var reIPv4 = regexp.MustCompile(`\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b`)

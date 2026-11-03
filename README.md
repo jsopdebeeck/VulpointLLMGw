@@ -2,7 +2,7 @@
 
 [Version française](README.fr.md)
 
-Version **1.5.9** · [Apache-2.0 license](LICENSE) · [examples](examples/) · documentation in English: [administration](docs/en/index.html) and [chat user guide](docs/en/chat.html), also built in at `/docs/en/` once the gateway runs (French at `/docs/`) · release notes in [RELEASE_NOTES.md](RELEASE_NOTES.md) (French).
+Version **1.5.10** · [Apache-2.0 license](LICENSE) · [examples](examples/) · documentation in English: [administration](docs/en/index.html) and [chat user guide](docs/en/chat.html), also built in at `/docs/en/` once the gateway runs (French at `/docs/`) · release notes in [RELEASE_NOTES.md](RELEASE_NOTES.md) (French).
 
 LLMGW is a single point of entry between your users, agents and applications and the language models. It applies your AI policy: who may use which model, which data may leave, and with what traceability. Personal data (names, emails, phones, IBANs, national numbers, addresses, your own client and project lists…) is replaced by placeholders such as `«PERSON_1»` before the request leaves, and put back in the answer, streaming included. Clients keep their usual OpenAI or Anthropic SDK: only the URL and the key change.
 

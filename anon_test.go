@@ -1093,6 +1093,70 @@ func TestListKindBeatsLearned(t *testing.T) {
 }
 
 // Cases of the Debug archive of 2 November 2026; the values are synthetic.
+func TestDebugReview1510(t *testing.T) {
+	// A systemd unit is not an address, a real one still is.
+	if !validEmail("marie@exemple.be") {
+		t.Error("validEmail: adresse réelle rejetée")
+	}
+	for _, unit := range []string{"backup-bot@alpha.service", "backup-bot@alpha.timer", "backup-bot@alpha.socket"} {
+		if validEmail(unit) {
+			t.Errorf("validEmail: %s lue comme une adresse", unit)
+		}
+	}
+	// A cue that is only part of a name announces nothing.
+	for _, in := range []string{
+		"voir archive/profil-alpha-naissance/export.tar 12/03/1980",
+		"dossier profil-alpha-naissance 12/03/1980",
+		"sous ~/.local/naissance/ 12/03/1980",
+		"copie de naissance/ 12/03/1980",
+	} {
+		if got := findBirthdates(in); len(got) != 0 {
+			t.Errorf("%q: date de naissance lue à tort", in)
+		}
+	}
+	// The cue words themselves still work.
+	for _, in := range []string{
+		"Date de naissance : 12/03/1980",
+		"date-de-naissance: 12/03/1980",
+		"naissance/décès : 12/03/1980",
+		`{"url":"https://exemple.be/a","dob":"12/03/1980"}`,
+		"date_naissance=12/03/1980",
+		"nouveau-né le 12/03/1980",
+		"né le 12 mars 1980",
+	} {
+		if got := findBirthdates(in); len(got) != 1 {
+			t.Errorf("%q: date de naissance manquée", in)
+		}
+	}
+	// This year and the last are ordinary dates, the one before is not.
+	y := time.Now().Year()
+	for _, c := range []struct {
+		in   string
+		want int
+	}{
+		{fmt.Sprintf("né le 12/03/%d", y), 0},
+		{fmt.Sprintf("né le %d-03-12", y-1), 0},
+		{fmt.Sprintf("né le 12 mars %d", y-1), 0},
+		{fmt.Sprintf("né le 12/03/%02d", (y-1)%100), 0},
+		{fmt.Sprintf("né le 12/03/%d", y+1), 0},
+		{fmt.Sprintf("né le 12/03/%d", y-2), 1},
+	} {
+		if got := findBirthdates(c.in); len(got) != c.want {
+			t.Errorf("%q: %d dates, attendu %d", c.in, len(got), c.want)
+		}
+	}
+	// An older birth date stays masked away from its cue, a recent date is not masked at all.
+	cfg := anonConfig(t)
+	in := "Patient né le 12/03/1980.\nLa suite du dossier reste à compléter. Rapport du 12/03/1980."
+	if out := NewSession(cfg, cfg.Profiles["standard"]).AnonymizeText(in); strings.Contains(out, "12/03/1980") {
+		t.Errorf("date de naissance en clair : %q", out)
+	}
+	recent := fmt.Sprintf("né le 12/03/%d, puis rapport du 12/03/%d.", y, y)
+	if out := NewSession(cfg, cfg.Profiles["standard"]).AnonymizeText(recent); out != recent {
+		t.Errorf("date récente masquée : %q", out)
+	}
+}
+
 func TestDebugReview159(t *testing.T) {
 	cfg := anonConfig(t)
 	std := cfg.Profiles["standard"]
