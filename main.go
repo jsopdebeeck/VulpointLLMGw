@@ -34,7 +34,7 @@ var i18nJS []byte
 var docsFS embed.FS
 
 // Version of LLMGW; every release is described in RELEASE_NOTES.md.
-const Version = "1.5.11"
+const Version = "1.7.0"
 
 var sessKey []byte
 
@@ -146,6 +146,14 @@ func main() {
 	mux.HandleFunc("GET /admin/api/config", g.staff(g.handleGetConfig))
 	mux.HandleFunc("PUT /admin/api/config", g.staff(g.handlePutConfig)) // support: Users section only
 	mux.HandleFunc("GET /admin/api/usage", g.staff(g.handleUsage))
+	mux.HandleFunc("GET /admin/api/fallback", g.staff(func(w http.ResponseWriter, r *http.Request) {
+		on := g.C().Fallback.Enabled
+		st := map[string]map[string]any{}
+		if on {
+			st = g.fb.Snapshot()
+		}
+		writeJSON(w, map[string]any{"enabled": on, "targets": st})
+	}))
 	mux.HandleFunc("POST /admin/api/target-test", g.admin(g.handleTargetTest))
 	mux.HandleFunc("POST /admin/api/alert-test", g.admin(func(w http.ResponseWriter, r *http.Request) {
 		ac := g.C().Alerts

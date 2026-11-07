@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -1741,7 +1742,294 @@ func TestClientColumnMigration(t *testing.T) {
 	if err := st.db.QueryRow(`SELECT client FROM requests WHERE user = 'ancien'`).Scan(&c); err != nil || c != "" {
 		t.Errorf("colonne client : %q %v", c, err)
 	}
+	var tc int64
+	if err := st.db.QueryRow(`SELECT tok_cache FROM requests WHERE user = 'ancien'`).Scan(&tc); err != nil || tc != 0 {
+		t.Errorf("colonne tok_cache : %d %v", tc, err)
+	}
 	if _, err := st.Stats("48h"); err != nil {
 		t.Errorf("statistiques après migration : %v", err)
+	}
+}
+
+// Hermes hangs up as soon as it has read [DONE], before the upstream connection ends:
+// the answer is complete, the request must not be recorded as an error (1.6.0).
+func TestStreamHangUpAfterDone(t *testing.T) {
+	gw, oai, _, g := setup(t)
+	oai.reply = func(w http.ResponseWriter, stream bool) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		for _, c := range []string{
+			`{"id":"x","choices":[{"index":0,"delta":{"content":"bonjour"},"finish_reason":null}]}`,
+			`{"id":"x","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}`,
+			`{"id":"x","choices":[],"usage":{"prompt_tokens":100,"completion_tokens":5,"prompt_cache_hit_tokens":64,"prompt_cache_miss_tokens":36}}`,
+		} {
+			fmt.Fprintf(w, "data: %s\n\n", c)
+		}
+		fmt.Fprint(w, "data: [DONE]\n\n")
+		w.(http.Flusher).Flush()
+		time.Sleep(1500 * time.Millisecond) // the upstream connection stays open after [DONE]
+	}
+	resp := post(t, gw.URL+"/v1/chat/completions", "gw-alice-remplace-moi", map[string]any{"model": "mistral-large", "stream": true,
+		"messages": []any{map[string]any{"role": "user", "content": "salut"}}})
+	br := bufio.NewReader(resp.Body)
+	for {
+		l, err := br.ReadString('\n')
+		if err != nil {
+			t.Fatalf("flux interrompu avant [DONE] : %v", err)
+		}
+		if strings.HasPrefix(l, "data: [DONE]") {
+			break
+		}
+	}
+	resp.Body.Close() // the client hangs up, like Hermes
+	var status int
+	var errs string
+	var cache int64
+	for i := 0; i < 40; i++ {
+		time.Sleep(100 * time.Millisecond)
+		if g.store.db.QueryRow(`SELECT status, err, tok_cache FROM requests ORDER BY id DESC LIMIT 1`).Scan(&status, &errs, &cache) == nil {
+			break
+		}
+	}
+	if status != 200 || errs != "" || cache != 64 {
+		t.Errorf("enregistré : status %d, erreur %q, cache %d (attendu 200, aucune erreur, 64)", status, errs, cache)
+	}
+}
+
+// Tokens served by the provider cache, in the three usage formats (1.6.0).
+func TestTakeUsageCache(t *testing.T) {
+	for _, c := range []struct {
+		name            string
+		usage           string
+		in, out, cached int64
+	}{
+		{"DeepSeek", `{"prompt_tokens":100,"completion_tokens":5,"prompt_cache_hit_tokens":64,"prompt_cache_miss_tokens":36}`, 100, 5, 64},
+		{"OpenAI", `{"prompt_tokens":100,"completion_tokens":5,"prompt_tokens_details":{"cached_tokens":80}}`, 100, 5, 80},
+		{"Anthropic", `{"input_tokens":10,"cache_creation_input_tokens":20,"cache_read_input_tokens":70,"output_tokens":5}`, 100, 5, 70},
+		{"sans cache", `{"prompt_tokens":100,"completion_tokens":5}`, 100, 5, 0},
+	} {
+		var u map[string]any
+		json.Unmarshal([]byte(c.usage), &u)
+		var rec Rec
+		takeUsage(u, &rec)
+		if rec.TokIn != c.in || rec.TokOut != c.out || rec.TokCache != c.cached {
+			t.Errorf("%s : in %d out %d cache %d", c.name, rec.TokIn, rec.TokOut, rec.TokCache)
+		}
+	}
+}
+
+// The cache share survives the rollup into daily aggregates (1.6.0).
+func TestCacheRollup(t *testing.T) {
+	st, err := OpenStore(filepath.Join(t.TempDir(), "g.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	ts := time.Now().Add(-time.Hour)
+	if err := st.flushOnce([]*Rec{{TS: ts, User: "u", Target: "deepseek", Status: 200, TokIn: 100, TokCache: 64},
+		{TS: ts, User: "u", Target: "deepseek", Status: 200, TokIn: 50, TokCache: 10}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Rollup(0, 200); err != nil {
+		t.Fatal(err)
+	}
+	var n int64
+	st.db.QueryRow(`SELECT COUNT(*) FROM requests`).Scan(&n)
+	res, err := st.Stats("60d")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ti, tc int64
+	for _, r := range res["all"].([]Row) {
+		ti, tc = ti+r.TI, tc+r.TC
+	}
+	if n != 0 || ti != 150 || tc != 74 {
+		t.Errorf("après agrégation : %d ligne(s) brute(s), %d tokens in, %d en cache (attendu 0, 150, 74)", n, ti, tc)
+	}
+}
+
+// A model served by one provider only (deepseek-flash) gets a fallback through an alias on another
+// target: when the first one answers 503, the next target of the profile receives its own model.
+func TestAliasFallbackOn503(t *testing.T) {
+	gw, oai, _, g := setup(t)
+	tg := g.C().Targets["openai"]
+	tg.Aliases = map[string]string{"mistral-large": "gpt-4o"}
+	tg.aliasRe = map[string]*regexp.Regexp{"mistral-large": globRe("mistral-large")}
+	echo := oai.reply
+	oai.reply = func(w http.ResponseWriter, stream bool) {
+		if strings.Contains(oai.last(), `"model":"mistral-large"`) {
+			w.WriteHeader(503)
+			fmt.Fprint(w, `{"error":{"message":"Service is too busy"}}`)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"id":"x","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":3,"completion_tokens":1}}`)
+	}
+	defer func() { oai.reply = echo }()
+	resp := post(t, gw.URL+"/v1/chat/completions", "gw-alice-remplace-moi", map[string]any{"model": "mistral-large",
+		"messages": []any{map[string]any{"role": "user", "content": "salut"}}})
+	resp.Body.Close()
+	if resp.StatusCode != 200 || resp.Header.Get("X-Gateway-Target") != "openai/gpt-4o" {
+		t.Fatalf("status %d, cible %q (attendu 200, openai/gpt-4o)", resp.StatusCode, resp.Header.Get("X-Gateway-Target"))
+	}
+	if n := len(oai.bodies); n != 2 || !strings.Contains(oai.last(), `"model":"gpt-4o"`) {
+		t.Errorf("%d tentative(s), dernière : %s", n, oai.last())
+	}
+}
+
+// ---------- automatic fallback (1.7.0) ----------
+
+// fbSetup: mistral-large is only served by mistral (local disabled); mistral declares openai/gpt-4o
+// as its fallback. primary answers the requests sent to mistral, openai always answers "ok".
+func fbSetup(t *testing.T, enabled bool, primary func(w http.ResponseWriter)) (*httptest.Server, *mock, *Gateway) {
+	t.Helper()
+	gw, oai, _, g := setup(t)
+	cfg := g.C()
+	cfg.Targets["local"].Disabled = true
+	cfg.Targets["mistral"].fb = []fbRef{{"openai", "gpt-4o"}}
+	cfg.Fallback = FallbackCfg{Enabled: enabled, FirstByteTimeout: 1, TripAfter: 2, TripWindow: 60, Cooldown: 1}
+	oai.reply = func(w http.ResponseWriter, stream bool) {
+		if strings.Contains(oai.last(), `"model":"mistral-large"`) {
+			primary(w)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"id":"x","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":3,"completion_tokens":1}}`)
+	}
+	return gw, oai, g
+}
+
+func busy(w http.ResponseWriter) {
+	w.WriteHeader(503)
+	fmt.Fprint(w, `{"error":{"message":"Service is too busy"}}`)
+}
+
+func fbPost(t *testing.T, gw *httptest.Server, model string) *http.Response {
+	t.Helper()
+	resp := post(t, gw.URL+"/v1/chat/completions", "gw-alice-remplace-moi", map[string]any{"model": model,
+		"messages": []any{map[string]any{"role": "user", "content": "salut"}}})
+	io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+	return resp
+}
+
+func TestFallbackDisabledNoChange(t *testing.T) {
+	gw, oai, _ := fbSetup(t, false, busy)
+	resp := fbPost(t, gw, "mistral-large")
+	if resp.StatusCode != 503 || len(oai.bodies) != 1 || resp.Header.Get("X-Gateway-Fallback") != "" {
+		t.Errorf("option désactivée : status %d, %d tentative(s), repli %q (attendu 503, 1, aucun)", resp.StatusCode, len(oai.bodies), resp.Header.Get("X-Gateway-Fallback"))
+	}
+}
+
+func TestFallbackOn503(t *testing.T) {
+	gw, oai, g := fbSetup(t, true, busy)
+	resp := fbPost(t, gw, "mistral-large")
+	if resp.StatusCode != 200 || resp.Header.Get("X-Gateway-Target") != "openai/gpt-4o" || resp.Header.Get("X-Gateway-Fallback") != "mistral:503" {
+		t.Fatalf("status %d, cible %q, repli %q", resp.StatusCode, resp.Header.Get("X-Gateway-Target"), resp.Header.Get("X-Gateway-Fallback"))
+	}
+	if len(oai.bodies) != 2 || !strings.Contains(oai.last(), `"model":"gpt-4o"`) {
+		t.Errorf("%d tentative(s), dernière : %s", len(oai.bodies), oai.last())
+	}
+	var fb string
+	for i := 0; i < 30 && fb == ""; i++ {
+		time.Sleep(100 * time.Millisecond)
+		g.store.db.QueryRow(`SELECT fallback FROM requests ORDER BY id DESC LIMIT 1`).Scan(&fb)
+	}
+	res, _ := g.store.Stats("48h")
+	var n int64
+	for _, r := range res["all"].([]Row) {
+		n += r.FB
+	}
+	if fb != "mistral:503" || n != 1 {
+		t.Errorf("enregistré : repli %q, %d repli(s) au reporting", fb, n)
+	}
+}
+
+func TestFallbackOnTimeoutAndConnectError(t *testing.T) {
+	gw, _, g := fbSetup(t, true, func(w http.ResponseWriter) { time.Sleep(1500 * time.Millisecond); busy(w) })
+	t0 := time.Now()
+	resp := fbPost(t, gw, "mistral-large")
+	if resp.StatusCode != 200 || resp.Header.Get("X-Gateway-Fallback") != "mistral:timeout" || time.Since(t0) > 1400*time.Millisecond {
+		t.Errorf("délai : status %d, repli %q, %v", resp.StatusCode, resp.Header.Get("X-Gateway-Fallback"), time.Since(t0))
+	}
+	g.C().Targets["mistral"].BaseURL = "http://127.0.0.1:1/v1" // nothing listens there
+	resp = fbPost(t, gw, "mistral-large")
+	if resp.StatusCode != 200 || resp.Header.Get("X-Gateway-Fallback") != "mistral:error" {
+		t.Errorf("connexion refusée : status %d, repli %q", resp.StatusCode, resp.Header.Get("X-Gateway-Fallback"))
+	}
+}
+
+func TestFallbackForcedTargetAndProfile(t *testing.T) {
+	gw, oai, g := fbSetup(t, true, busy)
+	if resp := fbPost(t, gw, "mistral/mistral-large"); resp.StatusCode != 503 || len(oai.bodies) != 1 {
+		t.Errorf("cible imposée : status %d, %d tentative(s) (attendu 503, 1)", resp.StatusCode, len(oai.bodies))
+	}
+	p := g.C().Profiles["standard"]
+	p.Targets = slices.DeleteFunc(slices.Clone(p.Targets), func(n string) bool { return n == "openai" })
+	if resp := fbPost(t, gw, "mistral-large"); resp.StatusCode != 503 || len(oai.bodies) != 2 {
+		t.Errorf("repli hors profil : status %d, %d tentative(s) (attendu 503, 2)", resp.StatusCode, len(oai.bodies))
+	}
+}
+
+// After trip_after failures the target is set aside: its requests go straight to the fallback.
+// After the cooldown, one trial request brings it back.
+func TestFallbackSetAsideAndTrial(t *testing.T) {
+	healthy := false
+	gw, oai, g := fbSetup(t, true, func(w http.ResponseWriter) {
+		if !healthy {
+			busy(w)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"id":"x","choices":[{"index":0,"message":{"role":"assistant","content":"principal"},"finish_reason":"stop"}]}`)
+	})
+	fbPost(t, gw, "mistral-large")
+	fbPost(t, gw, "mistral-large") // 2nd failure: set aside
+	if st := g.fb.Snapshot()["mistral"]; st == nil || st["aside"] != true {
+		t.Fatalf("mistral non mise de côté : %v", g.fb.Snapshot())
+	}
+	before := len(oai.bodies)
+	resp := fbPost(t, gw, "mistral-large")
+	if resp.Header.Get("X-Gateway-Fallback") != "mistral:aside" || len(oai.bodies) != before+1 || !strings.Contains(oai.last(), `"model":"gpt-4o"`) {
+		t.Errorf("cible mise de côté encore tentée en premier : repli %q, %d tentative(s)", resp.Header.Get("X-Gateway-Fallback"), len(oai.bodies)-before)
+	}
+	healthy = true
+	time.Sleep(1100 * time.Millisecond) // cooldown over: the next request is the trial
+	resp = fbPost(t, gw, "mistral-large")
+	if resp.Header.Get("X-Gateway-Target") != "mistral/mistral-large" || resp.Header.Get("X-Gateway-Fallback") != "" || len(g.fb.Snapshot()) != 0 {
+		t.Errorf("essai : cible %q, repli %q, état %v", resp.Header.Get("X-Gateway-Target"), resp.Header.Get("X-Gateway-Fallback"), g.fb.Snapshot())
+	}
+}
+
+func TestFallbackConfig(t *testing.T) {
+	base, _ := os.ReadFile("config.example.toml")
+	parse := func(line, section string) (*Config, error) {
+		c := strings.Replace(string(base), `# fallback = ["grok/grok-4.7"]`, line, 1)
+		if section != "" {
+			c = strings.Replace(c, "trip_after = 3\n", section+"\n", 1)
+		}
+		return ParseConfig([]byte(c), ".")
+	}
+	c, err := parse(`fallback = ["grok/grok-4.7"]`, "")
+	if err != nil || len(c.Targets["deepseek"].fb) != 1 || c.Targets["deepseek"].fb[0] != (fbRef{"grok", "grok-4.7"}) || c.Fallback.Enabled {
+		t.Fatalf("repli valide refusé ou mal lu : %v %+v", err, c)
+	}
+	if c.Fallback.FirstByteTimeout != 30 || c.Fallback.TripAfter != 3 || c.Fallback.Cooldown != 300 {
+		t.Errorf("valeurs par défaut : %+v", c.Fallback)
+	}
+	if c, err := parse(`fallback = []`, "trip_after = 0"); err != nil || c.Fallback.TripAfter != 3 {
+		t.Errorf("trip_after = 0 doit valoir 3 : %v", err)
+	}
+	for _, bad := range []struct{ line, section, want string }{
+		{`fallback = ["grok"]`, "", "format cible/modèle"},
+		{`fallback = ["nope/x"]`, "", "cible inconnue"},
+		{`fallback = ["deepseek/deepseek-flash"]`, "", "son propre repli"},
+		{`fallback = ["anthropic/claude-x"]`, "", "format d'API différent"},
+		{`fallback = ["grok/gpt-4o"]`, "", "modèle non autorisé"},
+		{`fallback = ["grok/grok-4.7", "grok/grok-4.3"]`, "", "déjà listée"},
+		{`fallback = []`, "trip_after = -1", "trip_after doit être compris"},
+	} {
+		if _, err := parse(bad.line, bad.section); err == nil || !strings.Contains(err.Error(), bad.want) {
+			t.Errorf("%s %s : erreur %v, attendu « %s »", bad.line, bad.section, err, bad.want)
+		}
 	}
 }

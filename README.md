@@ -2,7 +2,7 @@
 
 [Version française](README.fr.md)
 
-Version **1.5.11** · [Apache-2.0 license](LICENSE) · [examples](examples/) · documentation in English: [administration](docs/en/index.html) and [chat user guide](docs/en/chat.html), also built in at `/docs/en/` once the gateway runs (French at `/docs/`) · release notes in [RELEASE_NOTES.md](RELEASE_NOTES.md) (French).
+Version **1.7.0** · [Apache-2.0 license](LICENSE) · [examples](examples/) · documentation in English: [administration](docs/en/index.html) and [chat user guide](docs/en/chat.html), also built in at `/docs/en/` once the gateway runs (French at `/docs/`) · release notes in [RELEASE_NOTES.md](RELEASE_NOTES.md) (French).
 
 LLMGW is a single point of entry between your users, agents and applications and the language models. It applies your AI policy: who may use which model, which data may leave, and with what traceability. Personal data (names, emails, phones, IBANs, national numbers, addresses, your own client and project lists…) is replaced by placeholders such as `«PERSON_1»` before the request leaves, and put back in the answer, streaming included. Clients keep their usual OpenAI or Anthropic SDK: only the URL and the key change.
 
@@ -138,7 +138,7 @@ At startup, the log shows the redirect URI of each provider. The Alerts and SSO 
 
 ## How it works
 
-**Routing.** The key identifies the user, the user has a profile, and the profile lists the allowed targets in order of preference. The gateway uses the first target that accepts the API format and the model. On a network error, a 5xx or a 429, the next one takes over. Model aliases per target (`claude-*` → `deepseek-flash`) and a `json_schema` → `json_object` downgrade are available for providers that need them.
+**Routing.** The key identifies the user, the user has a profile, and the profile lists the allowed targets in order of preference. The gateway uses the first target that accepts the API format and the model. On a network error, a 5xx or a 429, the next one takes over. As an option (`[fallback]`, off by default), a target declares fallbacks to another model (`fallback = ["grok/grok-4.7"]`), also tried when it does not answer in time; a target that keeps failing is set aside, then brought back by a trial request. The `X-Gateway-Fallback` header gives the reason for the fallback. Model aliases per target (`claude-*` → `deepseek-flash`) and a `json_schema` → `json_object` downgrade are available for providers that need them.
 
 **Anonymisation.** Detectors (`[[detectors]]`) find:
 - emails, phone numbers, IBANs, Belgian national numbers (NISS), INAMI / RIZIV numbers of healthcare providers (check key verified), cards and IP addresses;
@@ -253,6 +253,7 @@ An entry-level VPS core is slower than an M5 core: count on half these figures. 
 |---|---|
 | `main.go` | server, routes, hot reload, version |
 | `proxy.go` | authentication, routing, fallback, plain and SSE relay |
+| `fallback.go` | automatic fallback: per-target fallbacks, setting aside and trial request |
 | `anon.go` | detectors, anonymisation, restoration, images and files |
 | `names.go`, `context.go`, `places.go` | name, context and place heuristics |
 | `config.go` | configuration loading and validation |

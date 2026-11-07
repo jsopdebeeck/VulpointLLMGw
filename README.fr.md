@@ -2,7 +2,7 @@
 
 [English version](README.md)
 
-Version **1.5.11** · [licence Apache 2.0](LICENSE) · [exemples](examples/) (en anglais) · notes de version dans [RELEASE_NOTES.md](RELEASE_NOTES.md) · documentation intégrée sur `/docs/` (administration) et `/docs/chat.html` (guide utilisateur du chat), en anglais sur `/docs/en/`, sources dans [docs/](docs/).
+Version **1.7.0** · [licence Apache 2.0](LICENSE) · [exemples](examples/) (en anglais) · notes de version dans [RELEASE_NOTES.md](RELEASE_NOTES.md) · documentation intégrée sur `/docs/` (administration) et `/docs/chat.html` (guide utilisateur du chat), en anglais sur `/docs/en/`, sources dans [docs/](docs/).
 
 <p align="center"><img src="docs/img/architecture-fr.svg" alt="Architecture de LLMGW : utilisateurs, agents et applications de la zone de confiance ne joignent les LLM que par la passerelle, en bordure de zone ; les accès directs vers Internet sont bloqués" width="100%"></p>
 
@@ -102,7 +102,7 @@ Au démarrage, le journal rappelle l'adresse de retour de chaque fournisseur. La
 
 ## Fonctionnement
 
-**Routage.** La clé identifie l'utilisateur, l'utilisateur a un profil, le profil liste les cibles autorisées dans l'ordre de préférence. La première cible qui accepte le format d'API et le modèle est utilisée. En cas d'erreur réseau, 5xx ou 429, la suivante prend le relais.
+**Routage.** La clé identifie l'utilisateur, l'utilisateur a un profil, le profil liste les cibles autorisées dans l'ordre de préférence. La première cible qui accepte le format d'API et le modèle est utilisée. En cas d'erreur réseau, 5xx ou 429, la suivante prend le relais. En option (`[fallback]`, désactivée par défaut), une cible déclare des replis vers un autre modèle (`fallback = ["grok/grok-4.7"]`), tentés aussi quand elle ne répond pas à temps ; une cible en échec répété est mise de côté puis rétablie par une requête d'essai. Le motif du repli est donné par l'en-tête `X-Gateway-Fallback`.
 
 **Anonymisation.** Les détecteurs (`[[detectors]]`) repèrent emails, téléphones, IBAN, NISS, numéros INAMI / RIZIV des prestataires de soins (clé vérifiée), cartes, IP, noms précédés d'un titre, listes de noms ou d'entreprises et motifs personnalisés (numéros de dossier, identifiants…). Selon le profil, chaque type est :
 - `anonymize` : remplacé par `«TYPE_n»`, puis restauré dans la réponse ;
@@ -178,6 +178,7 @@ Un cœur de VPS d'entrée de gamme est plus lent qu'un cœur M5 : comptez la moi
 |---|---|
 | `main.go` | serveur, routes, rechargement à chaud, version |
 | `proxy.go` | authentification, routage, repli, relais normal et SSE |
+| `fallback.go` | repli automatique : replis déclarés par cible, mise de côté et requête d'essai |
 | `anon.go` | détecteurs, anonymisation, restauration, images et fichiers |
 | `names.go`, `context.go`, `places.go` | heuristiques de noms, de contexte et de lieux |
 | `config.go` | chargement et validation de la configuration |

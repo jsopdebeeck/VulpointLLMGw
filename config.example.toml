@@ -66,6 +66,7 @@ api_key_env = "DEEPSEEK_API_KEY"
 models = ["deepseek-flash", "deepseek-v4-pro"]
 stream_usage = true
 downgrade_json_schema = true
+# fallback = ["grok/grok-4.7"]            # repli automatique : cible/modèle, dans l'ordre (voir [fallback])
 
 [targets.grok]
 api = "openai"
@@ -95,6 +96,21 @@ allow = ["Claude", "Claude Code", "GitHub", "Anthropic", "OpenAI", "Mistral"]
 enabled = false
 retention_hours = 24      # purge automatique
 max_kb = 1024             # taille max archivée par requête / réponse
+
+# ---------------------------------------------------------------- repli automatique
+# Option, désactivée par défaut. Une cible qui échoue (5xx, 429, erreur de connexion, pas de
+# réponse en first_byte_timeout_sec) passe la main aux replis qu'elle déclare (fallback = [...]
+# dans [targets.x]), seulement s'ils sont autorisés par le profil de l'utilisateur. Une cible
+# imposée par le client (cible/modèle) n'a pas de repli. Une cible qui échoue trip_after fois en
+# trip_window_sec est mise de côté cooldown_sec secondes, puis une requête d'essai la rétablit.
+# Le repli reçoit tout le contexte, à son tarif et sans le cache du premier fournisseur.
+
+[fallback]
+enabled = false
+first_byte_timeout_sec = 30
+trip_after = 3
+trip_window_sec = 60
+cooldown_sec = 300
 
 # ---------------------------------------------------------------- alertes
 # Récapitulatif par email (violations, quotas, erreurs LLM) toutes les interval_minutes,

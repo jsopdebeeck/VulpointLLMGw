@@ -20,6 +20,7 @@ type Config struct {
 	Users     map[string]*User    `toml:"users"`
 	Privacy   PrivacyCfg          `toml:"privacy"`
 	Debug     DebugCfg            `toml:"debug"`
+	Fallback  FallbackCfg         `toml:"fallback"`
 	Alerts    AlertsCfg           `toml:"alerts"`
 	Auth      AuthCfg             `toml:"auth"`
 	Admins    []*AdminAccount     `toml:"admins,omitempty"` // dashboard accounts (Admin / Support)
@@ -59,10 +60,27 @@ type Target struct {
 	DowngradeJSONSchema bool   `toml:"downgrade_json_schema,omitempty"`
 	Disabled            bool   `toml:"disabled,omitempty"`
 	Quota               *Quota `toml:"quota,omitempty"` // shared by all users of this target
+	// Fallback: "target/model" entries tried in order when this target fails
+	// (only with [fallback] enabled = true, and only for targets the user's profile allows).
+	Fallback []string `toml:"fallback,omitempty"`
 
 	key     string
 	pats    []*regexp.Regexp
 	aliasRe map[string]*regexp.Regexp // compiled once per configuration
+	fb      []fbRef                   // parsed Fallback
+}
+
+type fbRef struct{ target, model string }
+
+// FallbackCfg: automatic fallback, off by default. When on, a failing target (5xx, 429,
+// connection error, no answer within FirstByteTimeout) hands over to the fallbacks it declares,
+// and a target failing TripAfter times within TripWindow is set aside for Cooldown seconds.
+type FallbackCfg struct {
+	Enabled          bool `toml:"enabled"`
+	FirstByteTimeout int  `toml:"first_byte_timeout_sec,omitempty,omitzero"`
+	TripAfter        int  `toml:"trip_after,omitempty,omitzero"`
+	TripWindow       int  `toml:"trip_window_sec,omitempty,omitzero"`
+	Cooldown         int  `toml:"cooldown_sec,omitempty,omitzero"`
 }
 
 func globRe(pat string) *regexp.Regexp {
@@ -249,6 +267,9 @@ func ParseConfig(data []byte, base string) (*Config, error) {
 			t.aliasRe[pat] = globRe(pat)
 		}
 	}
+	if err := c.checkFallback(); err != nil {
+		return nil, err
+	}
 
 	c.allow = map[string]bool{}
 	for a := range defaultAllow {
@@ -372,6 +393,53 @@ func readWords(path string) ([]string, error) {
 		}
 	}
 	return out, sc.Err()
+}
+
+// checkFallback applies the defaults of [fallback] and checks every target's fallback list.
+func (c *Config) checkFallback() error {
+	f := &c.Fallback
+	for _, d := range []struct {
+		v      *int
+		def    int
+		key    string
+		lo, hi int
+	}{{&f.FirstByteTimeout, 30, "first_byte_timeout_sec", 1, 3600}, {&f.TripAfter, 3, "trip_after", 1, 1000},
+		{&f.TripWindow, 60, "trip_window_sec", 1, 86400}, {&f.Cooldown, 300, "cooldown_sec", 1, 86400}} {
+		if *d.v == 0 {
+			*d.v = d.def
+		}
+		if *d.v < d.lo || *d.v > d.hi {
+			return fmt.Errorf("repli : %s doit être compris entre %d et %d", d.key, d.lo, d.hi)
+		}
+	}
+	for n, t := range c.Targets {
+		t.fb = nil
+		seen := map[string]bool{}
+		for _, e := range t.Fallback {
+			e = strings.TrimSpace(e)
+			i := strings.Index(e, "/")
+			if i <= 0 || i == len(e)-1 || strings.ContainsAny(e, " \t") {
+				return fmt.Errorf("target %q : repli %q : format cible/modèle attendu (ex. grok/grok-4.7)", n, e)
+			}
+			tn, m := e[:i], e[i+1:]
+			ft := c.Targets[tn]
+			switch {
+			case ft == nil:
+				return fmt.Errorf("target %q : repli %q : cible inconnue %q", n, e, tn)
+			case tn == n:
+				return fmt.Errorf("target %q : repli %q : une cible ne peut pas être son propre repli", n, e)
+			case ft.API != t.API:
+				return fmt.Errorf("target %q : repli %q : format d'API différent (%s / %s)", n, e, t.API, ft.API)
+			case !ft.Allows(m):
+				return fmt.Errorf("target %q : repli %q : modèle non autorisé sur la cible %q", n, e, tn)
+			case seen[tn]:
+				return fmt.Errorf("target %q : repli %q : cible %q déjà listée", n, e, tn)
+			}
+			seen[tn] = true
+			t.fb = append(t.fb, fbRef{tn, m})
+		}
+	}
+	return nil
 }
 
 func checkQuota(q *Quota) error {

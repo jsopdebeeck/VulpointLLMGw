@@ -266,6 +266,7 @@ const fmt = n => { n = +n || 0; return Math.abs(n) >= 1e4 ? nfLong.format(n) : n
 const nfBytes = ["byte", "kilobyte", "megabyte", "gigabyte", "terabyte"].map(unit => new Intl.NumberFormat(I18N.loc, { style: "unit", unit, unitDisplay: "short", maximumFractionDigits: 1 }));
 const fmtB = n => { n = +n || 0; let i = 0; while (n >= 1000 && i < 4) { n /= 1000; i++; } return nfBytes[i].format(n); };
 const fmtMs = n => n >= 10000 ? (n / 1000).toFixed(1) + " s" : Math.round(n) + " ms";
+const fmtPct = (a, b) => b > 0 ? Math.round(100 * a / b) + " %" : "—"; // share of input tokens served by the provider cache
 const SLOTS = ["--s1", "--s2", "--s3", "--s4", "--s5", "--s6", "--s7", "--s8"];
 const color = i => `var(${SLOTS[i % 8]})`;
 const KEEP = "__keep__";
@@ -393,14 +394,14 @@ function seriesBy(rows, kind, buckets, val) {
 // ---------- tables ----------
 function sumRows(rows) {
   const g = {};
-  rows.forEach(r => { const a = g[r.G] ||= { G: r.G, N: 0, Err: 0, BI: 0, BO: 0, TI: 0, TO: 0, SI: 0, SG: 0, SU: 0, ST: 0, An: 0, Bl: 0 };
+  rows.forEach(r => { const a = g[r.G] ||= { G: r.G, N: 0, Err: 0, BI: 0, BO: 0, TI: 0, TO: 0, TC: 0, FB: 0, SI: 0, SG: 0, SU: 0, ST: 0, An: 0, Bl: 0 };
     for (const k in a) if (k !== "G") a[k] += r[k]; });
   return Object.values(g).sort((a, b) => b.N - a.N);
 }
 function table(el, rows, kind) {
   if (!rows.length) { el.innerHTML = `<p class="sub">Aucune donnée sur la période.</p>`; return; }
-  el.innerHTML = `<table><thead><tr><th>${kind === "user" ? "Utilisateur" : kind === "client" ? "Application" : "LLM"}</th><th class="n">Requêtes</th><th class="n">Tokens in</th><th class="n">Tokens out</th><th class="n">Volume in/out</th><th class="n">Moy. totale</th><th class="n">Moy. LLM</th><th class="n">Moy. gateway</th><th class="n">Conv.</th><th class="n">Viol.</th><th class="n">Erreurs</th></tr></thead><tbody>` +
-    rows.map(r => { const ok = r.N - r.Bl || 1; return `<tr><td><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${colorOf(kind, r.G)};margin-right:8px"></i>${kind === "client" && !r.G ? "(avant agrégation)" : esc(r.G || "?")}</td><td class="n">${fmt(r.N)}</td><td class="n">${fmt(r.TI)}</td><td class="n">${fmt(r.TO)}</td><td class="n">${fmtB(r.BI)} / ${fmtB(r.BO)}</td><td class="n">${fmtMs(r.ST / r.N)}</td><td class="n">${fmtMs(r.SU / ok)}</td><td class="n">${fmtMs(r.SG / r.N)}</td><td class="n">${fmt(r.An)}</td><td class="n">${r.Bl ? `<span class="badge bad">${fmt(r.Bl)}</span>` : "0"}</td><td class="n">${r.Err ? `<span class="badge warn">${fmt(r.Err)}</span>` : "0"}</td></tr>`; }).join("") + `</tbody></table>`;
+  el.innerHTML = `<table><thead><tr><th>${kind === "user" ? "Utilisateur" : kind === "client" ? "Application" : "LLM"}</th><th class="n">Requêtes</th><th class="n">Tokens in</th><th class="n">Tokens out</th><th class="n">Cache</th><th class="n">Volume in/out</th><th class="n">Moy. totale</th><th class="n">Moy. LLM</th><th class="n">Moy. gateway</th><th class="n">Conv.</th><th class="n">Viol.</th><th class="n">Erreurs</th></tr></thead><tbody>` +
+    rows.map(r => { const ok = r.N - r.Bl || 1; return `<tr><td><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${colorOf(kind, r.G)};margin-right:8px"></i>${kind === "client" && !r.G ? "(avant agrégation)" : esc(r.G || "?")}</td><td class="n">${fmt(r.N)}</td><td class="n">${fmt(r.TI)}</td><td class="n">${fmt(r.TO)}</td><td class="n">${fmtPct(r.TC, r.TI)}</td><td class="n">${fmtB(r.BI)} / ${fmtB(r.BO)}</td><td class="n">${fmtMs(r.ST / r.N)}</td><td class="n">${fmtMs(r.SU / ok)}</td><td class="n">${fmtMs(r.SG / r.N)}</td><td class="n">${fmt(r.An)}</td><td class="n">${r.Bl ? `<span class="badge bad">${fmt(r.Bl)}</span>` : "0"}</td><td class="n">${r.Err ? `<span class="badge warn">${fmt(r.Err)}</span>` : "0"}</td></tr>`; }).join("") + `</tbody></table>`;
 }
 const ACT = { anonymize: ["conv", "anonymisé"], strip: ["conv", "retiré"], block: ["bad", "bloqué"], log: ["warn", "journalisé"], pass: ["ok", "laissé passer"] };
 function detTable(el, dets) {
@@ -411,10 +412,10 @@ function detTable(el, dets) {
 }
 function recentTable(el, rec) {
   if (!rec?.length) { el.innerHTML = `<p class="sub">Aucune requête pour l'instant.</p>`; return; }
-  el.innerHTML = `<table><thead><tr><th>Heure</th><th>Utilisateur</th><th>Application</th><th>LLM</th><th>Modèle</th><th class="n">Statut</th><th class="n">Tokens</th><th class="n">Total</th><th class="n">LLM</th><th class="n">Gateway</th><th class="n">Conv.</th><th>Remarque</th></tr></thead><tbody>` +
+  el.innerHTML = `<table><thead><tr><th>Heure</th><th>Utilisateur</th><th>Application</th><th>LLM</th><th>Modèle</th><th class="n">Statut</th><th class="n">Tokens</th><th class="n">Cache</th><th class="n">Total</th><th class="n">LLM</th><th class="n">Gateway</th><th class="n">Conv.</th><th>Remarque</th></tr></thead><tbody>` +
     rec.map(r => `<tr><td>${new Date(r.TS * 1000).toLocaleString(I18N.loc, { dateStyle: "short", timeStyle: "medium" })}</td><td>${esc(r.User)}</td><td>${esc(r.Client || "—")}</td><td>${esc(r.Target)}</td><td>${esc(r.Model)}${r.Stream ? " ⇢" : ""}</td>
       <td class="n">${r.Blocked ? `<span class="badge bad">${r.Status}</span>` : r.Status >= 400 || !r.Status ? `<span class="badge warn">${r.Status}</span>` : r.Status}</td>
-      <td class="n">${fmt(r.TokIn)} / ${fmt(r.TokOut)}</td><td class="n">${fmtMs(r.TotalMs)}</td><td class="n">${fmtMs(r.UpMs)}</td><td class="n">${fmtMs(r.GwMs)}</td><td class="n">${r.Anon}</td><td class="err">${esc(r.Err)}</td></tr>`).join("") + `</tbody></table>`;
+      <td class="n">${fmt(r.TokIn)} / ${fmt(r.TokOut)}</td><td class="n">${fmtPct(r.TokCache, r.TokIn)}</td><td class="n">${fmtMs(r.TotalMs)}</td><td class="n">${fmtMs(r.UpMs)}</td><td class="n">${fmtMs(r.GwMs)}</td><td class="n">${r.Anon}</td><td class="err" title="${esc(r.Err)}">${r.Fallback ? '<span class="badge warn">repli</span> ' : ""}${esc(r.Fallback || r.Err)}</td></tr>`).join("") + `</tbody></table>`;
 }
 
 
@@ -845,7 +846,7 @@ function viewTargets() {
         <span class="chev" aria-hidden="true">▸</span>
         <span class="ldot ${st[0]}" title="${esc(st[1])}" role="img" aria-label="${esc(st[1])}"></span>
         <h3 class="pname ${used ? "on" : "off"}">${esc(n)}</h3>
-        <span class="badge" style="${st[0] === "ko" ? "color:var(--critical)" : st[0] === "ok" ? "" : "color:var(--muted)"}">${esc(st[1])}</span>
+        <span class="badge" style="${st[0] === "ko" ? "color:var(--critical)" : st[0] === "ok" ? "" : "color:var(--muted)"}">${esc(st[1])}</span>${S.fbst?.enabled && S.fbst.targets?.[n]?.aside ? '<span class="badge warn">mise de côté</span>' : ""}
         <span class="psum"><span translate="no">${esc(sum)}</span> · ${sumP}</span>
         <button class="btn" data-act="tgt-test" data-n="${esc(n)}" ${saved && !t.Disabled ? "" : 'disabled title="Enregistrer d\'abord"'}>Tester</button>
         <button class="icon" data-act="tgt-del" data-n="${esc(n)}" title="Supprimer la cible">✕</button>
@@ -856,6 +857,7 @@ function viewTargets() {
         <label>URL de base</label><input class="w100 mono" data-bind="${b}BaseURL" value="${esc(t.BaseURL)}" placeholder="${t.API === "anthropic" ? "https://api.anthropic.com" : "https://…/v1"}">
         <label>Modèles autorisés<br><span class="sub">séparés par des virgules, * accepté</span></label><input class="w100 mono" data-type="list" data-bind="${b}Models" value="${esc((t.Models || []).join(", "))}">
         <label>Alias de modèles<br><span class="sub">« demandé : envoyé », * accepté</span></label><textarea class="w100 mono" style="min-height:44px" data-type="kv" data-bind="${b}Aliases" placeholder="claude-* : deepseek-flash">${esc(Object.entries(t.Aliases || {}).map(([k, v]) => k + ": " + v).join("\n"))}</textarea>
+        <label>Repli automatique<br><span class="sub">cible/modèle, dans l'ordre, séparés par des virgules</span></label><input class="w100 mono" data-type="list" data-bind="${b}Fallback" value="${esc((t.Fallback || []).join(", "))}" placeholder="grok/grok-4.7">
         <label>Clé : variable d'env.</label><input class="w100 mono" data-bind="${b}APIKeyEnv" value="${esc(t.APIKeyEnv)}" placeholder="ex. MISTRAL_API_KEY (recommandé)">
         <label>Clé : valeur directe</label><input class="w100 mono" type="password" autocomplete="new-password" data-type="secret" ${t.APIKey === KEEP ? "data-had=1" : ""} data-bind="${b}APIKey" value="${t.APIKey === KEEP ? "" : esc(t.APIKey)}" placeholder="${t.APIKey === KEEP ? "enregistrée (vide = conserver)" : "écrite dans config.toml"}">
         <label>État</label><div>${keyState}</div>
@@ -865,11 +867,25 @@ function viewTargets() {
         <label>Connexion</label><div>${test || '<span class="sub">« Tester » interroge /models avec la clé enregistrée</span>'}</div>
       </div>` : ""}</div>`;
   }).join("");
-  return `<section><div class="chead"><div><h2 style="font-size:15px;margin:0">Gateways de sortie : LLM cibles</h2><div class="sub">OpenAI, Mistral, Azure, Ollama, vLLM, LM Studio… au format OpenAI ; Claude au format Anthropic. Un client OpenAI n'est routé que vers des cibles OpenAI, et inversement.</div></div><span class="spacer"></span><button class="btn primary" data-act="tgt-add">+ Cible</button></div>
+  return viewFallback() + `<section><div class="chead"><div><h2 style="font-size:15px;margin:0">Gateways de sortie : LLM cibles</h2><div class="sub">OpenAI, Mistral, Azure, Ollama, vLLM, LM Studio… au format OpenAI ; Claude au format Anthropic. Un client OpenAI n'est routé que vers des cibles OpenAI, et inversement.</div></div><span class="spacer"></span><button class="btn primary" data-act="tgt-add">+ Cible</button></div>
     <div style="display:flex;gap:8px;margin:-4px 0 10px;flex-wrap:wrap;align-items:center"><button class="btn" data-act="tgt-all" data-v="1">Tout déplier</button><button class="btn" data-act="tgt-all" data-v="0">Tout replier</button><button class="btn" data-act="tgt-testall">Tout retester</button>
       <span class="sub" style="margin:0 0 0 8px"><span class="ldot ok" style="display:inline-block;vertical-align:-1px"></span> connectée · <span class="ldot ko" style="display:inline-block;vertical-align:-1px"></span> injoignable ou clé refusée · <span class="ldot" style="display:inline-block;vertical-align:-1px"></span> désactivée ou non testée · nom <b style="color:var(--good)">vert</b> : utilisée par un profil</span></div>
     <div class="plist">${cards || '<p class="sub">Aucune cible</p>'}</div></section>`;
 }
+// automatic fallback (option): settings and targets currently set aside
+function viewFallback() {
+  const F = S.cfg.Fallback || {}, saved = S.meta.config.Fallback?.Enabled, st = S.fbst?.targets || {};
+  const until = u => new Date(u * 1000).toLocaleTimeString(I18N.loc, { hour: "2-digit", minute: "2-digit" });
+  const state = !S.fbst?.enabled ? '<span class="sub">repli automatique inactif</span>' : !Object.keys(st).length ? '<span class="sub">aucune cible mise de côté</span>'
+    : Object.entries(st).map(([n, x]) => `<span class="badge warn"><span translate="no">${esc(n)}</span> · <span>${x.aside ? `mise de côté jusqu'à ${until(x.until)}` : "en essai"}</span></span>`).join(" ");
+  return `<section class="card"><div class="chead"><div><h2>Repli automatique</h2><div class="sub">Option, désactivée par défaut. Une cible qui échoue (5xx, 429, erreur de connexion, pas de réponse dans le délai) passe la main aux replis qu'elle déclare, si le profil de l'utilisateur les autorise. Une cible imposée par le client (cible/modèle) n'a pas de repli.</div></div><span class="spacer"></span>
+      ${saved ? '<span class="badge ok">actif</span>' : '<span class="badge">inactif</span>'}</div>
+    <div class="fields" style="max-width:680px"><label>Activer</label><label><input type="checkbox" data-bind="Fallback|Enabled" ${F.Enabled ? "checked" : ""} data-rerender> basculer vers les replis des cibles ${!!F.Enabled !== !!saved ? '<span class="badge warn">à enregistrer</span>' : ""}</label>
+      <label>Délai de réponse</label><div><input class="num" style="width:70px" data-type="num" data-bind="Fallback|FirstByteTimeout" value="${F.FirstByteTimeout || 30}"> <span>secondes sans réponse avant la cible suivante</span></div>
+      <label>Mise de côté</label><div><span>après</span> <input class="num" style="width:60px" data-type="num" data-bind="Fallback|TripAfter" value="${F.TripAfter || 3}"> <span>échecs en</span> <input class="num" style="width:70px" data-type="num" data-bind="Fallback|TripWindow" value="${F.TripWindow || 60}"> <span>secondes, pendant</span> <input class="num" style="width:70px" data-type="num" data-bind="Fallback|Cooldown" value="${F.Cooldown || 300}"> <span>secondes, puis une requête d'essai</span></div>
+      <label>État</label><div>${state}</div></div></section>`;
+}
+async function loadFallback() { try { S.fbst = await api("/admin/api/fallback"); if (S.tab === "targets") render(); } catch {} }
 // test every saved, enabled target (at most once a minute unless forced)
 async function testTargets(force) {
   const names = Object.keys(S.meta.config.Targets || {}).filter(n => !S.meta.config.Targets[n].Disabled && (force || !S.tests[n] || Date.now() - (S.tests[n].at || 0) > 60000));
@@ -977,12 +993,12 @@ document.addEventListener("click", e => {
 function drawReport() {
   if (!data || S.tab !== "report" || !$("#kpis")) return;
   document.querySelectorAll("#ranges button").forEach(x => x.setAttribute("aria-pressed", x.dataset.r === range));
-  const d = data, B = d.buckets, all = d.all || [], tot = sumRows(all)[0] || { N: 0, Err: 0, BI: 0, BO: 0, TI: 0, TO: 0, SI: 0, SG: 0, SU: 0, ST: 0, An: 0, Bl: 0 };
+  const d = data, B = d.buckets, all = d.all || [], tot = sumRows(all)[0] || { N: 0, Err: 0, BI: 0, BO: 0, TI: 0, TO: 0, TC: 0, FB: 0, SI: 0, SG: 0, SU: 0, ST: 0, An: 0, Bl: 0 };
   const ok = tot.N - tot.Bl || 1, p = d.pct || {};
   const kpi = (l, v, s = "") => `<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${s}</div></div>`;
   $("#kpis").innerHTML =
-    kpi("Requêtes", fmt(tot.N), `${fmt(tot.Err)} erreurs`) +
-    kpi("Tokens", fmt(tot.TI + tot.TO), `${fmt(tot.TI)} in · ${fmt(tot.TO)} out`) +
+    kpi("Requêtes", fmt(tot.N), `${fmt(tot.Err)} erreurs · ${fmt(tot.FB)} repli(s)`) +
+    kpi("Tokens", fmt(tot.TI + tot.TO), `${fmt(tot.TI)} in · ${fmt(tot.TO)} out · cache ${fmtPct(tot.TC, tot.TI)}`) +
     kpi("Volume", fmtB(tot.BI + tot.BO), `${fmtB(tot.BI)} in · ${fmtB(tot.BO)} out`) +
     kpi("Temps total moy.", tot.N ? fmtMs(tot.ST / tot.N) : "—", p.total_ms_p95 != null ? `p50 ${fmtMs(p.total_ms_p50)} · p95 ${fmtMs(p.total_ms_p95)}` : "") +
     kpi("LLM cible moy.", tot.N ? fmtMs(tot.SU / ok) : "—", p.ttfb_ms_p50 != null ? `1er octet p50 ${fmtMs(p.ttfb_ms_p50)}` : "") +
@@ -1140,7 +1156,7 @@ function quotaAlerts() {
 }
 function viewOverview() {
   const d = S.ov, saved = S.meta.config, c = S.cfg;
-  const tot = (d && sumRows(d.all || [])[0]) || { N: 0, Err: 0, TI: 0, TO: 0, SU: 0, An: 0, Bl: 0 };
+  const tot = (d && sumRows(d.all || [])[0]) || { N: 0, Err: 0, TI: 0, TO: 0, TC: 0, FB: 0, SU: 0, An: 0, Bl: 0 };
   const ok = tot.N - tot.Bl || 1;
   const kpi = (l, v, s = "") => `<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${s}</div></div>`;
   const items = [];
@@ -1181,8 +1197,8 @@ function viewOverview() {
       <td class="n">${r.Blocked ? `<span class="badge bad">${r.Status}</span>` : r.Status >= 400 || !r.Status ? `<span class="badge warn">${r.Status}</span>` : r.Status}</td><td class="n">${r.Anon || ""}</td></tr>`).join("");
   const top = sumRows(d?.user || []).slice(0, 5).map(r => `<tr><td>${esc(r.G)}</td><td class="n">${fmt(r.N)}</td><td class="n">${fmt(r.TI + r.TO)}</td><td class="n">${fmt(r.An)}</td><td class="n">${r.Bl ? `<span class="badge bad">${r.Bl}</span>` : "0"}</td></tr>`).join("");
   return `<section class="kpis">
-      ${kpi("Requêtes (48 h)", fmt(tot.N), `${fmt(tot.Err)} erreur(s)`)}
-      ${kpi("Tokens", fmt(tot.TI + tot.TO), `${fmt(tot.TI)} in · ${fmt(tot.TO)} out`)}
+      ${kpi("Requêtes (48 h)", fmt(tot.N), `${fmt(tot.Err)} erreur(s) · ${fmt(tot.FB)} repli(s)`)}
+      ${kpi("Tokens", fmt(tot.TI + tot.TO), `${fmt(tot.TI)} in · ${fmt(tot.TO)} out · cache ${fmtPct(tot.TC, tot.TI)}`)}
       ${kpi("LLM cible moy.", tot.N ? fmtMs(tot.SU / ok) : "—", "temps de réponse")}
       ${kpi("Conversions", fmt(tot.An), "valeurs pseudonymisées")}
       ${kpi("Violations", tot.Bl ? `<span style="color:var(--critical)">${fmt(tot.Bl)}</span>` : "0", "requêtes bloquées")}
@@ -1301,7 +1317,7 @@ async function go(tab) {
   if (tab === "filelog") { await loadFileLog(); render(); }
   if (tab === "security") await loadSecurity();
   if (tab === "access") await loadAccess();
-  if (tab === "targets") testTargets(false);
+  if (tab === "targets") { loadFallback(); testTargets(false); }
   if (tab === "overview") { await Promise.all([loadOverview(), loadUsage()]); render(); }
   if (tab === "debug") { await loadDebug(); render(); }
   if (tab === "privacy") { try { S.learned = (await api("/admin/api/learned")).count; render(); } catch {} }

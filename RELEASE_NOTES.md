@@ -2,6 +2,40 @@
 
 Le numéro suit le schéma `majeur.mineur.correctif`. La version en cours s'affiche en bas du menu du dashboard, dans l'en-tête de connexion du chat, sur `GET /version` et avec `./llmgw -version`.
 
+## 1.7.0 (7 novembre 2026)
+
+Repli automatique vers un autre modèle, en option, désactivé par défaut. La base est migrée au démarrage (colonnes `requests.fallback` et `daily.fallbacks`). Sans `[fallback]` ou avec `enabled = false`, le routage reste celui de la 1.6.0. Un retour au binaire 1.6.0 fonctionne sans toucher la base : les nouvelles colonnes sont ignorées.
+
+### Repli automatique (`[fallback]`)
+- Une cible déclare ses replis, dans l'ordre, au format `cible/modèle` : `fallback = ["grok/grok-4.7"]` dans `[targets.deepseek]`. Le repli n'est tenté qu'après les cibles du profil qui servent le modèle demandé.
+- Déclencheurs : erreur 5xx, 429, erreur de connexion, ou pas d'en-têtes de réponse en `first_byte_timeout_sec` (30 s par défaut). La dernière cible tentée garde le délai complet `upstream_timeout_sec`.
+- Limites : un repli n'est utilisé que si le profil de l'utilisateur autorise sa cible, si elle est active et si elle a le même format d'API. Une cible imposée par le client (`deepseek/deepseek-flash`) n'a pas de repli. La requête envoyée au repli est la même, déjà pseudonymisée ; la restauration de la réponse est inchangée.
+- Mise de côté : une cible qui échoue `trip_after` fois (3) en `trip_window_sec` (60 s) est mise de côté `cooldown_sec` (300 s). Ses requêtes vont directement au repli ; elle reste tentée en dernier si tout le reste échoue. À la fin du délai, une seule requête d'essai la rétablit si elle aboutit. L'état est en mémoire et repart à zéro au redémarrage.
+- La configuration est vérifiée au chargement : cible inconnue, repli vers soi-même, format d'API différent, modèle non autorisé par la cible, doublon et bornes des délais sont refusés avec un message.
+- Le repli reçoit tout le contexte, à son propre tarif et sans le cache du premier fournisseur.
+
+### Traçabilité
+- En-tête `X-Gateway-Fallback` sur la réponse et colonne `fallback` en base : pourquoi la première cible n'a pas répondu (`deepseek:503`, `deepseek:timeout`, `deepseek:error`, `deepseek:quota`, `deepseek:aside`).
+- Ces métadonnées s'appliquent aussi aux bascules qui existaient déjà, option désactivée : une requête servie par une autre cible que la première du profil (panne, quota de la cible) est désormais marquée comme repli. Le routage, lui, ne change pas.
+- Journal : `fallback=<motifs>→<cible>` en fin de ligne ; mise de côté et rétablissement d'une cible journalisés.
+- Alertes : type « Repli (cible mise de côté) » dans le récapitulatif, soumis à `on_error`.
+- Dashboard : carte « Repli automatique » en tête de la page LLM cibles (activation, délais, cibles mises de côté), champ « Repli automatique » dans chaque cible, badge « mise de côté », nombre de replis dans l'indicateur Requêtes, motif dans les requêtes récentes. Route `GET /admin/api/fallback` pour l'état courant.
+
+## 1.6.0 (6 novembre 2026)
+
+Tirée de la lecture des journaux d'une passerelle en service sous Hermes. La base est migrée au démarrage (colonne `tok_cache`), sans réglage à changer.
+
+### Cache du fournisseur
+- Les tokens d'entrée servis par le cache du fournisseur sont relevés : `prompt_cache_hit_tokens` (DeepSeek), `prompt_tokens_details.cached_tokens` (OpenAI, xAI et compatibles), `cache_read_input_tokens` (Anthropic). Ils font partie des tokens in.
+- Dashboard : part du cache dans l'indicateur Tokens, colonne Cache dans les tableaux par utilisateur, par LLM et par application, et dans les requêtes récentes. La part est conservée dans les agrégats journaliers.
+- Journal : `cache=N` après `tok=in/out`.
+
+### Correction
+- Flux : un client qui raccroche après la fin de la réponse (`[DONE]`, `message_stop`), comme le fait Hermes, n'est plus compté en erreur `stream:context canceled`. La réponse était complète. Une coupure avant la fin reste une erreur.
+
+### Repli
+- Un modèle servi par un seul fournisseur (`deepseek-flash`) peut recevoir une cible de repli par un alias sur une cible suivante du profil, par exemple `aliases = { "deepseek-flash" = "grok-4.3" }` sur `grok`. Le mécanisme existait, un test le couvre désormais et la documentation le décrit. La cible de repli reçoit tout le contexte, à son propre tarif et sans le cache du premier fournisseur.
+
 ## 1.5.11 (3 novembre 2026)
 
 Aucun réglage à changer.

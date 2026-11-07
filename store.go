@@ -19,6 +19,8 @@ type Rec struct {
 	Status                            int
 	Stream                            bool
 	BytesIn, BytesOut, TokIn, TokOut  int64
+	TokCache                          int64  // input tokens served by the provider's prompt cache (part of TokIn)
+	Fallback                          string // answered by another target than the first: why (deepseek:503…)
 	InMs, GwMs, UpMs, TtfbMs, TotalMs int64
 	Anon, Blocked                     int
 	Dets                              map[string]map[string]int
@@ -57,6 +59,17 @@ func OpenStore(path string) (*Store, error) {
 		return nil, err
 	}
 	if err := addColumn(db, "requests", "client", "TEXT NOT NULL DEFAULT ''"); err != nil { // 1.5.0
+		return nil, err
+	}
+	for _, t := range []string{"requests", "daily"} { // 1.6.0
+		if err := addColumn(db, t, "tok_cache", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+			return nil, err
+		}
+	}
+	if err := addColumn(db, "requests", "fallback", "TEXT NOT NULL DEFAULT ''"); err != nil { // 1.7.0
+		return nil, err
+	}
+	if err := addColumn(db, "daily", "fallbacks", "INTEGER NOT NULL DEFAULT 0"); err != nil {
 		return nil, err
 	}
 	// the database holds the session signing key and the Debug archive: owner only
@@ -167,9 +180,9 @@ func (s *Store) flushOnce(batch []*Rec) error {
 	for _, r := range batch {
 		ts := r.TS.Unix()
 		if _, err := tx.Exec(`INSERT INTO requests(ts,user,profile,target,model,api,status,stream,bytes_in,bytes_out,tok_in,tok_out,
-			in_ms,gw_ms,up_ms,ttfb_ms,total_ms,anon,blocked,err,client) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+			in_ms,gw_ms,up_ms,ttfb_ms,total_ms,anon,blocked,err,client,tok_cache,fallback) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 			ts, r.User, r.Profile, r.Target, r.Model, r.API, r.Status, r.Stream, r.BytesIn, r.BytesOut, r.TokIn, r.TokOut,
-			r.InMs, r.GwMs, r.UpMs, r.TtfbMs, r.TotalMs, r.Anon, r.Blocked, r.Err, r.Client); err != nil {
+			r.InMs, r.GwMs, r.UpMs, r.TtfbMs, r.TotalMs, r.Anon, r.Blocked, r.Err, r.Client, r.TokCache, r.Fallback); err != nil {
 			return err
 		}
 		for kind, acts := range r.Dets {
@@ -196,14 +209,15 @@ func (s *Store) Rollup(rawDays, aggDays int) error {
 		q    string
 		args []any
 	}{
-		{`INSERT INTO daily SELECT date(ts,'unixepoch','localtime'), user, target, COUNT(*), SUM(` + errExpr + `),
+		{`INSERT INTO daily(day,user,target,requests,errors,bytes_in,bytes_out,tok_in,tok_out,sum_in,sum_gw,sum_up,sum_total,
+			anon,blocked,tok_cache,fallbacks) SELECT date(ts,'unixepoch','localtime'), user, target, COUNT(*), SUM(` + errExpr + `),
 			SUM(bytes_in), SUM(bytes_out), SUM(tok_in), SUM(tok_out), SUM(in_ms), SUM(gw_ms), SUM(up_ms), SUM(total_ms),
-			SUM(anon), SUM(blocked) FROM requests WHERE ts < ? GROUP BY 1,2,3
+			SUM(anon), SUM(blocked), SUM(tok_cache), SUM(fallback != '') FROM requests WHERE ts < ? GROUP BY 1,2,3
 			ON CONFLICT(day,user,target) DO UPDATE SET requests=requests+excluded.requests, errors=errors+excluded.errors,
 			bytes_in=bytes_in+excluded.bytes_in, bytes_out=bytes_out+excluded.bytes_out, tok_in=tok_in+excluded.tok_in,
 			tok_out=tok_out+excluded.tok_out, sum_in=sum_in+excluded.sum_in, sum_gw=sum_gw+excluded.sum_gw,
 			sum_up=sum_up+excluded.sum_up, sum_total=sum_total+excluded.sum_total, anon=anon+excluded.anon,
-			blocked=blocked+excluded.blocked`, []any{cut}},
+			blocked=blocked+excluded.blocked, tok_cache=tok_cache+excluded.tok_cache, fallbacks=fallbacks+excluded.fallbacks`, []any{cut}},
 		{`DELETE FROM requests WHERE ts < ?`, []any{cut}},
 		{`INSERT INTO daily_det SELECT date(ts,'unixepoch','localtime'), user, target, kind, action, SUM(n)
 			FROM detections WHERE ts < ? GROUP BY 1,2,3,4,5
@@ -264,6 +278,8 @@ type Row struct {
 	B, G                                   string
 	N, Err, BI, BO, TI, TO, SI, SG, SU, ST int64
 	An, Bl                                 int64
+	TC                                     int64 // input tokens served by the provider's cache
+	FB                                     int64 // requests answered through a fallback
 }
 
 // rows groups by grp; the daily aggregates have no client column: their part is grouped
@@ -273,12 +289,12 @@ func (s *Store) rows(rd rangeDef, grp, grpDaily string, since time.Time) ([]Row,
 	if rd.raw {
 		daily = 0
 	}
-	q := fmt.Sprintf(`SELECT b, g, SUM(n), SUM(er), SUM(bi), SUM(bo), SUM(ti), SUM(tt), SUM(si), SUM(sg), SUM(su), SUM(st), SUM(an), SUM(bl) FROM (
+	q := fmt.Sprintf(`SELECT b, g, SUM(n), SUM(er), SUM(bi), SUM(bo), SUM(ti), SUM(tt), SUM(si), SUM(sg), SUM(su), SUM(st), SUM(an), SUM(bl), SUM(tc), SUM(fb) FROM (
 		SELECT strftime('%[1]s', ts, 'unixepoch', 'localtime') b, %[2]s g, 1 n, %[3]s er, bytes_in bi, bytes_out bo, tok_in ti, tok_out tt,
-		  in_ms si, gw_ms sg, up_ms su, total_ms st, anon an, blocked bl FROM requests WHERE ts >= ?
+		  in_ms si, gw_ms sg, up_ms su, total_ms st, anon an, blocked bl, tok_cache tc, fallback != '' fb FROM requests WHERE ts >= ?
 		UNION ALL
 		SELECT strftime('%[1]s', day) b, %[4]s g, requests, errors, bytes_in, bytes_out, tok_in, tok_out,
-		  sum_in, sum_gw, sum_up, sum_total, anon, blocked FROM daily WHERE day >= ? AND ?
+		  sum_in, sum_gw, sum_up, sum_total, anon, blocked, tok_cache, fallbacks FROM daily WHERE day >= ? AND ?
 	) GROUP BY b, g ORDER BY b, g`, rd.sqlFmt, grp, errExpr, grpDaily)
 	rs, err := s.db.Query(q, since.Unix(), since.Format("2006-01-02"), daily)
 	if err != nil {
@@ -288,7 +304,7 @@ func (s *Store) rows(rd rangeDef, grp, grpDaily string, since time.Time) ([]Row,
 	var out []Row
 	for rs.Next() {
 		var r Row
-		if err := rs.Scan(&r.B, &r.G, &r.N, &r.Err, &r.BI, &r.BO, &r.TI, &r.TO, &r.SI, &r.SG, &r.SU, &r.ST, &r.An, &r.Bl); err != nil {
+		if err := rs.Scan(&r.B, &r.G, &r.N, &r.Err, &r.BI, &r.BO, &r.TI, &r.TO, &r.SI, &r.SG, &r.SU, &r.ST, &r.An, &r.Bl, &r.TC, &r.FB); err != nil {
 			return nil, err
 		}
 		out = append(out, r)
@@ -374,17 +390,19 @@ func (s *Store) Stats(rng string) (map[string]any, error) {
 		Status                             int
 		Stream                             bool
 		TokIn, TokOut, TotalMs, UpMs, GwMs int64
+		TokCache                           int64
+		Fallback                           string
 		Anon, Blocked                      int
 	}
 	var rec []recent
-	rs, err = s.db.Query(`SELECT ts, user, target, model, err, status, stream, tok_in, tok_out, total_ms, up_ms, gw_ms, anon, blocked, client
+	rs, err = s.db.Query(`SELECT ts, user, target, model, err, status, stream, tok_in, tok_out, total_ms, up_ms, gw_ms, anon, blocked, client, tok_cache, fallback
 		FROM requests ORDER BY id DESC LIMIT 50`)
 	if err != nil {
 		return nil, err
 	}
 	for rs.Next() {
 		var r recent
-		rs.Scan(&r.TS, &r.User, &r.Target, &r.Model, &r.Err, &r.Status, &r.Stream, &r.TokIn, &r.TokOut, &r.TotalMs, &r.UpMs, &r.GwMs, &r.Anon, &r.Blocked, &r.Client)
+		rs.Scan(&r.TS, &r.User, &r.Target, &r.Model, &r.Err, &r.Status, &r.Stream, &r.TokIn, &r.TokOut, &r.TotalMs, &r.UpMs, &r.GwMs, &r.Anon, &r.Blocked, &r.Client, &r.TokCache, &r.Fallback)
 		rec = append(rec, r)
 	}
 	rs.Close()

@@ -150,7 +150,7 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
 
 <div class="page">
   <nav class="toc" aria-label="Contents">
-    <a class="toc-brand" href="https://vulpoint.com" target="_blank" rel="noopener"><img src="../img/vulpoint-logo.jpg" alt="Vulpoint"><div><b>LLMGW</b><small>by Vulpoint.com · v1.5.11</small></div></a>
+    <a class="toc-brand" href="https://vulpoint.com" target="_blank" rel="noopener"><img src="../img/vulpoint-logo.jpg" alt="Vulpoint"><div><b>LLMGW</b><small>by Vulpoint.com · v1.7.0</small></div></a>
     <ol>
       <li><a href="../index.html" hreflang="fr" lang="fr"><span>FR</span>Version française</a></li>
     </ol>
@@ -214,7 +214,7 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
       <div class="eyebrow">Functional, technical and administration documentation</div>
       <h1>LLMGW, the organisation's AI gateway</h1>
       <p class="lede">A single connection point between users, agents and language models. It enforces the AI policy: who may use which model, which data may leave, and with what traceability.</p>
-      <div class="meta"><span><b>Version</b> 1.5.11 (3 November 2026)</span><span><b>Component</b> llmgw (single Go binary, macOS and Linux)</span><span><b>API formats</b> OpenAI and Anthropic</span><span><b>Interface</b> English, French, Dutch</span></div>
+      <div class="meta"><span><b>Version</b> 1.7.0 (7 November 2026)</span><span><b>Component</b> llmgw (single Go binary, macOS and Linux)</span><span><b>API formats</b> OpenAI and Anthropic</span><span><b>Interface</b> English, French, Dutch</span></div>
       <a class="crosslink" href="chat.html">Chat user guide ↗</a>
     </header>
 
@@ -489,11 +489,34 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
       <p>The decision always follows the same path: <span class="pill src">key</span> → <span class="pill src">user</span> → <span class="pill anon">profile</span> → <span class="pill dst">allowed LLMs, in order</span>.</p>
       <ul>
         <li><strong>Allowed models per target</strong>, with patterns (<code>mistral-*</code>, <code>claude-*</code>).</li>
-        <li><strong>Automatic fallback</strong>: if the first target is down, saturated (429) or failing (5xx), the next one in the profile takes over.</li>
+        <li><strong>Failover between targets</strong>: if the first target is down, saturated (429) or failing (5xx), the next one in the profile that serves the same model takes over. Always on.</li>
         <li><strong>Forced target</strong>: <code>mistral/mistral-large</code> forces a specific target, if the profile allows it.</li>
         <li><strong>Aliases</strong>: a requested name can be translated, for example <code>claude-*</code> to <code>deepseek-flash</code>.</li>
+        <li><strong>Fallback for a provider-specific model</strong>: <code>deepseek-flash</code> only exists at DeepSeek, so it has no fallback. An alias on a later target of the profile gives it one, for example <code>aliases = { "deepseek-flash" = "grok-4.3" }</code> on the <code>grok</code> target. The fallback target receives the whole context, at its own price and without the first provider's cache. A forced target (<code>deepseek/deepseek-flash</code>) has no fallback. Since 1.7.0, the automatic fallback below does it without an alias.</li>
         <li><strong>Formats</strong>: an OpenAI client is routed to OpenAI targets, an Anthropic client to Anthropic targets.</li>
         <li><strong>Unavailable targets</strong>: a target without a key, or a local LLM that does not answer, is not offered to users.</li>
+      </ul>
+      <h3>Automatic fallback to another model (option)</h3>
+      <p>Off by default. A target declares its fallbacks, in order, as <code>target/model</code>. They are only tried after the targets of the profile that serve the requested model.</p>
+<pre>[targets.deepseek]
+api = "openai"
+base_url = "https://api.deepseek.com/v1"
+api_key_env = "DEEPSEEK_API_KEY"
+models = ["deepseek-flash", "deepseek-v4-pro"]
+fallback = ["grok/grok-4.7"]     # fallbacks, in order: target/model
+
+[fallback]
+enabled = true                   # false by default
+first_byte_timeout_sec = 30      # no response headers: next target
+trip_after = 3                   # set aside after 3 failures…
+trip_window_sec = 60             # …within 60 s…
+cooldown_sec = 300               # …for 300 s, then one trial request</pre>
+      <ul>
+        <li><strong>Triggers</strong>: 5xx error, 429, connection error, or no response headers within <code>first_byte_timeout_sec</code>. The last target tried keeps the full <code>upstream_timeout_sec</code>.</li>
+        <li><strong>Limits</strong>: a fallback is only used if the user's profile allows its target, if it is enabled and if it has the same API format. A target forced by the client has no fallback. The request sent to the fallback is the same, already pseudonymised, and the response is restored the same way.</li>
+        <li><strong>Setting aside</strong>: a target that fails <code>trip_after</code> times within <code>trip_window_sec</code> is set aside for <code>cooldown_sec</code> seconds. Its requests go straight to the fallback, and it is still tried last if everything else fails. When the cooldown ends, a single trial request brings it back if it succeeds. The state is kept in memory and starts afresh on restart.</li>
+        <li><strong>Traceability</strong>: <code>X-Gateway-Fallback</code> header on the response and reason in the database (<code>deepseek:503</code>, <code>:timeout</code>, <code>:error</code>, <code>:quota</code>, <code>:aside</code>), also for failovers between targets. Log <code>fallback=…</code>, an alert when a target is set aside, subject to <code>on_error</code>.</li>
+        <li><strong>Cost</strong>: the fallback receives the whole context, at its own price and without the first provider's cache.</li>
       </ul>
     </section>
 
@@ -506,7 +529,7 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
         <li><strong>per LLM</strong>: a total budget shared by everyone. A saturated target is skipped in favour of the next one.</li>
       </ul>
       <p>When a limit is exceeded, the request is <span class="pill block">blocked</span> (error 429) or simply <span class="pill log">reported</span>, as you choose.</p>
-      <p><strong>Email alerts</strong>: a summary every N minutes, sent to the profile's recipients and to the default recipients. Triggers: violation, quota reached, LLM error, address banned by web protection, and blocked file whose rule asks for an alert (sent even if the « violation » trigger is disabled). The messages contain no sensitive value, only the data types concerned.</p>
+      <p><strong>Email alerts</strong>: a summary every N minutes, sent to the profile's recipients and to the default recipients. Triggers: violation, quota reached, LLM error, target set aside by the automatic fallback, address banned by web protection, and blocked file whose rule asks for an alert (sent even if the « violation » trigger is disabled). The messages contain no sensitive value, only the data types concerned.</p>
     </section>
 
     <section id="monitoring">
@@ -686,6 +709,7 @@ deploy/deploy.sh admin@server            <span class="c"># update</span></pre>
           <tr><td class="k"><code>[[detectors]]</code></td><td>detectors: built-in (email, NISS, IBAN, names, addresses…), patterns, term lists</td></tr>
           <tr><td class="k"><code>[privacy]</code></td><td>terms never anonymised</td></tr>
           <tr><td class="k"><code>[alerts]</code></td><td>SMTP server, recipients, triggers, frequency</td></tr>
+          <tr><td class="k"><code>[fallback]</code></td><td>automatic fallback to another model (option): activation, response timeout, setting aside a failing target; fallbacks are declared in each target (<code>fallback = ["target/model"]</code>)</td></tr>
           <tr><td class="k"><code>[debug]</code></td><td>activation and retention period of the archive</td></tr>
           <tr><td class="k"><code>[security]</code></td><td>web protection: trusted proxies, administration addresses, exempt networks, per-address limits, bans, built-in HTTPS</td></tr>
           <tr><td class="k"><code>[access]</code></td><td>access requests: activation, trusted domains, default profile, people notified, link validity, automatic refusal</td></tr>
@@ -714,7 +738,7 @@ files_default = "pass_log"                         <span class="c"># other exten
       <h3>Manual start</h3>
 <pre>export MISTRAL_API_KEY=… ANTHROPIC_API_KEY=…
 ./llmgw -config config.toml
-<span class="c"># LLMGW 1.5.11 listening on http://127.0.0.1:8088 (dashboard: /dashboard, documentation: /docs)</span></pre>
+<span class="c"># LLMGW 1.7.0 listening on http://127.0.0.1:8088 (dashboard: /dashboard, documentation: /docs)</span></pre>
       <p>One instance per port. Stop with Ctrl+C: pending metrics are saved before exiting.</p>
 
       <h3>macOS menu bar app</h3>
@@ -892,9 +916,9 @@ default_profile = "anonymisation"</pre>
       <h2><span class="n">24</span>Reporting</h2>
       <ul>
         <li>Period: 48 h, 60 d, 6 weeks, 6 months (maximum depth).</li>
-        <li><strong>Indicators</strong>: requests, tokens, volume, total time, LLM and gateway time (median, p95), conversions, violations.</li>
+        <li><strong>Indicators</strong>: requests, tokens and the share served by the provider cache, volume, total time, LLM and gateway time (median, p95), conversions, violations.</li>
         <li><strong>Charts</strong>: requests per LLM, tokens per user, IN / Gateway / LLM response times, conversions and violations.</li>
-        <li><strong>Tables</strong> per user, per LLM and per application (Hermes, Claude Code, chat…, recognised by the <code>X-LLMGW-Client</code> header or the User-Agent, over the detail period), detections per type, recent requests with the application and the reason for errors.</li>
+        <li><strong>Tables</strong> per user, per LLM and per application (Hermes, Claude Code, chat…, recognised by the <code>X-LLMGW-Client</code> header or the User-Agent, over the detail period), detections per type, recent requests with the application and the reason for errors; a request served by a fallback carries the « fallback » badge and its reason, and the Requests indicator gives the number of fallbacks. The <strong>Cache</strong> column gives the share of input tokens served by the provider cache (DeepSeek, OpenAI, xAI, Anthropic), recorded since version 1.6.0. A low share on long conversations points to a prompt prefix that changes from one call to the next.</li>
       </ul>
       <figure class="shot"><div class="frame"><img src="../img/dash-report.jpg" width="1600" height="2470" alt="Reporting over 60 days: indicators, charts and tables" loading="lazy"></div><figcaption class="bar"><span>Dashboard, Reporting over 60 days (scroll the image)</span><a href="../img/dash-report.jpg">Full size</a></figcaption></figure>
     </section>
@@ -922,6 +946,7 @@ default_profile = "anonymisation"</pre>
         <li>One collapsible card per LLM, with a <strong>status light</strong>: green connected (with the response time), red unreachable or key refused, grey disabled or not tested. « Retest all » runs the tests again.</li>
         <li>Open card: API format, address, allowed models, aliases, key (environment variable or masked value), HTTP headers, options, profiles that use it.</li>
         <li><strong>Test</strong> queries the LLM with the saved key and lists its models.</li>
+        <li><strong>Automatic fallback</strong> card at the top of the page: activation, response timeout, set-aside rule and targets set aside (until when, under trial). « set aside » badge on the target's card, « Automatic fallback » field in each target.</li>
       </ul>
       <figure class="shot"><div class="frame"><img src="../img/dash-targets.jpg" width="1600" height="1362" alt="Target LLMs page: cards with connection light, Mistral card open" loading="lazy"></div><figcaption class="bar"><span>Dashboard, Target LLMs</span><a href="../img/dash-targets.jpg">Full size</a></figcaption></figure>
     </section>
@@ -1030,6 +1055,17 @@ default_profile = "anonymisation"</pre>
       <h2><span class="n">39</span>Release notes</h2>
       <p>The current version is shown at the bottom of the dashboard menu, on the chat sign-in screen, on <code>GET /version</code> and with <code>./llmgw -version</code>. The full log is kept in <code>RELEASE_NOTES.md</code>, at the root of the repository.</p>
       <div class="rel">
+        <h3>1.7.0, 7 November 2026</h3>
+        <ul>
+          <li>Automatic fallback to another model, as an option and off by default: fallbacks declared per target (<code>fallback = ["grok/grok-4.7"]</code>), triggered by 5xx, 429, connection error or no response, within the limits of the profile. A target that keeps failing is set aside, then brought back by a trial request (Routing section).</li>
+          <li>Traceability: <code>X-Gateway-Fallback</code> header, reason in the database and in the log, alert, card and badges in the dashboard. The failovers between targets that already existed are marked too. The database is migrated at startup; with the option off, routing is the same as in 1.6.0.</li>
+        </ul>
+        <h3>1.6.0, 6 November 2026</h3>
+        <ul>
+          <li>Provider cache: input tokens served by the cache are recorded (DeepSeek, OpenAI, xAI, Anthropic) and shown in the dashboard (Tokens indicator, Cache column), and the log carries <code>cache=N</code>. The database is migrated at startup.</li>
+          <li>Streaming: a client that hangs up after the end of the answer (<code>[DONE]</code>, <code>message_stop</code>), as Hermes does, is no longer counted as an error.</li>
+          <li>Fallback: an alias on a later target of the profile gives a fallback to a model served by a single provider. The mechanism existed, it is now tested and described (Routing section).</li>
+        </ul>
         <h3>1.5.11, 3 November 2026</h3>
         <ul>
           <li>Restore: a token the model did not close (<code>«PERSON_2 is back</code>) is now restored, in text and in tool arguments. At the very end of a text it stays as is, because its number may be cut.</li>
@@ -1143,7 +1179,7 @@ default_profile = "anonymisation"</pre>
       </div>
     </section>
 
-    <footer class="doc"><img src="../img/vulpoint-logo.jpg" alt=""><span>LLMGW 1.5.11 by <a href="https://vulpoint.com" target="_blank" rel="noopener">Vulpoint.com</a></span></footer>
+    <footer class="doc"><img src="../img/vulpoint-logo.jpg" alt=""><span>LLMGW 1.7.0 by <a href="https://vulpoint.com" target="_blank" rel="noopener">Vulpoint.com</a></span></footer>
   </main>
 </div>
 </body>

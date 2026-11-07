@@ -27,6 +27,7 @@ type Gateway struct {
 	keyMu   sync.RWMutex
 	revoked sync.Map // revoked session id -> expiry
 	shield  *Shield
+	fb      breaker // automatic fallback: targets set aside
 }
 
 func (g *Gateway) C() *Config { return g.cfg.Load() }
@@ -80,6 +81,17 @@ func takeUsage(u map[string]any, rec *Rec) {
 	}
 	if v, ok := u["output_tokens"]; ok {
 		rec.TokOut = num(v)
+	}
+	// input tokens served by the provider's prompt cache (part of TokIn): DeepSeek,
+	// OpenAI-compatible (OpenAI, xAI, Mistral…), Anthropic
+	if v, ok := u["prompt_cache_hit_tokens"]; ok {
+		rec.TokCache = num(v)
+	} else if d, ok := u["prompt_tokens_details"].(map[string]any); ok {
+		if v, ok := d["cached_tokens"]; ok {
+			rec.TokCache = num(v)
+		}
+	} else if v, ok := u["cache_read_input_tokens"]; ok {
+		rec.TokCache = num(v)
 	}
 }
 
@@ -172,17 +184,18 @@ func route(cfg *Config, p *Profile, api, model string) []cand {
 	return out
 }
 
-func (g *Gateway) send(in *http.Request, c cand, api string, payload []byte) (*http.Response, error) {
+func (g *Gateway) send(ctx context.Context, in *http.Request, c cand, api string, payload []byte) (*http.Response, error) {
 	path := "/v1/messages"
 	if api == "openai" {
 		path = "/chat/completions"
 	}
-	return g.sendPath(in, c, api, path, payload)
+	return g.sendPath(ctx, in, c, api, path, payload)
 }
 
-func (g *Gateway) sendPath(in *http.Request, c cand, api, path string, payload []byte) (*http.Response, error) {
+// sendPath: ctx bounds the upstream request (the client's, or a shorter one for the fallback).
+func (g *Gateway) sendPath(ctx context.Context, in *http.Request, c cand, api, path string, payload []byte) (*http.Response, error) {
 	url := strings.TrimRight(c.t.BaseURL, "/") + path
-	req, err := http.NewRequestWithContext(in.Context(), "POST", url, bytes.NewReader(payload))
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(payload))
 	if err != nil {
 		return nil, err
 	}
@@ -261,8 +274,12 @@ func (g *Gateway) handleLLM(api string) http.HandlerFunc {
 				}
 				g.alerts.FromRec(rec, kinds, alertFiles)
 			}
-			log.Printf("%s %s → %s/%s %d in=%dms gw=%dms llm=%dms tok=%d/%d conv=%d viol=%d %s",
-				api, rec.User, rec.Target, rec.Model, rec.Status, rec.InMs, rec.GwMs, rec.UpMs, rec.TokIn, rec.TokOut, rec.Anon, rec.Blocked, rec.Err)
+			fbs := ""
+			if rec.Fallback != "" {
+				fbs = " fallback=" + rec.Fallback + "→" + rec.Target
+			}
+			log.Printf("%s %s → %s/%s %d in=%dms gw=%dms llm=%dms tok=%d/%d cache=%d conv=%d viol=%d%s %s",
+				api, rec.User, rec.Target, rec.Model, rec.Status, rec.InMs, rec.GwMs, rec.UpMs, rec.TokIn, rec.TokOut, rec.TokCache, rec.Anon, rec.Blocked, fbs, rec.Err)
 		}()
 
 		name, u := g.auth(cfg, r)
@@ -321,6 +338,15 @@ func (g *Gateway) handleLLM(api string) http.HandlerFunc {
 			return
 		}
 		rec.Target = cands[0].name
+		// automatic fallback (option): the fallbacks the targets declare follow them, unless the
+		// client forced a target. codes: why the first target did not answer (header, metrics).
+		fc := cfg.Fallback
+		fbOn := fc.Enabled && !forcedTarget(cfg, model)
+		primary := cands[0].name
+		var codes []string
+		if fbOn {
+			cands = withFallbacks(cfg, prof, api, cands)
+		}
 
 		// targets over their own quota are skipped (next target in the profile takes over)
 		var ok2 []cand
@@ -330,6 +356,7 @@ func (g *Gateway) handleLLM(api string) http.HandlerFunc {
 					quotaEvent(lim, "log")
 				} else {
 					quotaEvent(lim, "block")
+					codes = append(codes, c.name+":quota")
 					continue
 				}
 			}
@@ -341,6 +368,13 @@ func (g *Gateway) handleLLM(api string) http.HandlerFunc {
 			return
 		}
 		cands = ok2
+		if fbOn { // targets set aside go last
+			var aside []string
+			cands, aside = g.fb.order(cands, time.Duration(cfg.Server.UpstreamTimeout)*time.Second)
+			for _, n := range aside {
+				codes = append(codes, n+":aside")
+			}
+		}
 		rec.Target = cands[0].name
 
 		release, ok := g.shield.work(r.Context())
@@ -386,6 +420,12 @@ func (g *Gateway) handleLLM(api string) http.HandlerFunc {
 		var resp *http.Response
 		var upStart time.Time
 		var fails []string
+		var cancels []context.CancelFunc // shorter contexts of the fallback attempts, freed at the end
+		defer func() {
+			for _, cf := range cancels {
+				cf()
+			}
+		}()
 		for i, c := range cands {
 			body["model"] = c.model
 			delete(body, "stream_options")
@@ -404,21 +444,63 @@ func (g *Gateway) handleLLM(api string) http.HandlerFunc {
 			}
 			rec.Target, rec.Model = c.name, c.model
 			upStart = time.Now()
-			resp, err = g.send(r, c, api, encodeJSON(adaptBody(body, c.t, api)))
 			last := i == len(cands)-1
-			if err == nil && (last || (resp.StatusCode < 500 && resp.StatusCode != 429)) {
+			ctx := r.Context()
+			var timer *time.Timer // fallback: a target that does not answer in time hands over
+			if fbOn && !last {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithCancel(ctx)
+				cancels = append(cancels, cancel)
+				timer = time.AfterFunc(time.Duration(fc.FirstByteTimeout)*time.Second, cancel)
+			}
+			resp, err = g.send(ctx, r, c, api, encodeJSON(adaptBody(body, c.t, api)))
+			timedOut := timer != nil && !timer.Stop()
+			if timedOut {
+				if err == nil {
+					resp.Body.Close()
+				}
+				err = fmt.Errorf("sans réponse en %d s", fc.FirstByteTimeout)
+			}
+			healthy := err == nil && resp.StatusCode < 500 && resp.StatusCode != 429
+			if fbOn {
+				switch {
+				case healthy:
+					g.fb.result(c.name, true, fc)
+				case r.Context().Err() != nil: // the client left: says nothing about the target
+					g.fb.release(c.name)
+				default:
+					if g.fb.result(c.name, false, fc) && g.alerts != nil {
+						g.alerts.Fallback(c.name, fmt.Sprintf("cible %s mise de côté %d s (%d échecs en %d s)", c.name, fc.Cooldown, fc.TripAfter, fc.TripWindow))
+					}
+				}
+			}
+			if err == nil && (last || healthy) {
 				rec.TtfbMs = ms(time.Since(upStart))
 				break
 			}
-			if err == nil {
+			switch {
+			case err == nil:
 				resp.Body.Close()
 				fails = append(fails, fmt.Sprintf("%s:%d", c.name, resp.StatusCode))
-			} else {
+				codes = append(codes, fmt.Sprintf("%s:%d", c.name, resp.StatusCode))
+			case timedOut:
 				fails = append(fails, c.name+":"+err.Error())
+				codes = append(codes, c.name+":timeout")
+			default:
+				fails = append(fails, c.name+":"+err.Error())
+				codes = append(codes, c.name+":error")
 			}
 			resp = nil
 		}
 		rec.Err = strings.Join(fails, " ")
+		if resp != nil && resp.StatusCode < 500 && resp.StatusCode != 429 && rec.Target != primary {
+			// answered by another target than the first one of the profile: a fallback
+			rec.Fallback = strings.Join(codes, " ")
+			if rec.Fallback == "" {
+				rec.Fallback = primary
+			}
+			w.Header().Set("X-Gateway-Fallback", rec.Fallback)
+		}
 		if resp == nil {
 			upDur = time.Since(upStart)
 			if r.Context().Err() != nil { // the client gave up (stop button): not an outage, no alert
@@ -505,6 +587,9 @@ func relaySSE(w http.ResponseWriter, body io.Reader, api string, s *Session, rec
 	rs := newRestorer(s)
 	rs.raw = raw
 	var tpl map[string]any
+	// done: the end of the answer went through ([DONE], message_stop). A client that hangs up
+	// then (Hermes does, without waiting for the end of the connection) is not an error.
+	done := false
 	put := func(name, data string, extra []string) {
 		var b strings.Builder
 		for _, l := range extra {
@@ -550,6 +635,7 @@ func relaySSE(w http.ResponseWriter, body io.Reader, api string, s *Session, rec
 		if d == "[DONE]" {
 			flushAll()
 			put(name, d, extra)
+			done = true
 			return
 		}
 		v, err := decodeJSON([]byte(d))
@@ -567,6 +653,9 @@ func relaySSE(w http.ResponseWriter, body io.Reader, api string, s *Session, rec
 			}
 		}
 		put(name, string(encodeJSON(m)), extra)
+		if m["type"] == "message_stop" {
+			done = true
+		}
 	}
 
 	br := bufio.NewReaderSize(body, 64<<10)
@@ -590,7 +679,7 @@ func relaySSE(w http.ResponseWriter, body io.Reader, api string, s *Session, rec
 			if fl != nil {
 				fl.Flush()
 			}
-			if err == io.EOF {
+			if err == io.EOF || done {
 				return nil
 			}
 			return err
@@ -981,7 +1070,7 @@ func (g *Gateway) handleCountTokens(w http.ResponseWriter, r *http.Request) {
 	var resp *http.Response
 	for i, c := range cands {
 		body["model"] = c.model
-		resp, err = g.sendPath(r, c, api, "/v1/messages/count_tokens", encodeJSON(body))
+		resp, err = g.sendPath(r.Context(), r, c, api, "/v1/messages/count_tokens", encodeJSON(body))
 		if err == nil && (i == len(cands)-1 || (resp.StatusCode < 500 && resp.StatusCode != 429)) {
 			break
 		}

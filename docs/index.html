@@ -150,7 +150,7 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
 
 <div class="page">
   <nav class="toc" aria-label="Sommaire">
-    <a class="toc-brand" href="https://vulpoint.com" target="_blank" rel="noopener"><img src="img/vulpoint-logo.jpg" alt="Vulpoint"><div><b>LLMGW</b><small>by Vulpoint.com · v1.5.11</small></div></a>
+    <a class="toc-brand" href="https://vulpoint.com" target="_blank" rel="noopener"><img src="img/vulpoint-logo.jpg" alt="Vulpoint"><div><b>LLMGW</b><small>by Vulpoint.com · v1.7.0</small></div></a>
     <ol>
       <li><a href="en/index.html" hreflang="en" lang="en"><span>EN</span>English version</a></li>
     </ol>
@@ -214,7 +214,7 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
       <div class="eyebrow">Documentation fonctionnelle, technique et d'administration</div>
       <h1>LLMGW, la passerelle IA de l'organisation</h1>
       <p class="lede">Un point de connexion unique entre les utilisateurs, les agents et les modèles de langage. Il applique la politique IA : qui peut utiliser quel modèle, quelles données peuvent sortir, et avec quelle traçabilité.</p>
-      <div class="meta"><span><b>Version</b> 1.5.11 (3 novembre 2026)</span><span><b>Composant</b> llmgw (binaire unique Go, macOS et Linux)</span><span><b>Formats d'API</b> OpenAI et Anthropic</span><span><b>Interface</b> anglais, français, néerlandais</span></div>
+      <div class="meta"><span><b>Version</b> 1.7.0 (7 novembre 2026)</span><span><b>Composant</b> llmgw (binaire unique Go, macOS et Linux)</span><span><b>Formats d'API</b> OpenAI et Anthropic</span><span><b>Interface</b> anglais, français, néerlandais</span></div>
       <a class="crosslink" href="chat.html">Guide utilisateur du chat ↗</a>
     </header>
 
@@ -489,11 +489,34 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
       <p>La décision suit toujours le même chemin : <span class="pill src">clé</span> → <span class="pill src">utilisateur</span> → <span class="pill anon">profil</span> → <span class="pill dst">LLM autorisés, dans l'ordre</span>.</p>
       <ul>
         <li><strong>Modèles autorisés par cible</strong>, avec motifs (<code>mistral-*</code>, <code>claude-*</code>).</li>
-        <li><strong>Repli automatique</strong> : si la première cible est en panne, saturée (429) ou en erreur (5xx), la suivante du profil prend le relais.</li>
+        <li><strong>Bascule entre cibles</strong> : si la première cible est en panne, saturée (429) ou en erreur (5xx), la suivante du profil qui sert le même modèle prend le relais. Toujours active.</li>
         <li><strong>Cible imposée</strong> : <code>mistral/mistral-large</code> force une cible précise, si le profil l'autorise.</li>
         <li><strong>Alias</strong> : un nom demandé peut être traduit, par exemple <code>claude-*</code> vers <code>deepseek-flash</code>.</li>
+        <li><strong>Repli d'un modèle propre à un fournisseur</strong> : <code>deepseek-flash</code> n'existe que chez DeepSeek et n'a donc pas de repli. Un alias sur une cible suivante du profil lui en donne un, par exemple <code>aliases = { "deepseek-flash" = "grok-4.3" }</code> sur la cible <code>grok</code>. La cible de repli reçoit tout le contexte, à son propre tarif et sans le cache du premier fournisseur. Une cible imposée (<code>deepseek/deepseek-flash</code>) n'a pas de repli. Depuis la 1.7.0, le repli automatique ci-dessous le fait sans alias.</li>
         <li><strong>Formats</strong> : un client OpenAI est routé vers des cibles OpenAI, un client Anthropic vers des cibles Anthropic.</li>
         <li><strong>Cibles hors service</strong> : une cible sans clé ou un LLM local qui ne répond pas n'est pas proposé aux utilisateurs.</li>
+      </ul>
+      <h3>Repli automatique vers un autre modèle (option)</h3>
+      <p>Désactivé par défaut. Une cible déclare ses replis, dans l'ordre, au format <code>cible/modèle</code>. Ils ne sont tentés qu'après les cibles du profil qui servent le modèle demandé.</p>
+<pre>[targets.deepseek]
+api = "openai"
+base_url = "https://api.deepseek.com/v1"
+api_key_env = "DEEPSEEK_API_KEY"
+models = ["deepseek-flash", "deepseek-v4-pro"]
+fallback = ["grok/grok-4.7"]     # replis, dans l'ordre : cible/modèle
+
+[fallback]
+enabled = true                   # false par défaut
+first_byte_timeout_sec = 30      # sans en-têtes de réponse : cible suivante
+trip_after = 3                   # mise de côté après 3 échecs…
+trip_window_sec = 60             # …en 60 s…
+cooldown_sec = 300               # …pendant 300 s, puis une requête d'essai</pre>
+      <ul>
+        <li><strong>Déclencheurs</strong> : erreur 5xx, 429, erreur de connexion, ou pas d'en-têtes de réponse en <code>first_byte_timeout_sec</code>. La dernière cible tentée garde le délai complet <code>upstream_timeout_sec</code>.</li>
+        <li><strong>Limites</strong> : un repli n'est utilisé que si le profil de l'utilisateur autorise sa cible, si elle est active et si elle a le même format d'API. Une cible imposée par le client n'a pas de repli. La requête envoyée au repli est la même, déjà pseudonymisée, et la réponse est restaurée de la même façon.</li>
+        <li><strong>Mise de côté</strong> : une cible qui échoue <code>trip_after</code> fois en <code>trip_window_sec</code> est mise de côté <code>cooldown_sec</code> secondes. Ses requêtes vont directement au repli, et elle reste tentée en dernier si tout le reste échoue. À la fin du délai, une seule requête d'essai la rétablit si elle aboutit. L'état est tenu en mémoire et repart à zéro au redémarrage.</li>
+        <li><strong>Traçabilité</strong> : en-tête <code>X-Gateway-Fallback</code> sur la réponse et motif en base (<code>deepseek:503</code>, <code>:timeout</code>, <code>:error</code>, <code>:quota</code>, <code>:aside</code>), aussi pour les bascules entre cibles. Journal <code>fallback=…</code>, alerte « Repli (cible mise de côté) » soumise à <code>on_error</code>.</li>
+        <li><strong>Coût</strong> : le repli reçoit tout le contexte, à son propre tarif et sans le cache du premier fournisseur.</li>
       </ul>
     </section>
 
@@ -506,7 +529,7 @@ footer.doc img { width: 22px; height: 22px; border-radius: 50%; background: #fff
         <li><strong>par LLM</strong> : un budget total partagé par tous. Une cible saturée est sautée au profit de la suivante.</li>
       </ul>
       <p>Au dépassement, la requête est <span class="pill block">bloquée</span> (erreur 429) ou simplement <span class="pill log">signalée</span>, au choix.</p>
-      <p><strong>Alertes par email</strong> : un récapitulatif toutes les N minutes, envoyé aux destinataires du profil et aux destinataires par défaut. Déclencheurs : violation, quota atteint, erreur d'un LLM, adresse bloquée par la protection web, et fichier bloqué dont la règle demande une alerte (envoyée même si le déclencheur « violation » est désactivé). Les messages ne contiennent aucune valeur sensible, seulement les types de données concernés.</p>
+      <p><strong>Alertes par email</strong> : un récapitulatif toutes les N minutes, envoyé aux destinataires du profil et aux destinataires par défaut. Déclencheurs : violation, quota atteint, erreur d'un LLM, cible mise de côté par le repli automatique, adresse bloquée par la protection web, et fichier bloqué dont la règle demande une alerte (envoyée même si le déclencheur « violation » est désactivé). Les messages ne contiennent aucune valeur sensible, seulement les types de données concernés.</p>
     </section>
 
     <section id="monitoring">
@@ -679,6 +702,7 @@ deploy/deploy.sh admin@serveur            <span class="c"># mise à jour</span><
         <tbody>
           <tr><td class="k"><code>[server]</code></td><td>adresse d'écoute, base, jeton d'administration, conservation des données (30 jours de détail, environ 6 mois d'agrégats)</td></tr>
           <tr><td class="k"><code>[targets.&lt;nom&gt;]</code></td><td>un LLM : format d'API, adresse, clé (de préférence via variable d'environnement <code>api_key_env</code> ; si elle n'est pas définie, <code>api_key</code> sert de clé), modèles, alias, quota</td></tr>
+          <tr><td class="k"><code>[fallback]</code></td><td>repli automatique vers un autre modèle (option) : activation, délai de réponse, mise de côté d'une cible en échec ; les replis se déclarent dans chaque cible (<code>fallback = ["cible/modèle"]</code>)</td></tr>
           <tr><td class="k"><code>[profiles.&lt;nom&gt;]</code></td><td>LLM autorisés dans l'ordre, action par défaut, actions par type, <code>images</code> (pass, blank, block), <code>files</code> par extension (pass_log, blank, block, block_alert) et <code>files_default</code>, prompt de comportement, alertes, quota</td></tr>
           <tr><td class="k"><code>[users.&lt;nom&gt;]</code></td><td>personne ou application : clé gateway, profil, quota individuel, email (lien avec l'identité SSO)</td></tr>
           <tr><td class="k"><code>[auth]</code></td><td>SSO : adresse publique, durée de session, fournisseurs Entra ID / Google / OIDC, règles groupes et rôles → profils, administrateurs</td></tr>
@@ -714,7 +738,7 @@ files_default = "pass_log"                         <span class="c"># autres exte
       <h3>Lancement manuel</h3>
 <pre>export MISTRAL_API_KEY=… ANTHROPIC_API_KEY=…
 ./llmgw -config config.toml
-<span class="c"># LLMGW 1.5.11 à l'écoute sur http://127.0.0.1:8088 (dashboard : /dashboard, documentation : /docs)</span></pre>
+<span class="c"># LLMGW 1.7.0 à l'écoute sur http://127.0.0.1:8088 (dashboard : /dashboard, documentation : /docs)</span></pre>
       <p>Une seule instance par port. Arrêt avec Ctrl+C : les métriques en attente sont enregistrées avant la sortie.</p>
 
       <h3>App macOS dans la barre des menus</h3>
@@ -892,9 +916,9 @@ default_profile = "anonymisation"</pre>
       <h2><span class="n">24</span>Reporting</h2>
       <ul>
         <li>Période : 48 h, 60 j, 6 semaines, 6 mois (profondeur maximale).</li>
-        <li><strong>Indicateurs</strong> : requêtes, tokens, volume, temps total, temps du LLM et de la passerelle (médiane, p95), conversions, violations.</li>
+        <li><strong>Indicateurs</strong> : requêtes, tokens et part servie par le cache du fournisseur, volume, temps total, temps du LLM et de la passerelle (médiane, p95), conversions, violations.</li>
         <li><strong>Graphiques</strong> : requêtes par LLM, tokens par utilisateur, temps de réponse IN / Gateway / LLM, conversions et violations.</li>
-        <li><strong>Tableaux</strong> par utilisateur, par LLM et par application (Hermes, Claude Code, chat…, reconnue par l'en-tête <code>X-LLMGW-Client</code> ou le User-Agent, sur la période de détail), détections par type, requêtes récentes avec l'application et le motif des erreurs.</li>
+        <li><strong>Tableaux</strong> par utilisateur, par LLM et par application (Hermes, Claude Code, chat…, reconnue par l'en-tête <code>X-LLMGW-Client</code> ou le User-Agent, sur la période de détail), détections par type, requêtes récentes avec l'application et le motif des erreurs ; une requête servie par un repli porte le badge « repli » et son motif, et l'indicateur Requêtes donne le nombre de replis. La colonne <strong>Cache</strong> donne la part des tokens d'entrée servis par le cache du fournisseur (DeepSeek, OpenAI, xAI, Anthropic), relevée depuis la version 1.6.0. Une part basse sur de longues conversations signale un préfixe de prompt qui change d'un appel à l'autre.</li>
       </ul>
       <figure class="shot"><div class="frame"><img src="img/dash-report.jpg" width="1600" height="2470" alt="Reporting sur 60 jours : indicateurs, graphiques et tableaux" loading="lazy"></div><figcaption class="bar"><span>Dashboard, Reporting sur 60 jours (faire défiler l'image)</span><a href="img/dash-report.jpg">Taille réelle</a></figcaption></figure>
     </section>
@@ -922,6 +946,7 @@ default_profile = "anonymisation"</pre>
         <li>Une carte repliable par LLM, avec un <strong>voyant</strong> : vert connecté (avec le temps de réponse), rouge injoignable ou clé refusée, gris désactivé ou non testé. « Tout retester » relance les tests.</li>
         <li>Carte ouverte : format d'API, adresse, modèles autorisés, alias, clé (variable d'environnement ou valeur masquée), en-têtes HTTP, options, profils qui l'utilisent.</li>
         <li><strong>Tester</strong> interroge le LLM avec la clé enregistrée et liste ses modèles.</li>
+        <li>Carte <strong>Repli automatique</strong> en tête de page : activation, délai de réponse, règle de mise de côté et cibles mises de côté (jusqu'à quelle heure, en essai). Badge « mise de côté » sur la carte de la cible, champ « Repli automatique » dans chaque cible.</li>
       </ul>
       <figure class="shot"><div class="frame"><img src="img/dash-targets.jpg" width="1600" height="1362" alt="Page LLM cibles : cartes avec voyant de connexion, carte Mistral ouverte" loading="lazy"></div><figcaption class="bar"><span>Dashboard, LLM cibles</span><a href="img/dash-targets.jpg">Taille réelle</a></figcaption></figure>
     </section>
@@ -1030,6 +1055,17 @@ default_profile = "anonymisation"</pre>
       <h2><span class="n">39</span>Notes de version</h2>
       <p>La version en cours s'affiche en bas du menu du dashboard, sur l'écran de connexion du chat, sur <code>GET /version</code> et avec <code>./llmgw -version</code>. Le journal complet est tenu dans <code>RELEASE_NOTES.md</code>, à la racine du dépôt.</p>
       <div class="rel">
+        <h3>1.7.0, 7 novembre 2026</h3>
+        <ul>
+          <li>Repli automatique vers un autre modèle, en option et désactivé par défaut : replis déclarés par cible (<code>fallback = ["grok/grok-4.7"]</code>), déclenchés sur 5xx, 429, erreur de connexion ou absence de réponse, dans les limites du profil. Une cible en échec répété est mise de côté puis rétablie par une requête d'essai (section Routage).</li>
+          <li>Traçabilité : en-tête <code>X-Gateway-Fallback</code>, motif en base et dans le journal, alerte, carte et badges dans le dashboard. Les bascules entre cibles qui existaient déjà sont aussi marquées. La base est migrée au démarrage ; option désactivée, le routage est celui de la 1.6.0.</li>
+        </ul>
+        <h3>1.6.0, 6 novembre 2026</h3>
+        <ul>
+          <li>Cache du fournisseur : les tokens d'entrée servis par le cache sont relevés (DeepSeek, OpenAI, xAI, Anthropic) et affichés dans le dashboard (indicateur Tokens, colonne Cache), et le journal porte <code>cache=N</code>. La base est migrée au démarrage.</li>
+          <li>Flux : un client qui raccroche après la fin de la réponse (<code>[DONE]</code>, <code>message_stop</code>), comme Hermes, n'est plus compté en erreur.</li>
+          <li>Repli : un alias sur une cible suivante du profil donne un repli à un modèle servi par un seul fournisseur. Le mécanisme existait, il est désormais testé et décrit (section Routage).</li>
+        </ul>
         <h3>1.5.11, 3 novembre 2026</h3>
         <ul>
           <li>Restauration : un jeton que le modèle n'a pas refermé (<code>«PERSON_2 revient</code>) est désormais restauré, dans le texte comme dans les arguments d'outils. En fin de texte, il reste tel quel, car son numéro peut être coupé.</li>
@@ -1143,7 +1179,7 @@ default_profile = "anonymisation"</pre>
       </div>
     </section>
 
-    <footer class="doc"><img src="img/vulpoint-logo.jpg" alt=""><span>LLMGW 1.5.11 by <a href="https://vulpoint.com" target="_blank" rel="noopener">Vulpoint.com</a> · <a href="en/index.html" hreflang="en" lang="en">English version</a></span></footer>
+    <footer class="doc"><img src="img/vulpoint-logo.jpg" alt=""><span>LLMGW 1.7.0 by <a href="https://vulpoint.com" target="_blank" rel="noopener">Vulpoint.com</a> · <a href="en/index.html" hreflang="en" lang="en">English version</a></span></footer>
   </main>
 </div>
 </body>

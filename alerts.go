@@ -41,7 +41,7 @@ type Alert struct {
 }
 
 var alertLabels = map[string]string{"file": "Fichier bloqué", "violation": "Violation (requête bloquée)", "quota": "Quota atteint", "error": "Erreur LLM",
-	"security": "Sécurité (adresse bloquée)"}
+	"security": "Sécurité (adresse bloquée)", "fallback": "Repli (cible mise de côté)"}
 
 type Alerter struct {
 	g       *Gateway
@@ -109,6 +109,22 @@ func (a *Alerter) Security(addr, detail string) {
 	}
 }
 
+// Fallback reports a target set aside by the automatic fallback (trigger on_error).
+func (a *Alerter) Fallback(target, detail string) {
+	ac := a.g.C().Alerts
+	if !ac.Enabled || !ac.OnError {
+		return
+	}
+	al := Alert{TS: time.Now(), Kind: "fallback", Target: target, Detail: detail}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for _, r := range ac.To {
+		if r = strings.TrimSpace(r); r != "" && len(a.pending[r]) < 500 {
+			a.pending[r] = append(a.pending[r], al)
+		}
+	}
+}
+
 func (a *Alerter) Run(stop <-chan struct{}) {
 	t := time.NewTicker(30 * time.Second)
 	defer t.Stop()
@@ -148,7 +164,7 @@ func digest(als []Alert) (string, string) {
 		n[a.Kind]++
 	}
 	var parts []string
-	for _, k := range []string{"security", "file", "violation", "quota", "error"} {
+	for _, k := range []string{"security", "file", "violation", "quota", "error", "fallback"} {
 		if n[k] > 0 {
 			parts = append(parts, fmt.Sprintf("%d %s", n[k], strings.ToLower(alertLabels[k])))
 		}
@@ -158,7 +174,7 @@ func digest(als []Alert) (string, string) {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Gateway LLM : %d alerte(s) entre %s et %s.\n\n", len(als), als[0].TS.Format("02/01 15:04"), als[len(als)-1].TS.Format("02/01 15:04"))
 	for _, a := range als {
-		if a.Kind == "security" {
+		if a.Kind == "security" || a.Kind == "fallback" {
 			fmt.Fprintf(&b, "%s  %-28s  %s\n", a.TS.Format("02/01 15:04:05"), alertLabels[a.Kind], a.Detail)
 			continue
 		}
